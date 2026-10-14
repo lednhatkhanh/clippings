@@ -7,6 +7,12 @@
       "skillPath": "skills/engineering/ask-matt/SKILL.md",
       "computedHash": "d1c5b4151720e96135154bd593ac4986a1030a2bc81e2aaf129f8b11224af9a9"
     },
+    "chrome-extensions": {
+      "source": "GoogleChrome/modern-web-guidance",
+      "sourceType": "github",
+      "skillPath": "skills/chrome-extensions/SKILL.md",
+      "computedHash": "1e8525bb49647008dcd3a6b7e5d3c3207345f086e7a64d7e6d5bcc67dbba7a71"
+    },
     "code-review": {
       "source": "mattpocock/skills",
       "sourceType": "github",
@@ -73,17 +79,11 @@
       "skillPath": "skills/engineering/improve-codebase-architecture/SKILL.md",
       "computedHash": "ac2c94885f34ff8492dc12aa4543182f661f32ea1722b8d6b6c2c7045af33ae3"
     },
-    "neon": {
-      "source": "neondatabase/agent-skills",
+    "modern-web-guidance": {
+      "source": "GoogleChrome/modern-web-guidance",
       "sourceType": "github",
-      "skillPath": "skills/neon/SKILL.md",
-      "computedHash": "72813af523242dc39715b225fb3b37d255e3dbf4ea276e7f01ef6064b53b47af"
-    },
-    "neon-postgres": {
-      "source": "neondatabase/agent-skills",
-      "sourceType": "github",
-      "skillPath": "skills/neon-postgres/SKILL.md",
-      "computedHash": "346d6b69e4097402ee4c7719d68a5329463b0f8b6ebd2d8034f36a1769ff7fcd"
+      "skillPath": "skills/modern-web-guidance/SKILL.md",
+      "computedHash": "813274e05233f139ad0bc5f67ce7c4c524b4c81c672f9ff7905957b3a09b46b4"
     },
     "next-bundle-optimizer": {
       "source": "vercel/next.js",
@@ -127,6 +127,12 @@
       "sourceType": "well-known",
       "computedHash": "69a333ca4abfc4c5fd674ef3d505bc74014ee8b1be6e89b44eaa855c81536661",
       "wellKnownDigest": "sha256:ffc7cd806e4e648bf353d5a5538946bbc882560444a5fae24176e68f239337a3"
+    },
+    "recommend": {
+      "source": "toss/es-toolkit",
+      "sourceType": "github",
+      "skillPath": "es-toolkit-plugin/skills/recommend/SKILL.md",
+      "computedHash": "d48ef72e28efdad6421ae4370b9d52c49aa32c4171da8248ba02720844edb170"
     },
     "research": {
       "source": "mattpocock/skills",
@@ -182,6 +188,12 @@
       "skillPath": "skills/engineering/triage/SKILL.md",
       "computedHash": "a683e69163e23630f39c05a50fb9d83a3795a6a6fbd317357669e082cd43a158"
     },
+    "vercel-react-best-practices": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/react-best-practices/SKILL.md",
+      "computedHash": "3219a1944e404ffc14d1d9d6aef6dd2e3855b81387ee0a044ccbfe14d34c2357"
+    },
     "vercel-react-view-transitions": {
       "source": "vercel-labs/agent-skills",
       "sourceType": "github",
@@ -199,6 +211,12 @@
       "sourceType": "github",
       "skillPath": "skills/engineering/wayfinder/SKILL.md",
       "computedHash": "71d1296ae9f1ea0397f385f72d11ca3473827f5d067df4d06c58eb03377a57ce"
+    },
+    "web-design-guidelines": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/web-design-guidelines/SKILL.md",
+      "computedHash": "a6a44d5498f7e8f68289902f3dedfc6f38ae0cee1e96527c80724cf27f727c2a"
     },
     "wizard": {
       "source": "mattpocock/skills",
