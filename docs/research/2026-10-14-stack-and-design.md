@@ -2,19 +2,21 @@
 
 Date: 2026-10-14 (versions checked against npm, nodejs.org and GitHub on that day). Baseline: the brief (CLIPPINGS_BRIEF.md). Where the brief and the user's requested changes conflict, the user's changes win.
 
+**Updated 2026-10-15: hosting moved off GCP** to Vercel Hobby + Neon Free + Upstash QStash ($0/mo against ≈ $10–12/mo), and search moved from `pg_textsearch` BM25 to `tsvector` + GIN. The comparison is in [hosting alternatives](./2026-10-15-hosting-alternatives.md). §3, §4, §10, §12, the stack table and the brief changes are rewritten; the GCP plan is kept in Appendix A.
+
 **Summary.** The requested stack is current and fits together:
 - Next.js 16.4.0 (React 19.3, Turbopack, Cache Components, Rust React Compiler)
 - Node 24 LTS, pnpm 12, Turborepo 2.11
 - Tailwind 4.3 + React Aria Components 1.22, SWR 2.5, WXT for the extension
-- Cloud Run + Cloud SQL PG 18 (pgvector 0.8.5 + `pg_textsearch`, both available)
-- Terraform google provider 8.7, GitHub Actions with Workload Identity Federation
+- Vercel Hobby + Neon Free PG 18 (pgvector 0.8.6; `tsvector` search) + Upstash QStash for background jobs
+- GitHub Actions + Vercel CLI; no Terraform
 
 Five things differ from what was assumed:
 1. **`typescript@latest` is 7.0.2**, the native Go compiler, which has no JS API.
 2. **Node 24 leaves Active LTS on 2026-10-20.**
 3. **The MCP stack moved to SDK v2 and spec 2026-07-28**, and claude.ai connectors need **your own OAuth authorization server**.
 4. **Next's `experimental.viewTransition` flag is gone.** `<ViewTransition>` is stable in React 19.3.
-5. **Cloud Run's default billing throttles CPU after the response**, so `after()` can't replace Cloud Tasks.
+5. **`after()` isn't durable.** On Vercel it runs up to the 300 s function limit but has no retries, so enrichment goes through QStash. (On Cloud Run, the original plan, CPU is throttled after the response, so `after()` stalled outright.)
 
 "shadcn/lint" and "shadcn/cn" are real, but as the separate packages `@shadcn/lint` and `cn`.
 
@@ -25,7 +27,7 @@ Five things differ from what was assumed:
 | Runtime | Node.js 24 LTS "Krypton" (plan to move to 26 after 2026-10-28) | 24.22.0 | [nodejs dist index](https://nodejs.org/dist/index.json), [Release schedule](https://github.com/nodejs/Release/blob/main/schedule.json) |
 | Package manager | pnpm 12 + catalogs, pinned via `packageManager` + `devEngines.packageManager` | 12.11.2 (`latest`) | [npm](https://www.npmjs.com/package/pnpm), [v12.0.0](https://github.com/pnpm/pnpm/releases/tag/v12.0.0) |
 | Monorepo | Turborepo, JIT internal packages | turbo 2.11.8 | [npm](https://www.npmjs.com/package/turbo), [internal packages](https://turborepo.dev/docs/core-concepts/internal-packages) |
-| Framework | Next.js App Router, Turbopack, Cache Components, `typedRoutes`, `output: 'standalone'` | next 16.4.0 | [Next 16.4](https://nextjs.org/blog/next-16-4) |
+| Framework | Next.js App Router, Turbopack, Cache Components, `typedRoutes`; default Vercel build (no `output: 'standalone'` / Dockerfile; keep them only as an exit path) | next 16.4.0 | [Next 16.4](https://nextjs.org/blog/next-16-4) |
 | UI runtime | React + react-dom | 19.3.1 | [npm](https://www.npmjs.com/package/react), [React 19.3](https://react.dev/blog/2026/09/09/react-19-3) |
 | React Compiler | Rust port only: `reactCompiler: true` + `experimental.turbopackRustReactCompiler: true` (experimental; no Babel, no `babel-plugin-react-compiler`) | built into next 16.4.0; upstream crate `react_compiler` 0.1.0 | [docs](https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopackRustReactCompiler), [crates](https://github.com/facebook/react/tree/main/compiler/crates) |
 | Language | TypeScript, `strict`, `erasableSyntaxOnly` | 7.0.2 (fallback 6.0.3) | [npm](https://www.npmjs.com/package/typescript), [Next + TS 7](https://nextjs.org/docs/app/api-reference/config/typescript#using-typescript-7) |
@@ -42,11 +44,15 @@ Five things differ from what was assumed:
 | Extension | WXT (MV3, React, Vite) | wxt 0.21.4 (vite 8.3.4) | [npm](https://www.npmjs.com/package/wxt) |
 | Lint | oxlint with `react`, `nextjs`, `jsx-a11y`, `import` plugins + native React Compiler rules + type-aware (oxlint-tsgolint, needs TS 7) | 1.88.0 / 7.0.2004 | [plugins](https://oxc.rs/docs/guide/usage/linter/plugins.html), [type-aware](https://oxc.rs/docs/guide/usage/linter/type-aware.html) |
 | Format | oxfmt with `sortImports` + `sortTailwindcss` (beta) | 0.73.0 | [config reference](https://oxc.rs/docs/guide/usage/formatter/config-file-reference.html) |
-| DB driver | `pg` + Cloud SQL Node connector (or Cloud Run's built-in Unix socket) | pg 8.23.1, @google-cloud/cloud-sql-connector 1.12.1 | npm |
-| DB | Cloud SQL for PostgreSQL 18, Enterprise edition `db-f1-micro` (~$9/mo with 10 GiB SSD), pgvector + `pg_textsearch` (BM25) | PG 18.6, pgvector 0.8.5 | [extensions](https://docs.cloud.google.com/sql/docs/postgres/extensions), [pricing](https://cloud.google.com/sql/pricing) |
-| Async jobs | Cloud Tasks → Route Handler (Cloud Run throttles CPU after the response, so `after()` is not enough) | @google-cloud/tasks 7.3.0 | [billing settings](https://docs.cloud.google.com/run/docs/configuring/billing-settings) |
-| IaC | Terraform + google provider, GCS backend | terraform 1.16.6, provider 8.7.0 | [GitHub releases](https://github.com/hashicorp/terraform-provider-google/releases) |
-| CI/CD | GitHub Actions + WIF, SHA-pinned; Cloud Run Job for migrations | checkout v7.0.1, setup-node v7.1.0, pnpm/action-setup v6.1.0, google-github-actions/auth v3.0.0, deploy-cloudrun v3.0.1, setup-gcloud v3.0.1, setup-terraform v4.0.1, docker/build-push-action v7.4.0 | §12 |
+| DB driver | `pg` with Neon's pooled URL (app) and direct URL (migrations); `@neondatabase/serverless` optional | pg 8.23.1 (serverless 1.2.0) | [pooling](https://neon.com/docs/connect/connection-pooling), [serverless driver](https://neon.com/docs/serverless/serverless-driver) |
+| DB | Neon Free, PostgreSQL 18, pgvector + `pg_trgm`, scale-to-zero after 5 min; region matched to the Vercel function region. No `pg_textsearch` | PG 18.6, pgvector 0.8.6 | [plans](https://neon.com/docs/introduction/plans), [extensions](https://neon.com/docs/extensions/pg-extensions) |
+| Full-text search | Weighted `tsvector` generated column + GIN + `ts_rank_cd`, behind one `searchClippings()` | — | §3 |
+| Hosting | Vercel Hobby (Fluid compute, 300 s max duration; personal, non-commercial) | — | [Hobby](https://vercel.com/docs/plans/hobby) |
+| Async jobs | Upstash QStash → Route Handler verified with `verifySignatureAppRouter`; daily Vercel cron sweeper | @upstash/qstash 2.12.0 | [QStash pricing](https://upstash.com/pricing/qstash), [Next.js quickstart](https://upstash.com/docs/qstash/quickstarts/vercel-nextjs) |
+| IaC | None (dashboards + `vercel.json`); optional `vercel/vercel` provider for the Vercel project only | provider 5.21.1 | [registry](https://registry.terraform.io/providers/vercel/vercel) |
+| Secrets | Vercel env vars (Sensitive) for runtime; GitHub Actions secrets for deploy, migrations and backups | — | [env vars](https://vercel.com/docs/environment-variables) |
+| Backups | Neon Free 6 h restore window + nightly `pg_dump` to Cloudflare R2 | — | §12 |
+| CI/CD | GitHub Actions, SHA-pinned: migrate (Neon direct URL) → `vercel build` → `vercel deploy --prebuilt --prod`; Neon branch per PR | checkout v7.0.1, setup-node v7.1.0, pnpm/action-setup v6.1.0, vercel CLI 64.0.2, neondatabase/create-branch-action v6.3.1, delete-branch-action v3.2.1 | §12 |
 | Browsers | `last 2 Chrome versions, last 2 Firefox versions, last 2 Safari versions, last 2 iOS versions` | browserslist 4.29.3 → Chrome 153–154, Firefox 156–157, Safari/iOS 26.6–27 | §7 |
 
 ## 1. Material 3 paper theme
@@ -197,95 +203,98 @@ Verified with `npm view` / nodejs.org / GitHub releases on 2026-10-14.
 | mise | Yes, but **opt-in** via `idiomatic_version_file_enable_tools = ["node"]` | Also reads `devEngines.runtime`, not `engines.node` ([mise node](https://mise.jdx.dev/lang/node.html)) |
 | Volta | Not documented; **Volta is unmaintained** and recommends mise | [volta README](https://github.com/volta-cli/volta) |
 | actions/setup-node | Yes: `node-version-file: .node-version` | With `package.json` it reads `volta.node`, then `devEngines.runtime`, then `engines.node` ([advanced usage](https://github.com/actions/setup-node/blob/main/docs/advanced-usage.md)) |
-| GCP buildpacks | No (`engines.node` or `GOOGLE_NODEJS_VERSION`; pnpm version from `engines.pnpm`) | [buildpacks Node.js](https://docs.cloud.google.com/docs/buildpacks/nodejs). Not used here: we deploy a Dockerfile |
+| Vercel | No. `engines.node` in `package.json` overrides the Node version set in Project Settings | [Node.js version](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions). Set `"engines": { "node": "24.x" }` to match |
 
 **Recommendation**
 - Pin the runtime in two places that agree:
   - root `package.json` → `"devEngines": { "runtime": { "name": "node", "version": "24.22.0", "onFail": "download" }, "packageManager": { "name": "pnpm", "version": "^12.11.2", "onFail": "download" } }`
   - `.node-version` → `24.22.0`, for fnm/mise/editors and so `setup-node` can use `node-version-file`.
-  - The Dockerfile `FROM node:24.22.0-...` must match.
+  - Vercel picks the Node major from `engines.node` (`24.x`), so that must match too. (A Dockerfile, if the exit path is ever used, must use the same `node:24.22.0` tag.)
 - Keep `packageManager: "pnpm@12.11.2"` as well, because `pnpm/action-setup` and Corepack read it (see §12).
 - Rule of thumb: an exact version in `.node-version`, and the same exact version in `devEngines.runtime`, so the two can't drift.
-- **Node 24 vs 26**: start on 24.x. It is supported until 2028-04-30, and Cloud Run base images and every tool here support it. Plan a switch to 26 after 2026-10-28 (Active LTS). Not urgent for a personal app.
+- **Node 24 vs 26**: start on 24.x. It is supported until 2028-04-30, and Vercel and every tool here support it. Plan a switch to 26 after 2026-10-28 (Active LTS). Not urgent for a personal app.
 - **TypeScript**: use `typescript@7.0.2` for `tsc --noEmit` speed, keeping the caveats in §6 in mind (no JS API, so the Next IDE plugin and any type-aware tool that uses the TS JS API may not work). The safe fallback is `typescript@6.0.3`. Use `strict: true` and `erasableSyntaxOnly: true` (§6).
 - date-fns 4.4 + @date-fns/tz 1.5 (`TZDate`) for display. es-toolkit 1.52 instead of lodash.
 
-**Open questions**: Does the user want Node 26 from day one? (LTS on 2026-10-28; check Cloud Run / `node:26` image availability then.)
+**Open questions**: Does the user want Node 26 from day one? (LTS on 2026-10-28; check when Vercel offers `26.x` then.)
 
-## 3. Infra on GCP
+## 3. Infra on Vercel + Neon + QStash
 
-**Cloud SQL for PostgreSQL**
-- **Version and edition**
-  - **PG 18 is GA** (2025-11-20) and the **default** major (18.6) ([release notes](https://docs.cloud.google.com/sql/docs/postgres/release-notes), [db versions](https://docs.cloud.google.com/sql/docs/db-versions)).
-  - ⚠ For PG 16+, an unset `edition` defaults to **Enterprise Plus**, which rejects shared-core tiers. **Set `edition = "ENTERPRISE"`** ([Terraform resource](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/sql_database_instance)).
-- **Extensions**
-  - **pgvector** is 0.8.5 on PG 13+. Enable it with `CREATE EXTENSION vector;` as a `cloudsqlsuperuser` on the primary; no flag is needed ([extensions](https://docs.cloud.google.com/sql/docs/postgres/extensions)).
-  - **`pg_textsearch` (BM25) is supported**. It was added 2026-09-14 and needs **PG 17+** and maintenance version **R20260712.01_06** or later ([extensions](https://docs.cloud.google.com/sql/docs/postgres/extensions), [release notes](https://docs.cloud.google.com/sql/docs/postgres/release-notes)). The brief's plan works.
-  - `pg_trgm` is supported. `pg_bigm` needs the flag `cloudsql.enable_pg_bigm`. `rum` and ParadeDB `pg_search` are not available.
-  - You cannot install custom extensions.
-  - Fallback if `pg_textsearch` misbehaves: a `tsvector` column with `setweight`, a GIN index, and `ts_rank_cd`.
-- **Cheapest tier** (us-central1, [pricing](https://cloud.google.com/sql/pricing)):
+Adopted 2026-10-15 in place of the GCP plan. Comparison, prices and sources: [hosting alternatives](./2026-10-15-hosting-alternatives.md) (referred to below as "hosting §N"). The original GCP plan is kept in [Appendix A](#appendix-a-gcp-option-superseded-2026-10-15). Monthly cost at this scale: **$0** (plus the domain), against ≈ $10–12 on GCP.
 
-  | Item | Price |
-  |---|---|
-  | `db-f1-micro` (shared, 0.6 GB) | $0.0105/h ≈ **$7.7/mo** |
-  | `db-g1-small` (1.7 GB) | ≈ $25.6/mo |
-  | Smallest dedicated (1 vCPU / 3.75 GB) | ≈ $49/mo |
-  | SSD | ≈ $0.17/GiB-mo |
-  | Backups | ≈ $0.08/GiB-mo |
-  | Public IPv4 while idle | $0.01/h |
+**Neon (Postgres)** ([plans](https://neon.com/docs/introduction/plans), [extensions](https://neon.com/docs/extensions/pg-extensions), [compute lifecycle](https://neon.com/docs/introduction/compute-lifecycle))
+- **Free plan**: 100 CU-hours per project a month, 1 GB storage per project, 5 GB egress, 10 branches.
+- **Project settings**:
+  - PG 18 (18.6), with pgvector **0.8.6** and `pg_trgm`.
+  - Autoscaling max 0.25–0.5 CU.
+  - Suspends after 5 min idle and wakes in "a few hundred milliseconds". That is well inside Claude's 10 s OAuth budget (hosting §1).
+  - Put the region next to the Vercel function region: `aws-eu-central-1` with `fra1`, or `aws-us-east-1` with `iad1` ([regions](https://neon.com/docs/introduction/regions)). A cross-continent hop adds ~100 ms per query.
+- **Connections** ([pooling](https://neon.com/docs/connect/connection-pooling)):
+  - The app uses the **pooled** URL (`-pooler` host) with `pg`. The pooler is PgBouncer in transaction mode, so there are no session `SET`s, no LISTEN/NOTIFY and no session advisory locks.
+  - Migrations use the **direct** URL.
+  - `@neondatabase/serverless` 1.2.0 (HTTP/WebSocket) is an option if `pg` connection setup ever shows in latency. Not needed to start ([serverless driver](https://neon.com/docs/serverless/serverless-driver)).
+- **Not available on Neon**: `pg_textsearch`, ParadeDB `pg_search` (retired 2026-09-21) and `pgmq`. `pg_cron` runs only while the compute is awake (hosting §2).
+- **Backups**: Free keeps a **6 h** restore window. Add a nightly `pg_dump` to Cloudflare R2, which is free up to 10 GB (§12). Move to **Neon Launch** (usage-based, ≈ $2/mo here) if you want up to 7 days of restore history ([pricing](https://neon.com/pricing)).
+- **Vectors**: no ANN index. An exact `ORDER BY embedding <=> $1` over a few thousand rows per user is fine (§10).
 
-  - **f1-micro + 10 GiB SSD ≈ $9.4/mo plus backups.**
-  - Shared-core is available on Enterprise edition only and is **not covered by the SLA** ([SLA](https://cloud.google.com/sql/sla)).
-  - 0.6 GB RAM is tight for pgvector plus BM25 indexes. Start with f1-micro and move to g1-small if memory errors appear.
-  - There is no scale-to-zero. Activation policy `NEVER` stops instance charges, but storage and IP are still billed ([start/stop](https://docs.cloud.google.com/sql/docs/postgres/start-stop-restart-instance)).
-- **Connecting from Cloud Run**
-  - Use the **built-in Cloud SQL connection** (`--add-cloudsql-instances` / a `cloud_sql_instance` volume in Terraform) over a Unix socket at `/cloudsql/PROJECT:REGION:INSTANCE`. The connection is encrypted, needs the `roles/cloudsql.client` role, and allows 100 connections per instance ([connect from Cloud Run](https://docs.cloud.google.com/sql/docs/postgres/connect-run)).
-  - Alternative: `@google-cloud/cloud-sql-connector` 1.12.1 (supports IAM DB auth) ([repo](https://github.com/GoogleCloudPlatform/cloud-sql-nodejs-connector)).
-  - Private IP needs Direct VPC egress plus PSC or PSA, which isn't worth it here.
-  - The Cloud SQL Auth Proxy's current line is **v2.26.0**. v1.38.4 is legacy maintenance ([releases](https://github.com/GoogleCloudPlatform/cloud-sql-proxy/releases)).
+**Full-text search: `tsvector` + GIN + `ts_rank_cd`** (replaces `pg_textsearch` BM25)
+- Add a stored generated column, weighted so the title counts most (column names are illustrative):
+  ```sql
+  search_tsv tsvector GENERATED ALWAYS AS (
+    setweight(to_tsvector('simple', coalesce(title, '')), 'A') ||
+    setweight(to_tsvector('simple', coalesce(note, '')), 'B') ||
+    setweight(to_tsvector('simple', coalesce(excerpt, '')), 'C')
+  ) STORED
+  ```
+  Index it with `CREATE INDEX ... USING gin (search_tsv)`.
+- Query with `websearch_to_tsquery('simple', $q)` and rank with `ts_rank_cd(search_tsv, query)`, scoped by `user_id` ([text search controls](https://www.postgresql.org/docs/current/textsearch-controls.html), [GIN and GiST indexes](https://www.postgresql.org/docs/current/textsearch-indexes.html)).
+- Use the `simple` config, or a per-language one such as `english`. Clippings are in mixed languages, and `simple` avoids wrong stemming. `pg_trgm` can cover typo-tolerant matching on titles.
+- For hybrid search, merge the `tsvector` ranking and the vector-distance ranking in SQL, for example with reciprocal rank fusion. Only the keyword half changes from the BM25 plan.
+- Keep all of this behind one `searchClippings()` function in `packages/db`, so the ranking can later switch to BM25: Neon's `lakebase_text`, or `pg_textsearch` on another host (hosting §2).
 
-**Cloud Run** ([pricing](https://cloud.google.com/run/pricing))
-- **Request-based billing**:
-  - Free each month: 180k vCPU-s, 360k GiB-s and 2M requests.
-  - Idle instances that aren't minimum instances cost nothing, and `min_instance_count` defaults to 0.
-- **Instance-based billing**: free each month 240k vCPU-s and 450k GiB-s. Set it with `--no-cpu-throttling` / `cpu_idle = false`, and it needs at least 512 MiB.
-- Request timeout: maximum **3600 s**, default 300 s ([request timeout](https://docs.cloud.google.com/run/docs/configuring/request-timeout)).
-- ⚠ **With request-based billing, CPU is "only allocated during request processing"** ([billing settings](https://docs.cloud.google.com/run/docs/configuring/billing-settings)). After the response, access to CPU is "disabled or severely limited" ([tips](https://docs.cloud.google.com/run/docs/tips/general)).
-  - **So Next.js `after()` work (fetch + Haiku + embedding) will stall on the default billing mode.**
-  - The SIGTERM grace period is only 10 s, versus the 10–30 s drain Next recommends.
+**Vercel Hobby** ([Hobby](https://vercel.com/docs/plans/hobby), [limits](https://vercel.com/docs/limits), [duration](https://vercel.com/docs/functions/configuring-functions/duration))
 
-**Cloud Tasks vs `after()`**
-- Cloud Tasks is free for the first 1M operations a month ([pricing](https://cloud.google.com/tasks/pricing)).
-- It targets Cloud Run over HTTP with an OIDC token. The invoking SA needs `run.invoker`, and the Tasks service agent needs `iam.serviceAccountUser` on it. The `dispatchDeadline` is up to **30 min** ([HTTP target tasks](https://docs.cloud.google.com/tasks/docs/creating-http-target-tasks)).
-- The enrichment runs inside its own request, so CPU is allocated, with durable retries and backoff.
-- **Verdict: keep Cloud Tasks** (the brief's choice). It costs $0 at this scale and fixes the CPU-throttling problem.
-- `after()` is acceptable only with instance-based billing plus a re-sweep of `pending` rows, and loses work on shutdown.
-- Use `after()` only to *enqueue* the task after responding, or enqueue synchronously, since it's a ~50 ms call.
+| Limit | Hobby |
+|---|---|
+| Function duration (Fluid compute) | 300 s default and max. `after()` / `waitUntil` share it |
+| Active CPU | 4 h/mo |
+| Memory | 360 GB-h/mo |
+| Invocations | 1M/mo |
+| Fast Data Transfer | 100 GB/mo |
+| Cron | Once a day at most, firing anywhere within the hour |
+| Deployments | 100/day |
+| Seats / repos | One user; can't connect a repo owned by a GitHub organization |
+| Over a limit | The feature pauses until 30 days have passed; Hobby can't buy more |
 
-**Terraform**
-- terraform **1.16.6**; `hashicorp/google` **8.7.0** (2026-10-13) ([releases](https://github.com/hashicorp/terraform-provider-google/releases)).
-- **v7→v8 breaking changes for these resources** ([v8 upgrade guide](https://github.com/hashicorp/terraform-provider-google/blob/main/website/docs/guides/version_8_upgrade.html.markdown)): only `google_secret_manager_secret_version` changes.
-  - `secret_data_wo_version` is now a string.
-  - `secret_data_wo` requires it.
-- **Resources and the settings to remember**:
-  - `google_sql_database_instance`: `edition = "ENTERPRISE"`, `tier = "db-f1-micro"`, `deletion_protection` (Terraform guard) and `settings.deletion_protection_enabled` (API guard).
-  - `google_cloud_run_v2_service`: `deletion_protection` defaults to true; set `cpu_idle` explicitly when you add a `resources` block; secrets go through `env.value_source.secret_key_ref`.
-  - `google_cloud_tasks_queue`: use `http_target` for queue-level OIDC.
-  - `google_artifact_registry_repository` with `cleanup_policies` ([cleanup](https://docs.cloud.google.com/artifact-registry/docs/repositories/cleanup-policy)).
-  - `google_iam_workload_identity_pool` / `_provider` (`attribute_condition` in CEL).
-  - `google_service_account_iam_member` (`roles/iam.workloadIdentityUser`, `principalSet://…/attribute.repository_id/ID`, using the project **number**) ([WIF for pipelines](https://docs.cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines)).
-  - The GCS backend supports locking ([gcs backend](https://developer.hashicorp.com/terraform/language/backend/gcs)).
+- **Terms**: "personal or non-commercial use" only ([terms](https://vercel.com/legal/terms)). A free tool for ~5 people with no revenue fits. If the app ever earns money, move to Pro ($20/mo) or to the Hetzner runner-up (hosting §9).
+- **Next.js 16.4** runs natively, with Cache Components, `after()`, `proxy.ts` and streaming. There's no Dockerfile and no `output: 'standalone'`.
+- **MCP** runs as a normal Route Handler with `mcp-handler` 2. Vercel documents that the handler doesn't issue tokens, so Better Auth stays the authorization server ([deploy MCP](https://vercel.com/docs/mcp/deploy-mcp-servers-to-vercel)).
+- **Runtime secrets** are Vercel env vars marked Sensitive (write-only) ([env vars](https://vercel.com/docs/environment-variables)).
+
+**Upstash QStash (enrichment jobs)** ([pricing](https://upstash.com/pricing/qstash), [retry](https://upstash.com/docs/qstash/features/retry), [Next.js quickstart](https://upstash.com/docs/qstash/quickstarts/vercel-nextjs))
+- **Free tier**: 1,000 messages a day (retries count), a 15 min response timeout, a 3-day dead-letter queue and 10 queues. That is far above a few jobs a day.
+- **Flow** (same shape as Cloud Tasks):
+  1. The save action inserts the clipping with `status = 'pending'`.
+  2. It calls `publishJSON({ url: <origin>/api/tasks/enrich, body: { clippingId } })` with `@upstash/qstash` 2.12.0. This takes ~50 ms, so it runs either inline or in `after()`.
+  3. `app/api/tasks/enrich/route.ts` is wrapped in `verifySignatureAppRouter` (env `QSTASH_CURRENT_SIGNING_KEY` and `QSTASH_NEXT_SIGNING_KEY`) ([signature](https://upstash.com/docs/qstash/howto/signature)). It fetches the page, calls Haiku, writes the embedding and sets the status to `ready`. It finishes well inside 300 s.
+  4. A non-2xx response makes QStash retry with backoff.
+- **Idempotency**: the handler starts by checking that `status = 'pending'`, so a duplicate delivery is a no-op.
+- **Sweeper**: a daily Vercel cron re-publishes rows stuck in `pending` or `failed` for over an hour ([cron](https://vercel.com/docs/cron-jobs/usage-and-pricing)).
+- **Why not `after()` alone**: on Vercel it runs up to 300 s but has no retries or durability. If the instance dies, the job is lost.
+
+**IaC**: none. The setup is three dashboards (Vercel, Neon, Upstash) and about ten env vars. Neon's own Terraform provider isn't on the registry yet, and the community one is archived. If wanted later, the `vercel/vercel` 5.21.1 Terraform provider can manage the Vercel project and env vars alone (hosting §6).
 
 **Recommendation**
-- One Cloud Run service on request-based billing with `min 0` / `max 2`.
-- Cloud SQL Enterprise `db-f1-micro`, PG 18, pgvector 0.8.5 + `pg_textsearch`.
-- The built-in Unix-socket connection.
-- **Keep Cloud Tasks** for enrichment.
-- Terraform 1.16 with google provider 8.7 and a GCS backend.
+- One Vercel Hobby project for `apps/web`, with the function region pinned next to Neon.
+- Neon Free, PG 18, pgvector 0.8.6: pooled URL for the app, direct URL for migrations.
+- Search with `tsvector` + GIN + `ts_rank_cd` behind `searchClippings()`.
+- QStash for enrichment, plus a daily cron sweeper.
+- A nightly `pg_dump` to R2, or Neon Launch at ≈ $2/mo.
+- No Terraform.
 
-**Open questions**: europe-west1 prices weren't extracted (check the pricing page for your region); whether `pg_textsearch` needs `shared_preload_libraries` (none is listed).
-
+**Open questions**
+- Whether Hobby lets you pick the function region (hosting Unverified).
+- Whether `lakebase_text` is on Neon Free. Check this only if `tsvector` ranking feels weak.
 ## 4. Fastify vs API inside Next.js
 
 | Concern | All-in Next.js (Route Handlers + Server Actions + `after()`) | Separate Fastify 5.12.7 service |
@@ -293,15 +302,15 @@ Verified with `npm view` / nodejs.org / GitHub releases on 2026-10-14.
 | REST for extension | `app/api/**/route.ts`. Web `Request`/`Response`, manual CORS headers + `OPTIONS` export | `@fastify/cors` 11.3.1, schema validation, hooks |
 | Remote MCP | `mcp-handler` 2.3.0 returns a Web `(Request)=>Response` handler. Mount it in `app/api/mcp/route.ts` (or `app/mcp/route.ts`). It is framework-agnostic and not tied to Vercel ([README](https://github.com/vercel/mcp-handler)) | Official `@modelcontextprotocol/node` / `express` / `hono` 2.x adapters |
 | OAuth AS for claude.ai | Better Auth `mcp()` plugin (OAuth 2.1 AS, RFC 8414 + RFC 9728 metadata, optional DCR, CIMD via `@better-auth/cimd`) ([docs](https://www.better-auth.com/docs/plugins/mcp)) | Same library works on Fastify |
-| Cloud Tasks callback | `POST app/api/tasks/enrich/route.ts`. Verify the OIDC token audience/SA email | Same |
+| QStash callback | `POST app/api/tasks/enrich/route.ts`, wrapped in `verifySignatureAppRouter` from `@upstash/qstash/nextjs` | Same, verifying the signature manually |
 | Web UI data | Server Components + Server Actions, no API layer needed | Web app still needs an API client → duplicated contracts |
-| Background work | `after()` is stable since 15.1 and "fully supported when self-hosting with `next start`" ([after](https://nextjs.org/docs/app/api-reference/functions/after), [self-hosting](https://nextjs.org/docs/app/guides/self-hosting#after)). On Cloud Run request-based billing, CPU is throttled after the response, so heavy work goes through Cloud Tasks → a Route Handler (§3) | Same constraint |
-| Deploy | One `output: 'standalone'` image, one Cloud Run service | Two images and services, two cold starts, CORS between them |
-| Cost (Cloud Run) | One service, scale to zero | About the same idle cost (both scale to zero) but double the config, logs, IAM, deploy steps |
+| Background work | `after()` is stable since 15.1 and "fully supported when self-hosting with `next start`" ([after](https://nextjs.org/docs/app/api-reference/functions/after), [self-hosting](https://nextjs.org/docs/app/guides/self-hosting#after)). On Vercel it shares the function's 300 s limit and has no retries, so durable work goes through QStash → a Route Handler (§3) | Needs an always-on process or the same queue |
+| Deploy | One Vercel project | Fastify doesn't run as a long-lived server on Vercel functions, so it needs a second host, plus CORS between them |
+| Cost | $0 on Hobby | A second host to pay for and run |
 
 MCP specifics, verified today:
 - **Package rename**: MCP TypeScript SDK **v2** is split into `@modelcontextprotocol/server` 2.3.1, `/client` 2.3.1, `/core`, `/node` 2.1.1, `/express`, `/hono`. The legacy single package `@modelcontextprotocol/sdk` is still at 1.32.1 (npm). `mcp-handler@2` peers on `@modelcontextprotocol/server ^2` and `next >=13` (npm).
-- **Spec version**: the current MCP spec is **2026-07-28** and is stateless: each message is an HTTP POST, and replies come as JSON or a request-scoped SSE stream ([transports](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports)). `mcp-handler` 2.x serves it natively and falls back to stateless 2025-era Streamable HTTP. It no longer needs Redis; the HTTP+SSE transport was removed ([README](https://github.com/vercel/mcp-handler)). Stateless serving fits Cloud Run scale-to-zero and multiple instances.
+- **Spec version**: the current MCP spec is **2026-07-28** and is stateless: each message is an HTTP POST, and replies come as JSON or a request-scoped SSE stream ([transports](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports)). `mcp-handler` 2.x serves it natively and falls back to stateless 2025-era Streamable HTTP. It no longer needs Redis; the HTTP+SSE transport was removed ([README](https://github.com/vercel/mcp-handler)). Stateless serving fits serverless functions and multiple instances.
 - **Auth for claude.ai**:
   - Claude needs a `401` with `WWW-Authenticate: Bearer resource_metadata=...`, uses only the **first** `authorization_servers` entry, and needs PKCE S256.
   - Register the redirect `https://claude.ai/api/mcp/auth_callback`. For Claude Code, accept a loopback redirect on any port.
@@ -312,13 +321,12 @@ MCP specifics, verified today:
   - The extension service worker can fetch the API origin cross-origin when `host_permissions` lists it. Content scripts cannot ([Chrome docs](https://developer.chrome.com/docs/extensions/develop/concepts/network-requests)). Do fetches from the service worker.
   - Sign-in: `chrome.identity.launchWebAuthFlow` against the same AS, redirect `https://<extension-id>.chromiumapp.org/*` ([identity API](https://developer.chrome.com/docs/extensions/reference/api/identity)). Store the access/refresh token and send `Authorization: Bearer`.
   - Still answer `OPTIONS` + `Access-Control-Allow-Origin: chrome-extension://<id>` in case requests come from extension pages. Do not use cookies cross-site.
-- **Docker for Cloud Run**:
-  - Use `output: 'standalone'` ([output](https://nextjs.org/docs/app/api-reference/config/next-config-js/output)).
-  - For multiple instances or rolling deploys: set `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` at **build** time, `deploymentId` for version-skew protection, and `generateBuildId` from the git SHA ([self-hosting](https://nextjs.org/docs/app/guides/self-hosting)).
-  - The default cache is in memory per instance and not shared. At ~5 users with max-instances 1–2 that's acceptable. Otherwise add `'use cache: remote'` + a cache handler.
+- **On Vercel**:
+  - No Dockerfile or `output: 'standalone'`. Keep the app free of Vercel-only APIs (apart from optional `@vercel/functions`) so a Docker exit path stays open.
+  - Vercel scales instances itself, so the old "max-instances 1–2 makes the per-instance cache acceptable" reasoning no longer applies. How `'use cache'` data is shared across Vercel instances, and whether Vercel handles the self-hosting concerns (`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`, `deploymentId` skew protection) itself, is unverified ([self-hosting](https://nextjs.org/docs/app/guides/self-hosting)). Check it before relying on cross-request caching.
   - Env vars are server-side and read at runtime under dynamic rendering; `NEXT_PUBLIC_*` are inlined at build time.
 
-**Recommendation**: Go all-in on Next.js with one Cloud Run service. Route Handlers for `/api/*` (extension + Cloud Tasks callback + health), Server Actions for web-app mutations, `mcp-handler@2` at `/mcp`, and Better Auth (Google provider + `mcp()` AS + CIMD) for both the web session and OAuth tokens for claude.ai / Claude Code / the extension. Fastify adds nothing this app needs.
+**Recommendation**: Go all-in on Next.js with one Vercel project. Route Handlers for `/api/*` (extension + QStash callback + daily sweeper cron + health), Server Actions for web-app mutations, `mcp-handler@2` at `/mcp`, and Better Auth (Google provider + `mcp()` AS + CIMD) for both the web session and OAuth tokens for claude.ai / Claude Code / the extension. Fastify adds nothing this app needs.
 
 **Open questions**: Better Auth vs Firebase Auth / Identity Platform (the brief's choice). Identity Platform can't be the MCP authorization server, so you'd need an AS anyway. Better Auth covers both and stores sessions in the same Postgres. Check that the custom-connector flow works end-to-end before M4.
 
@@ -329,7 +337,7 @@ Needed? **Yes, lightly.** There are two deployables (Next app, extension) sharin
 Proposed layout:
 ```
 apps/
-  web/          Next.js 16.4 (UI + /api + /mcp + auth), output: 'standalone'
+  web/          Next.js 16.4 (UI + /api + /mcp + auth), deployed to Vercel
   extension/    WXT 0.21 MV3 extension (React)
 packages/
   shared/       zod schemas, DTO types, URL normalizer (JIT TS package)
@@ -337,12 +345,11 @@ packages/
   ui/           React Aria components + Tailwind tokens/themes.css (JIT)
   themes/       (optional, or inside ui) M3 token generator script → themes.css
   config/       tsconfig bases, oxlint/oxfmt configs
-infra/          Terraform
 ```
 - **Internal packages**: use **Just-in-Time** packages (`exports` pointing at `./src/*.ts(x)`, no build step). Both consumers (Turbopack, Vite in WXT) transpile TS. Trade-offs: no `compilerOptions.paths` inside packages (use subpath imports), and type errors surface in consumers ([Turborepo internal packages](https://turborepo.dev/docs/core-concepts/internal-packages)).
 - **`transpilePackages`**: not needed for workspace packages. "Turbopack transpiles workspace packages ... automatically under both routers" ([transpilePackages](https://nextjs.org/docs/app/api-reference/config/next-config-js/transpilePackages)).
 - **Catalogs**: put shared versions (react, react-dom, typescript, zod, tailwindcss, react-aria-components) in `pnpm-workspace.yaml` `catalog:` and reference them as `"react": "catalog:"`. `catalogMode: strict` stops drift. `catalogPrune` (11.22+) removes unused entries ([catalogs](https://pnpm.io/catalogs)).
-- **Standalone + monorepo**: set `outputFileTracingRoot` to the repo root so traced files from `packages/*` land in `.next/standalone` (check [output docs](https://nextjs.org/docs/app/api-reference/config/next-config-js/output)). The Docker build uses `turbo prune web --docker`.
+- **Vercel + monorepo**: set the Vercel project's root directory to `apps/web`. Vercel detects Turborepo and pnpm workspaces ([monorepos](https://vercel.com/docs/monorepos/turborepo)). If the Docker exit path is ever used: `output: 'standalone'`, `outputFileTracingRoot` at the repo root, and `turbo prune web --docker`.
 
 Chrome extension build tool:
 
@@ -374,7 +381,7 @@ Chrome extension build tool:
     - the flag throws unless running under Turbopack ("only supported with Turbopack");
     - it throws unless `reactCompiler` is enabled.
   - Turbopack is the default for `next dev` and `next build`, so the flag works on our setup (Node 24, Turbopack).
-  - It needs the **native** SWC bindings. The WASM fallback bindings stub out compiler support (`dist/build/swc/index.js`). Use the glibc or musl `@next/swc-linux-*` binaries, which pnpm installs automatically for the Docker build platform.
+  - It needs the **native** SWC bindings. The WASM fallback bindings stub out compiler support (`dist/build/swc/index.js`). Use the glibc or musl `@next/swc-linux-*` binaries, which pnpm installs automatically for the build platform.
   - `compilationMode: 'annotation'` compiles only functions with `'use memo'`; `'use no memo'` opts out ([reactCompiler](https://nextjs.org/docs/app/api-reference/config/next-config-js/reactCompiler)). Recommendation: default `infer` mode, and use `'use no memo'` on any component that hits a Rust-port bug.
   - Set `enablePreserveExistingMemoizationGuarantees` explicitly, because "defaults may differ between compiler implementations" (same page).
   - `panicThreshold` was ignored by the Rust path until [#99455](https://github.com/vercel/next.js/issues/99455) was closed (2026-09-30). Confirm it is honoured in 16.4.
@@ -614,10 +621,9 @@ Where client fetching actually earns its place in Clippings:
   - Every query is scoped by `user_id`. Search ranking is per user. Optionally use Postgres RLS later; not needed now.
 - **Simplifications at this scale**:
   - No ANN index: exact `ORDER BY embedding <=> $1` over a few thousand rows is fine (the brief already says this).
-  - Smallest Cloud SQL tier (see §3).
-  - Keep Cloud Tasks: it costs $0 at this volume and avoids Cloud Run's post-response CPU throttling (§3).
-  - `max-instances` 1–2 on Cloud Run, which also sidesteps the shared Next cache issue.
-  - No Redis. No separate API service.
+  - Neon Free instead of a paid always-on database (§3).
+  - QStash for enrichment (free tier: 1,000 messages/day), because `after()` has no retries (§3).
+  - No Redis. No separate API service. No Terraform or Docker.
 
 ## 11. Light/dark + modern CSS (recommended approach)
 
@@ -631,7 +637,7 @@ Where client fetching actually earns its place in Clippings:
 4. **Tailwind v4**: `@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));` ([dark mode](https://tailwindcss.com/docs/dark-mode)). Note that with `light-dark()` tokens you rarely need `dark:`. Keep the variant for one-off overrides only. "System" mode under `dark:` needs the script to set `data-theme` from `matchMedia`, or `dark:` won't match.
 5. **next-themes** (0.4.6, last released 2025-03) isn't needed; the official pattern is about 15 lines.
 
-## 12. GitHub CI + deploy to GCP via GitHub Actions
+## 12. GitHub CI + deploy to Vercel via GitHub Actions
 
 Action versions and commit SHAs were read from the GitHub Releases/Git refs API on 2026-10-14. The other facts come from the linked docs.
 
@@ -640,18 +646,14 @@ Action versions and commit SHAs were read from the GitHub Releases/Git refs API 
 | actions/checkout | v7.0.1 | `3d3c42e5aac5ba805825da76410c181273ba90b1` |
 | actions/setup-node | v7.1.0 | `949feb2413d6458794dcd2491c4babbbce0c15c1` |
 | pnpm/action-setup | v6.1.0 | `ea17c68df8912ef543352723c149a84f56e3d413` |
-| google-github-actions/auth | v3.0.0 | `7c6bc770dae815cd3e89ee6cdf493a5fab2cc093` |
-| google-github-actions/deploy-cloudrun | v3.0.1 | `2028e2d7d30a78c6910e0632e48dd561b064884d` |
-| google-github-actions/setup-gcloud | v3.0.1 | (resolve from the tag) |
-| actions/github-script | v9.0.0 | (resolve from the tag) |
 | pnpm/setup (alternative to action-setup + setup-node) | v3.1.1 | `a0881977cd8ea73b1ed212236c99ca10dcc80cf4` |
-| hashicorp/setup-terraform | v4.0.1 | `dfe3c3f87815947d99a8997f908cb6525fc44e9e` |
-| docker/build-push-action | v7.4.0 | `c3c9e263c25d99ce0380d002d59b67737d91b0dc` |
-| docker/setup-buildx-action | v4.4.1 | `f87e5991a6d7451dcb8d9637bfbc97413f497069` |
+| neondatabase/create-branch-action | v6.3.1 (tag `6.3.1`, read 2026-10-15) | `fb620d43d4c565abaf088b848a4e28e5c4ea4d9c` |
+| neondatabase/delete-branch-action | v3.2.1 (read 2026-10-15) | `4468d825d5a88ef4012f1705a82f02ec3072f776` |
+| `vercel` CLI (npm, not an action; run with `pnpm dlx vercel@64.0.2`) | 64.0.2 (read 2026-10-15) | — |
 | actions/cache | v6.1.0 | `55cc8345863c7cc4c66a329aec7e433d2d1c52a9` |
 | actions/upload-artifact | v7.0.2 | `cf430e030ddbb5b0abf93d22962f4752f3646cd9` |
 
-Sources: the GitHub Releases API for each repo (e.g. [auth releases](https://github.com/google-github-actions/auth/releases), [deploy-cloudrun releases](https://github.com/google-github-actions/deploy-cloudrun/releases)).
+Sources: the GitHub Releases API for each repo (e.g. [checkout releases](https://github.com/actions/checkout/releases), [create-branch-action releases](https://github.com/neondatabase/create-branch-action/releases)). The GCP-only actions (`google-github-actions/*`, `setup-terraform`, `docker/*`) are listed in Appendix A.2.
 - Pin every action to a full commit SHA with a `# vX.Y.Z` comment, and check the SHA belongs to the action's own repo, not a fork ([secure use](https://docs.github.com/en/actions/reference/security/secure-use)).
   - That page now also documents "workflow dependency lockfiles" as superseding SHA pinning. Their GA/preview status was not verified.
   - Dependabot does not alert on SHA-pinned actions, so schedule a version-update job for them.
@@ -669,6 +671,251 @@ Sources: the GitHub Releases API for each repo (e.g. [auth releases](https://git
   - Simplest: `actions/cache` on `.turbo` keyed by `${{ runner.os }}-turbo-${{ github.sha }}` with restore-keys.
   - Vercel Remote Cache is free on all plans. Connect it via OIDC (`vercel/setup-turborepo-remote-cache-action`) or `TURBO_TOKEN` / `TURBO_TEAM`. It is better but needs a Vercel account. Self-hosting is possible through the OpenAPI spec ([GitHub Actions guide](https://turborepo.dev/docs/guides/ci-vendors/github-actions), [remote caching](https://turborepo.dev/docs/core-concepts/remote-caching)).
 - **pnpm 11+ `minimumReleaseAge` = 1 day**: a dependency bumped to a version published that day won't resolve. That is fine with a frozen lockfile, but `pnpm update` in CI would hit it.
+
+**Deploy (`deploy.yml`, on push to `main` + `workflow_dispatch`)**
+- Production deploys run from Actions, not from Vercel's Git integration, so migrations always run before the new code gets traffic.
+  - Turn off Git-triggered production deploys in `vercel.json` with `"git": { "deploymentEnabled": { "main": false } }` ([git configuration](https://vercel.com/docs/project-configuration/git-configuration)).
+  - Preview deploys of other branches can stay on the Git integration.
+- `permissions: { contents: read }`. No `id-token` is needed: there's no WIF.
+- ⚠ **GitHub Environments are not available for private repos on GitHub Free.** "Users with GitHub Free plans can only configure environments for public repositories", and required reviewers and wait timers are public-only on Free/Pro/Team ([manage environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments)).
+  - On a private Free repo, drop `environment:` and use repo-level secrets plus branch protection on `main`.
+- **Steps**:
+  1. checkout → pnpm → setup-node → `pnpm install --frozen-lockfile`.
+  2. **Migrate**: `pnpm --filter db migrate` with `DATABASE_URL_DIRECT`, Neon's direct URL, as a GitHub secret.
+     - Make migrations backward-compatible (expand/contract) so the running deployment keeps working while they apply.
+  3. **Build and deploy** with the Vercel CLI (`vercel` 64.0.2) ([GitHub Actions guide](https://vercel.com/guides/how-can-i-use-github-actions-with-vercel)):
+     - `vercel pull --yes --environment=production --token=$VERCEL_TOKEN`
+     - `vercel build --prod --token=$VERCEL_TOKEN`
+     - `vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN`
+     - Set `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` as env.
+- **GitHub secrets**: `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, `DATABASE_URL_DIRECT`, plus the R2 keys for backups.
+- **Vercel env vars (Sensitive)**: `DATABASE_URL` (pooled), `ANTHROPIC_API_KEY`, `BETTER_AUTH_SECRET`, the Google OAuth client ID and secret, `QSTASH_TOKEN`, `QSTASH_CURRENT_SIGNING_KEY` and `QSTASH_NEXT_SIGNING_KEY`. `vercel pull` brings them into the build.
+- **Hobby restriction**: the repo must be under a personal GitHub account, since Hobby can't connect org-owned repos. Whether a CLI deploy from an org repo works is unverified (hosting Unverified).
+
+**Preview databases (`preview-db.yml`, on `pull_request` opened / synchronize / closed)**
+- On open or synchronize, `neondatabase/create-branch-action` v6.3.1 creates a branch `preview/pr-<n>` from `main`. Its outputs are `db_url` and `db_url_pooled`.
+  - Run migrations against `db_url`.
+  - Hand `db_url_pooled` to the Vercel preview, either as a branch-scoped env var through the Vercel CLI, or by using the Neon ↔ Vercel integration instead of this workflow ([create-branch-action](https://github.com/neondatabase/create-branch-action), [Neon GitHub integration](https://neon.com/docs/guides/neon-github-integration)).
+- On close, `neondatabase/delete-branch-action` v3.2.1 deletes the branch ([delete-branch-action](https://github.com/neondatabase/delete-branch-action)). Neon Free allows only 10 branches per project.
+- Uses the `NEON_API_KEY` secret and the `NEON_PROJECT_ID` variable.
+- **Google sign-in on previews**: preview URLs change on every deploy, and Google OAuth needs exact redirect URIs. Either skip sign-in on previews or give previews one fixed alias (hosting §7).
+
+**Backups (`backup.yml`, on `schedule` nightly + `workflow_dispatch`)**
+- `pg_dump -Fc` against `DATABASE_URL_DIRECT`. Run it from the `postgres:18` image (`docker run --rm postgres:18 pg_dump ...`), because pg_dump must be at least the server's major version and the runner's own client may be older ([pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html)).
+- Upload to a Cloudflare R2 bucket with the AWS CLI and R2's S3 endpoint (`--endpoint-url https://<account_id>.r2.cloudflarestorage.com`) ([R2 with aws CLI](https://developers.cloudflare.com/r2/examples/aws/aws-cli/)).
+- Add an R2 lifecycle rule to delete objects after ~30 days. R2 is free up to 10 GB with free egress ([R2 pricing](https://developers.cloudflare.com/r2/pricing/)).
+- Test a restore into a Neon branch once.
+
+**Chrome extension**
+- CI runs `pnpm turbo run build --filter=extension` then `wxt zip`, and uploads the zip with `actions/upload-artifact`.
+- Publishing is feasible.
+  - The official **Chrome Web Store API v2** has upload/publish/fetchStatus endpoints and supports **service accounts**: add the SA email in the Developer Dashboard, scope `https://www.googleapis.com/auth/chromewebstore` ([using the API](https://developer.chrome.com/docs/webstore/using-api), [service accounts](https://developer.chrome.com/docs/webstore/service-accounts)). Without GCP in the stack, that means a small Google Cloud project used only for the store service account, or an OAuth refresh token instead.
+  - `wxt submit` and `mnao305/chrome-extension-upload` v7.0.0 also exist.
+  - For 5 users, an **unlisted** listing or loading the unpacked zip is enough.
+
+**Cost notes (~5 users)**
+- GitHub Actions on Free (private repos): **2,000 min/month**, 500 MB artifacts, 10 GB cache per repo. Linux 2-core costs $0.006/min beyond that; public repos are free ([billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)).
+  - Expect ~5 min per CI run, ~4 min per deploy and ~1 min per nightly backup (~30 min/month), so ~150 pushes/month fit inside the free tier.
+- Vercel builds run on GitHub's runners (`vercel build`), so Vercel's own build allowance is barely used.
+- Neon, QStash and R2 are all on free tiers (§3).
+
+YAML sketch (outline only):
+```yaml
+# .github/workflows/ci.yml
+on: { pull_request: {}, push: { branches: [main] } }
+concurrency: { group: ci-${{ github.ref }}, cancel-in-progress: true }
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version-file: .node-version, cache: pnpm }
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with: { path: .turbo, key: turbo-${{ github.sha }}, restore-keys: turbo- }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run lint format:check typecheck test build --affected
+      - run: pnpm --filter extension zip   # + upload-artifact v7.0.2
+
+# .github/workflows/deploy.yml
+on: { push: { branches: [main] }, workflow_dispatch: {} }
+concurrency: { group: deploy-prod, cancel-in-progress: false }
+permissions: { contents: read }
+env: { VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}, VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }} }
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - checkout (v7.0.1), pnpm/action-setup (v6.1.0), setup-node (v7.1.0), pnpm install --frozen-lockfile
+      - run: pnpm --filter db migrate
+        env: { DATABASE_URL: ${{ secrets.DATABASE_URL_DIRECT }} }
+      - run: pnpm dlx vercel@64.0.2 pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+      - run: pnpm dlx vercel@64.0.2 build --prod --token=${{ secrets.VERCEL_TOKEN }}
+      - run: pnpm dlx vercel@64.0.2 deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+# .github/workflows/preview-db.yml
+on: { pull_request: { types: [opened, synchronize, reopened, closed] } }
+jobs:
+  create:   # if: github.event.action != 'closed'
+    # neondatabase/create-branch-action@fb620d43d4c565abaf088b848a4e28e5c4ea4d9c # v6.3.1
+    #   with: { project_id: ${{ vars.NEON_PROJECT_ID }}, branch_name: preview/pr-${{ github.event.number }}, api_key: ${{ secrets.NEON_API_KEY }} }
+    # migrate against steps.create.outputs.db_url; pass db_url_pooled to the Vercel preview
+  delete:   # if: github.event.action == 'closed'
+    # neondatabase/delete-branch-action@4468d825d5a88ef4012f1705a82f02ec3072f776 # v3.2.1
+
+# .github/workflows/backup.yml
+on: { schedule: [{ cron: '17 3 * * *' }], workflow_dispatch: {} }
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - run: docker run --rm -e URL="$DATABASE_URL" postgres:18 sh -c 'pg_dump -Fc "$URL"' > clippings-$(date +%F).dump
+        env: { DATABASE_URL: ${{ secrets.DATABASE_URL_DIRECT }} }
+      - run: aws s3 cp clippings-*.dump s3://clippings-backups/ --endpoint-url https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        env: { AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}, AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}, AWS_DEFAULT_REGION: auto }
+```
+
+**Recommendation**
+- Four workflows as sketched: `ci`, `deploy`, `preview-db` and `backup`.
+- SHA-pin every action.
+- Production deploys go through the Vercel CLI from Actions, with migrations first. Previews come from the Git integration with a Neon branch per PR.
+- Runtime secrets live in Vercel env vars. Deploy, DB and backup credentials live in GitHub secrets.
+- No WIF, Docker, Artifact Registry or Terraform. The previous GCP deploy design is in Appendix A.
+## Changes to the brief (edits to CLIPPINGS_BRIEF.md)
+
+1. **Architecture diagram**: replace "Cloud Run service (Node, Hono)" and "static React SPA" with **one Next.js 16.4 app** on Vercel Hobby serving the UI (RSC), `/api/*` Route Handlers, `/mcp` (`mcp-handler` 2) and auth routes.
+2. **Decisions table**:
+   - **Repo**: pnpm 12 + Turborepo 2.11 monorepo: `apps/web` (Next), `apps/extension` (WXT), `packages/shared`, `packages/ui`, `packages/db`, `packages/config`. Remove `apps/server`. Use pnpm catalogs and JIT internal packages.
+   - **Backend**: Next.js Route Handlers + Server Actions; no Hono, no Fastify.
+   - **Frontend**: Next.js App Router (not Vite), React 19.3, React Aria Components 1.22, Tailwind 4.3. Drop `tailwindcss-react-aria-components`; Tailwind v4 `data-*` variants cover RAC states. Add SWR 2.5 for search, polling and optimistic tag edits only.
+   - **Auth**: replace "Firebase Auth / Identity Platform, single user" with **Better Auth** (Google provider) plus an **allowlist of ~5 emails**. Its `mcp()` plugin is the OAuth 2.1 authorization server for claude.ai / Claude Code (CIMD, PKCE S256, redirect `https://claude.ai/api/mcp/auth_callback`) and for the extension (`launchWebAuthFlow`).
+   - **Hosting**: Vercel Hobby (personal, non-commercial; repo under a personal GitHub account).
+   - **DB**: Neon Free, PG 18, pgvector 0.8.6. Search uses a weighted `tsvector` + GIN + `ts_rank_cd` instead of BM25 (`pg_textsearch` isn't available outside Cloud SQL).
+   - **Save flow**: replace Cloud Tasks with Upstash QStash, and note why: `after()` has no retries. Keep the `pending` status and add a daily cron sweeper.
+3. **Data model**: add `users` (Better Auth tables) and `user_id` on `clippings` / `tags` / `clipping_tags`. Change `url_normalized` to `unique(user_id, url_normalized)` and tags to `unique(user_id, name)`. Keep `source` incl. `digest`.
+4. **MCP tools**: `save_clipping(url, note?, source?)`. Pin the protocol to spec 2026-07-28 with stateless fallback. Prefer CIMD over DCR for client identity.
+5. **Design**:
+   - Generate tokens with `@material/material-color-utilities` 0.4.0 (Tonal Spot, spec 2021, neutral override hue 72–88 / chroma 8–9) for **olive, yellow, orange × light/dark**, as `light-dark()` tokens under `data-palette`, mapped via `@theme inline`.
+   - Material Theme Builder becomes a visual cross-check only (its repo is archived).
+   - Add the M3 Expressive shape steps (20/32/48) and spring motion curves.
+   - `cn` 0.4.0 replaces clsx + tailwind-merge. `@shadcn/lint` enforces "No hardcoded colors".
+6. **Resources**: add Material Web 2.5 `labs/gb/styles/tailwind.css` as the reference for the Tailwind token mapping.
+7. **New sections**:
+   - **Toolchain**: Node 24.22 via `.node-version` + `devEngines.runtime`; TypeScript 7.0.2 (`strict`, `erasableSyntaxOnly`, `verbatimModuleSyntax`, no `baseUrl`); oxlint 1.88 (+ tsgolint, React Compiler rules, `@shadcn/lint`); oxfmt 0.73 (`sortImports`, `sortTailwindcss`); Rust React Compiler only.
+   - **Browsers**: last 2 Chrome / Firefox / Safari / iOS.
+   - **CI/CD**: §12 workflows.
+8. **Milestones**:
+   - M0: Next + Turborepo scaffold; Vercel, Neon and QStash projects; GitHub secrets; CI.
+   - M4: Better Auth AS + `/mcp` (stateless).
+   - M5: theme generator + 3 palettes.
+   - Add a CI/deploy milestone.
+9. **Later**: daily digest moves to its own spec. Keep `source = digest` and MCP `save_clipping` as its entry points.
+10. **Not using**: GCP (Cloud Run, Cloud SQL, Cloud Tasks), Terraform, Docker (for now), Hono, Vite (for the web app), Firebase Auth, Babel / `babel-plugin-react-compiler`, shadcn components and registries, next-themes, Redis.
+
+## Unverified / could not confirm
+
+- Whether the Next.js TS IDE plugin loads under TypeScript 7's native language server (likely not, since there is no JS API). Keep `typescript@6.0.3` as the editor TSDK if needed.
+- oxlint React Compiler rules: the plugins page says "experimental, off by default", while the blog files them under `correctness`.
+- oxfmt still labelled beta (no stable announcement found).
+- Rust React Compiler: whether `panicThreshold` is honoured in 16.4.0 (#99455 closed 2026-09-30). There is no per-file compiler report from Next.
+- `cn` / tailwind-merge behaviour with M3 typescale and custom radius class names (inferred from tailwind-merge semantics; test it).
+- Whether `@shadcn/lint` reads RAC `className` render functions (not in its documented table).
+- That Lightning CSS in Turbopack leaves `light-dark()` / nesting untranspiled under the new browserslist (implied by docs, not tested).
+- Chrome / Firefox ~2-week release cadence (inferred from caniuse release dates).
+- Combining a manual `document.startViewTransition` (theme switch) with React-driven transitions.
+- Vercel Hobby: whether you can pick the function region, cold-start times, and the build-minute allowance. Whether `vercel deploy --prebuilt` works for a Hobby project whose repo is org-owned.
+- How `'use cache'` / Cache Components data is shared across Vercel instances, and whether Vercel handles `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` / `deploymentId` itself.
+- QStash's maximum retry count on the Free plan. Whether Neon's `lakebase_text` (BM25) is on the Free plan.
+- Whether `pg_textsearch` on Cloud SQL is GA or public preview (Appendix A only).
+- GitHub "workflow dependency lockfiles" GA status. Whether `mnao305/chrome-extension-upload` v7 uses the CWS v2 API.
+- Material Theme Builder: exact CSS number formatting, and whether the UI exposes a full variant picker.
+- `@material/material-color-utilities` 0.4.0 resolving through Turbopack (fails in plain Node ESM; run the generator with `tsx` at build time, so this doesn't matter).
+- M3 Expressive spring damping/stiffness values were read under the "Standard, Android" table only.
+- pnpm `devEngines.runtime` `onFail` values beyond `download` (pnpm docs only show `download`; `runtimeOnFail` accepts download / error / warn / ignore).
+
+## Appendix A: GCP option (superseded 2026-10-15)
+
+This was the plan before switching to Vercel + Neon + QStash (§3, §12). It is kept as a reference and as an exit path: it is still the only managed option with `pg_textsearch` BM25. Cost ≈ $10–12/mo, almost all Cloud SQL.
+
+### A.1 Infra on GCP
+
+**Cloud SQL for PostgreSQL**
+- **Version and edition**
+  - **PG 18 is GA** (2025-11-20) and the **default** major (18.6) ([release notes](https://docs.cloud.google.com/sql/docs/postgres/release-notes), [db versions](https://docs.cloud.google.com/sql/docs/db-versions)).
+  - ⚠ For PG 16+, an unset `edition` defaults to **Enterprise Plus**, which rejects shared-core tiers. **Set `edition = "ENTERPRISE"`** ([Terraform resource](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/sql_database_instance)).
+- **Extensions**
+  - **pgvector** is 0.8.5 on PG 13+. Enable it with `CREATE EXTENSION vector;` as a `cloudsqlsuperuser` on the primary; no flag is needed ([extensions](https://docs.cloud.google.com/sql/docs/postgres/extensions)).
+  - **`pg_textsearch` (BM25) is supported**. It was added 2026-09-14 and needs **PG 17+** and maintenance version **R20260712.01_06** or later ([extensions](https://docs.cloud.google.com/sql/docs/postgres/extensions), [release notes](https://docs.cloud.google.com/sql/docs/postgres/release-notes)). The brief's plan works.
+  - `pg_trgm` is supported. `pg_bigm` needs the flag `cloudsql.enable_pg_bigm`. `rum` and ParadeDB `pg_search` are not available.
+  - You cannot install custom extensions.
+  - Fallback if `pg_textsearch` misbehaves: a `tsvector` column with `setweight`, a GIN index, and `ts_rank_cd`.
+- **Cheapest tier** (us-central1, [pricing](https://cloud.google.com/sql/pricing)):
+
+  | Item | Price |
+  |---|---|
+  | `db-f1-micro` (shared, 0.6 GB) | $0.0105/h ≈ **$7.7/mo** |
+  | `db-g1-small` (1.7 GB) | ≈ $25.6/mo |
+  | Smallest dedicated (1 vCPU / 3.75 GB) | ≈ $49/mo |
+  | SSD | ≈ $0.17/GiB-mo |
+  | Backups | ≈ $0.08/GiB-mo |
+  | Public IPv4 while idle | $0.01/h |
+
+  - **f1-micro + 10 GiB SSD ≈ $9.4/mo plus backups.**
+  - Shared-core is available on Enterprise edition only and is **not covered by the SLA** ([SLA](https://cloud.google.com/sql/sla)).
+  - 0.6 GB RAM is tight for pgvector plus BM25 indexes. Start with f1-micro and move to g1-small if memory errors appear.
+  - There is no scale-to-zero. Activation policy `NEVER` stops instance charges, but storage and IP are still billed ([start/stop](https://docs.cloud.google.com/sql/docs/postgres/start-stop-restart-instance)).
+- **Connecting from Cloud Run**
+  - Use the **built-in Cloud SQL connection** (`--add-cloudsql-instances` / a `cloud_sql_instance` volume in Terraform) over a Unix socket at `/cloudsql/PROJECT:REGION:INSTANCE`. The connection is encrypted, needs the `roles/cloudsql.client` role, and allows 100 connections per instance ([connect from Cloud Run](https://docs.cloud.google.com/sql/docs/postgres/connect-run)).
+  - Alternative: `@google-cloud/cloud-sql-connector` 1.12.1 (supports IAM DB auth) ([repo](https://github.com/GoogleCloudPlatform/cloud-sql-nodejs-connector)).
+  - Private IP needs Direct VPC egress plus PSC or PSA, which isn't worth it here.
+  - The Cloud SQL Auth Proxy's current line is **v2.26.0**. v1.38.4 is legacy maintenance ([releases](https://github.com/GoogleCloudPlatform/cloud-sql-proxy/releases)).
+
+**Cloud Run** ([pricing](https://cloud.google.com/run/pricing))
+- **Request-based billing**:
+  - Free each month: 180k vCPU-s, 360k GiB-s and 2M requests.
+  - Idle instances that aren't minimum instances cost nothing, and `min_instance_count` defaults to 0.
+- **Instance-based billing**: free each month 240k vCPU-s and 450k GiB-s. Set it with `--no-cpu-throttling` / `cpu_idle = false`, and it needs at least 512 MiB.
+- Request timeout: maximum **3600 s**, default 300 s ([request timeout](https://docs.cloud.google.com/run/docs/configuring/request-timeout)).
+- ⚠ **With request-based billing, CPU is "only allocated during request processing"** ([billing settings](https://docs.cloud.google.com/run/docs/configuring/billing-settings)). After the response, access to CPU is "disabled or severely limited" ([tips](https://docs.cloud.google.com/run/docs/tips/general)).
+  - **So Next.js `after()` work (fetch + Haiku + embedding) will stall on the default billing mode.**
+  - The SIGTERM grace period is only 10 s, versus the 10–30 s drain Next recommends.
+
+**Cloud Tasks vs `after()`**
+- Cloud Tasks is free for the first 1M operations a month ([pricing](https://cloud.google.com/tasks/pricing)).
+- It targets Cloud Run over HTTP with an OIDC token. The invoking SA needs `run.invoker`, and the Tasks service agent needs `iam.serviceAccountUser` on it. The `dispatchDeadline` is up to **30 min** ([HTTP target tasks](https://docs.cloud.google.com/tasks/docs/creating-http-target-tasks)).
+- The enrichment runs inside its own request, so CPU is allocated, with durable retries and backoff.
+- **Verdict: keep Cloud Tasks** (the brief's choice). It costs $0 at this scale and fixes the CPU-throttling problem.
+- `after()` is acceptable only with instance-based billing plus a re-sweep of `pending` rows, and loses work on shutdown.
+- Use `after()` only to *enqueue* the task after responding, or enqueue synchronously, since it's a ~50 ms call.
+
+**Terraform**
+- terraform **1.16.6**; `hashicorp/google` **8.7.0** (2026-10-13) ([releases](https://github.com/hashicorp/terraform-provider-google/releases)).
+- **v7→v8 breaking changes for these resources** ([v8 upgrade guide](https://github.com/hashicorp/terraform-provider-google/blob/main/website/docs/guides/version_8_upgrade.html.markdown)): only `google_secret_manager_secret_version` changes.
+  - `secret_data_wo_version` is now a string.
+  - `secret_data_wo` requires it.
+- **Resources and the settings to remember**:
+  - `google_sql_database_instance`: `edition = "ENTERPRISE"`, `tier = "db-f1-micro"`, `deletion_protection` (Terraform guard) and `settings.deletion_protection_enabled` (API guard).
+  - `google_cloud_run_v2_service`: `deletion_protection` defaults to true; set `cpu_idle` explicitly when you add a `resources` block; secrets go through `env.value_source.secret_key_ref`.
+  - `google_cloud_tasks_queue`: use `http_target` for queue-level OIDC.
+  - `google_artifact_registry_repository` with `cleanup_policies` ([cleanup](https://docs.cloud.google.com/artifact-registry/docs/repositories/cleanup-policy)).
+  - `google_iam_workload_identity_pool` / `_provider` (`attribute_condition` in CEL).
+  - `google_service_account_iam_member` (`roles/iam.workloadIdentityUser`, `principalSet://…/attribute.repository_id/ID`, using the project **number**) ([WIF for pipelines](https://docs.cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines)).
+  - The GCS backend supports locking ([gcs backend](https://developer.hashicorp.com/terraform/language/backend/gcs)).
+
+**Recommendation**
+- One Cloud Run service on request-based billing with `min 0` / `max 2`.
+- Cloud SQL Enterprise `db-f1-micro`, PG 18, pgvector 0.8.5 + `pg_textsearch`.
+- The built-in Unix-socket connection.
+- **Keep Cloud Tasks** for enrichment.
+- Terraform 1.16 with google provider 8.7 and a GCS backend.
+
+**Open questions**: europe-west1 prices weren't extracted (check the pricing page for your region); whether `pg_textsearch` needs `shared_preload_libraries` (none is listed).
+
+### A.2 Deploy to GCP via GitHub Actions
+
+Uses the same `ci.yml` and action table as §12, plus `google-github-actions/auth` v3.0.0 (`7c6bc770dae815cd3e89ee6cdf493a5fab2cc093`), `deploy-cloudrun` v3.0.1 (`2028e2d7d30a78c6910e0632e48dd561b064884d`), `setup-gcloud` v3.0.1, `hashicorp/setup-terraform` v4.0.1 (`dfe3c3f87815947d99a8997f908cb6525fc44e9e`), `docker/build-push-action` v7.4.0 (`c3c9e263c25d99ce0380d002d59b67737d91b0dc`) and `docker/setup-buildx-action` v4.4.1 (`f87e5991a6d7451dcb8d9637bfbc97413f497069`).
 
 **Deploy (`deploy.yml`, on push to `main` + `workflow_dispatch`)**
 - `permissions: { contents: read, id-token: write }`.
@@ -703,38 +950,10 @@ Sources: the GitHub Releases API for each repo (e.g. [auth releases](https://git
   4. the WIF pool + provider + the two SAs
   Then migrate the bootstrap state into the bucket (`terraform init -migrate-state`). This is Google's documented flow ([store state](https://docs.cloud.google.com/docs/terraform/resource-management/store-state)). Everything else lives in `infra/` with the GCS backend.
 
-**Chrome extension**
-- CI runs `pnpm turbo run build --filter=extension` then `wxt zip`, and uploads the zip with `actions/upload-artifact`.
-- Publishing is feasible.
-  - The official **Chrome Web Store API v2** has upload/publish/fetchStatus endpoints and supports **service accounts**: add the SA email in the Developer Dashboard, scope `https://www.googleapis.com/auth/chromewebstore` ([using the API](https://developer.chrome.com/docs/webstore/using-api), [service accounts](https://developer.chrome.com/docs/webstore/service-accounts)).
-  - Keyless publishing through WIF (`auth@v3` + `access_token_scopes`) is plausible but untested.
-  - `wxt submit` and `mnao305/chrome-extension-upload` v7.0.0 also exist.
-  - For 5 users, an **unlisted** listing or loading the unpacked zip is enough.
-
-**Cost notes (~5 users)**
-- GitHub Actions on Free (private repos): **2,000 min/month**, 500 MB artifacts, 10 GB cache per repo. Linux 2-core costs $0.006/min beyond that; public repos are free ([billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)). At ~5 min per CI run plus ~6 min per deploy, that's ~150 pushes/month inside the free tier.
+**Cost note**
 - Artifact Registry: the first **0.5 GiB-month is free**, then about $0.10/GiB-month ([pricing](https://cloud.google.com/artifact-registry/pricing)). A Next standalone image is a few hundred MB, so add `cleanup_policies` (keep the 5 most recent versions, delete untagged after 7 days). Keep policies win over delete policies ([cleanup](https://docs.cloud.google.com/artifact-registry/docs/repositories/cleanup-policy)).
 
-YAML sketch (outline only):
 ```yaml
-# .github/workflows/ci.yml
-on: { pull_request: {}, push: { branches: [main] } }
-concurrency: { group: ci-${{ github.ref }}, cancel-in-progress: true }
-jobs:
-  check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with: { fetch-depth: 0 }
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with: { node-version-file: .node-version, cache: pnpm }
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with: { path: .turbo, key: turbo-${{ github.sha }}, restore-keys: turbo- }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm turbo run lint format:check typecheck test build --affected
-      - run: pnpm --filter extension zip   # + upload-artifact v7.0.2
-
 # .github/workflows/deploy.yml
 on: { push: { branches: [main] }, workflow_dispatch: {} }
 concurrency: { group: deploy-prod, cancel-in-progress: false }
@@ -763,54 +982,6 @@ jobs:
 ```
 
 **Recommendation**: three workflows as sketched. WIF with a `repository_id` + ref condition, SHA-pinned actions, GHA Docker layer cache, a Cloud Run Job for migrations, Secret Manager for runtime secrets, and a one-time bootstrap Terraform dir for state bucket + WIF.
-
-## Changes to the brief (edits to CLIPPINGS_BRIEF.md)
-
-1. **Architecture diagram**: replace "Cloud Run service (Node, Hono)" and "static React SPA" with **one Next.js 16.4 app** (`output: 'standalone'`) serving the UI (RSC), `/api/*` Route Handlers, `/mcp` (`mcp-handler` 2) and auth routes.
-2. **Decisions table**:
-   - **Repo**: pnpm 12 + Turborepo 2.11 monorepo: `apps/web` (Next), `apps/extension` (WXT), `packages/shared`, `packages/ui`, `packages/db`, `packages/config`. Remove `apps/server`. Use pnpm catalogs and JIT internal packages.
-   - **Backend**: Next.js Route Handlers + Server Actions; no Hono, no Fastify.
-   - **Frontend**: Next.js App Router (not Vite), React 19.3, React Aria Components 1.22, Tailwind 4.3. Drop `tailwindcss-react-aria-components`; Tailwind v4 `data-*` variants cover RAC states. Add SWR 2.5 for search, polling and optimistic tag edits only.
-   - **Auth**: replace "Firebase Auth / Identity Platform, single user" with **Better Auth** (Google provider) plus an **allowlist of ~5 emails**. Its `mcp()` plugin is the OAuth 2.1 authorization server for claude.ai / Claude Code (CIMD, PKCE S256, redirect `https://claude.ai/api/mcp/auth_callback`) and for the extension (`launchWebAuthFlow`).
-   - **DB**: Cloud SQL PG 18, **edition ENTERPRISE**, `db-f1-micro`. pgvector 0.8.5 + `pg_textsearch` (needs PG 17+ and maintenance ≥ R20260712.01_06).
-   - **Save flow**: keep Cloud Tasks, and note why: Cloud Run CPU throttling after the response.
-3. **Data model**: add `users` (Better Auth tables) and `user_id` on `clippings` / `tags` / `clipping_tags`. Change `url_normalized` to `unique(user_id, url_normalized)` and tags to `unique(user_id, name)`. Keep `source` incl. `digest`.
-4. **MCP tools**: `save_clipping(url, note?, source?)`. Pin the protocol to spec 2026-07-28 with stateless fallback. Prefer CIMD over DCR for client identity.
-5. **Design**:
-   - Generate tokens with `@material/material-color-utilities` 0.4.0 (Tonal Spot, spec 2021, neutral override hue 72–88 / chroma 8–9) for **olive, yellow, orange × light/dark**, as `light-dark()` tokens under `data-palette`, mapped via `@theme inline`.
-   - Material Theme Builder becomes a visual cross-check only (its repo is archived).
-   - Add the M3 Expressive shape steps (20/32/48) and spring motion curves.
-   - `cn` 0.4.0 replaces clsx + tailwind-merge. `@shadcn/lint` enforces "No hardcoded colors".
-6. **Resources**: add Material Web 2.5 `labs/gb/styles/tailwind.css` as the reference for the Tailwind token mapping.
-7. **New sections**:
-   - **Toolchain**: Node 24.22 via `.node-version` + `devEngines.runtime`; TypeScript 7.0.2 (`strict`, `erasableSyntaxOnly`, `verbatimModuleSyntax`, no `baseUrl`); oxlint 1.88 (+ tsgolint, React Compiler rules, `@shadcn/lint`); oxfmt 0.73 (`sortImports`, `sortTailwindcss`); Rust React Compiler only.
-   - **Browsers**: last 2 Chrome / Firefox / Safari / iOS.
-   - **CI/CD**: §12 workflows.
-8. **Milestones**:
-   - M0: Next + Turborepo scaffold, Terraform bootstrap + WIF, CI.
-   - M4: Better Auth AS + `/mcp` (stateless).
-   - M5: theme generator + 3 palettes.
-   - Add a CI/deploy milestone.
-9. **Later**: daily digest moves to its own spec. Keep `source = digest` and MCP `save_clipping` as its entry points.
-10. **Not using**: Hono, Vite (for the web app), Firebase Auth, Babel / `babel-plugin-react-compiler`, shadcn components and registries, next-themes, Redis.
-
-## Unverified / could not confirm
-
-- Whether the Next.js TS IDE plugin loads under TypeScript 7's native language server (likely not, since there is no JS API). Keep `typescript@6.0.3` as the editor TSDK if needed.
-- oxlint React Compiler rules: the plugins page says "experimental, off by default", while the blog files them under `correctness`.
-- oxfmt still labelled beta (no stable announcement found).
-- Rust React Compiler: whether `panicThreshold` is honoured in 16.4.0 (#99455 closed 2026-09-30). There is no per-file compiler report from Next.
-- `cn` / tailwind-merge behaviour with M3 typescale and custom radius class names (inferred from tailwind-merge semantics; test it).
-- Whether `@shadcn/lint` reads RAC `className` render functions (not in its documented table).
-- That Lightning CSS in Turbopack leaves `light-dark()` / nesting untranspiled under the new browserslist (implied by docs, not tested).
-- Chrome / Firefox ~2-week release cadence (inferred from caniuse release dates).
-- Combining a manual `document.startViewTransition` (theme switch) with React-driven transitions.
-- Cloud SQL / Cloud Run prices for europe-west1 (only us-central1 extracted). Whether `pg_textsearch` needs `shared_preload_libraries` on Cloud SQL.
-- GitHub "workflow dependency lockfiles" GA status. Whether `mnao305/chrome-extension-upload` v7 uses the CWS v2 API. Keyless CWS publishing via WIF.
-- Material Theme Builder: exact CSS number formatting, and whether the UI exposes a full variant picker.
-- `@material/material-color-utilities` 0.4.0 resolving through Turbopack (fails in plain Node ESM; run the generator with `tsx` at build time, so this doesn't matter).
-- M3 Expressive spring damping/stiffness values were read under the "Standard, Android" table only.
-- pnpm `devEngines.runtime` `onFail` values beyond `download` (pnpm docs only show `download`; `runtimeOnFail` accepts download / error / warn / ignore).
 
 ## Sources
 
@@ -904,7 +1075,16 @@ jobs:
 - https://m3.material.io/styles/motion/overview/specs
 - https://m3.material.io/foundations/interaction/states/state-layers
 
-**GCP**
+**Vercel, Neon, QStash, R2** (see [hosting alternatives](./2026-10-15-hosting-alternatives.md) for the full list)
+- https://vercel.com/docs/plans/hobby · https://vercel.com/docs/limits · https://vercel.com/legal/terms · https://vercel.com/docs/functions/configuring-functions/duration · https://vercel.com/docs/cron-jobs/usage-and-pricing · https://vercel.com/docs/environment-variables · https://vercel.com/docs/mcp/deploy-mcp-servers-to-vercel
+- https://vercel.com/guides/how-can-i-use-github-actions-with-vercel · https://vercel.com/docs/project-configuration/git-configuration · https://vercel.com/docs/monorepos/turborepo · https://vercel.com/docs/functions/runtimes/node-js/node-js-versions
+- https://neon.com/docs/introduction/plans · https://neon.com/pricing · https://neon.com/docs/extensions/pg-extensions · https://neon.com/docs/introduction/compute-lifecycle · https://neon.com/docs/connect/connection-pooling · https://neon.com/docs/serverless/serverless-driver · https://neon.com/docs/introduction/regions · https://neon.com/docs/guides/neon-github-integration
+- https://github.com/neondatabase/create-branch-action · https://github.com/neondatabase/delete-branch-action
+- https://upstash.com/pricing/qstash · https://upstash.com/docs/qstash/features/retry · https://upstash.com/docs/qstash/howto/signature · https://upstash.com/docs/qstash/quickstarts/vercel-nextjs
+- https://developers.cloudflare.com/r2/pricing/ · https://developers.cloudflare.com/r2/examples/aws/aws-cli/
+- https://www.postgresql.org/docs/current/textsearch-controls.html · https://www.postgresql.org/docs/current/textsearch-indexes.html · https://www.postgresql.org/docs/current/app-pgdump.html
+
+**GCP (Appendix A)**
 - https://docs.cloud.google.com/sql/docs/postgres/release-notes · https://docs.cloud.google.com/sql/docs/db-versions · https://docs.cloud.google.com/sql/docs/postgres/extensions
 - https://cloud.google.com/sql/pricing · https://cloud.google.com/sql/sla
 - https://docs.cloud.google.com/sql/docs/postgres/connect-run
@@ -916,8 +1096,8 @@ jobs:
 - https://cloud.google.com/artifact-registry/pricing
 
 **GitHub**
-- https://github.com/google-github-actions/auth · https://github.com/google-github-actions/deploy-cloudrun
-- https://github.com/hashicorp/setup-terraform · https://github.com/pnpm/action-setup
+- https://github.com/pnpm/action-setup
+- GCP deploy (Appendix A): https://github.com/google-github-actions/auth · https://github.com/google-github-actions/deploy-cloudrun · https://github.com/hashicorp/setup-terraform
 - https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments
 - https://docs.github.com/en/actions/reference/security/secure-use
 - https://docs.github.com/en/billing/concepts/product-billing/github-actions
