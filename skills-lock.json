@@ -73,6 +73,18 @@
       "skillPath": "skills/engineering/improve-codebase-architecture/SKILL.md",
       "computedHash": "ac2c94885f34ff8492dc12aa4543182f661f32ea1722b8d6b6c2c7045af33ae3"
     },
+    "neon": {
+      "source": "neondatabase/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/neon/SKILL.md",
+      "computedHash": "72813af523242dc39715b225fb3b37d255e3dbf4ea276e7f01ef6064b53b47af"
+    },
+    "neon-postgres": {
+      "source": "neondatabase/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/neon-postgres/SKILL.md",
+      "computedHash": "346d6b69e4097402ee4c7719d68a5329463b0f8b6ebd2d8034f36a1769ff7fcd"
+    },
     "next-bundle-optimizer": {
       "source": "vercel/next.js",
       "sourceType": "github",
