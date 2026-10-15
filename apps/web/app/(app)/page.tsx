@@ -1,10 +1,16 @@
-import { HealthStatus } from "../components/health-status";
+import { NotebookIllustration } from "@clippings/ui";
 
 export default function HomePage() {
   return (
     <div className="mx-auto max-w-180">
       <h1 className="py-4 typescale-headline-sm">Clippings</h1>
-      <HealthStatus />
+      <section className="flex flex-col items-center gap-4 py-12 text-center">
+        <NotebookIllustration className="h-40 w-60" />
+        <h2 className="typescale-title-lg">Nothing clipped yet</h2>
+        <p className="typescale-body-md text-on-surface-variant">
+          Pages you save will show up here.
+        </p>
+      </section>
     </div>
   );
 }

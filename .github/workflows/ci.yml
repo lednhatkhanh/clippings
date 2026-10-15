@@ -16,6 +16,19 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # A real Postgres for the `db` package's migration tests.
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       # Full history: `turbo --affected` treats every package as changed on a shallow clone.
       - uses: actions/checkout@v7
@@ -46,3 +59,4 @@ jobs:
         run: node scripts/run-checks.mjs
         env:
           BEFORE_SHA: ${{ github.event.before }}
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres

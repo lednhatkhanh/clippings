@@ -11,7 +11,9 @@
     "lint": {},
     "format:check": {},
     "typecheck": {},
-    "test": {},
+    "test": {
+      "env": ["TEST_DATABASE_URL"]
+    },
     "build": {
       "dependsOn": ["^build", "typecheck"],
       "outputs": [".next/**", "!.next/cache/**", ".output/**"]
