@@ -1,6 +1,7 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { cpSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import pg from "pg";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -8,20 +9,50 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { migrate } from "./migrate";
 import { TEST_DATABASE_URL, createTempDatabase, type TempDatabase } from "./test/temp-database";
 
-async function migrationsDir(files: Record<string, string>) {
-  const dir = await mkdtemp(join(tmpdir(), "clippings-migrations-"));
-  for (const [name, sql] of Object.entries(files)) await writeFile(join(dir, name), sql);
-  return dir;
-}
+const SHIPPED = fileURLToPath(new URL("../drizzle", import.meta.url));
+const LEGACY = fileURLToPath(new URL("./test/legacy-migrations", import.meta.url));
 
-async function tableNames(url: string) {
+async function withClient<T>(url: string, run: (client: pg.Client) => Promise<T>): Promise<T> {
   const client = new pg.Client({ connectionString: url });
   await client.connect();
-  const { rows } = await client.query<{ table_name: string }>(
-    "select table_name from information_schema.tables where table_schema = 'public' order by 1",
-  );
-  await client.end();
-  return rows.map((row) => row.table_name);
+  try {
+    return await run(client);
+  } finally {
+    await client.end();
+  }
+}
+
+const tableNames = (url: string) =>
+  withClient(url, async (client) => {
+    const { rows } = await client.query<{ table_name: string }>(
+      "select table_name from information_schema.tables where table_schema = 'public' order by 1",
+    );
+    return rows.map((row) => row.table_name);
+  });
+
+/** What the old hand-written runner left behind: its SQL files applied and recorded by name. */
+async function applyLegacyRunner(url: string, names: string[]) {
+  await withClient(url, async (client) => {
+    await client.query(
+      "create table schema_migrations (name text primary key, applied_at timestamptz not null default now())",
+    );
+    for (const name of names) {
+      await client.query(readFileSync(join(LEGACY, name), "utf8"));
+      await client.query("insert into schema_migrations (name) values ($1)", [name]);
+    }
+  });
+}
+
+/** A copy of the shipped migrations plus one that comes after them. */
+function foldersWithExtraMigration(sql: string) {
+  const folder = mkdtempSync(join(tmpdir(), "clippings-migrations-"));
+  for (const name of readdirSync(SHIPPED)) {
+    cpSync(join(SHIPPED, name), join(folder, name), { recursive: true });
+  }
+  const extra = "29990101000000_add_probe";
+  mkdirSync(join(folder, extra));
+  writeFileSync(join(folder, extra, "migration.sql"), sql);
+  return { folder, extra };
 }
 
 describe.skipIf(!TEST_DATABASE_URL)("migrate", () => {
@@ -35,53 +66,55 @@ describe.skipIf(!TEST_DATABASE_URL)("migrate", () => {
     await database.drop();
   });
 
-  it("applies migrations in filename order and records them", async () => {
-    const directory = await migrationsDir({
-      "0002_b.sql": "create table b (id int primary key);",
-      "0001_a.sql": "create table a (id int primary key);",
-    });
+  it("builds the whole schema and the extensions on an empty database, once", async () => {
+    const first = await migrate({ connectionString: database.url });
+    const second = await migrate({ connectionString: database.url });
 
-    const applied = await migrate({ connectionString: database.url, directory });
-
-    expect(applied).toEqual(["0001_a.sql", "0002_b.sql"]);
+    expect(first).toHaveLength(1);
+    expect(second).toEqual([]);
     expect(await tableNames(database.url)).toEqual(
-      expect.arrayContaining(["a", "b", "schema_migrations"]),
+      expect.arrayContaining(["user", "session", "account", "verification", "clippings"]),
     );
-  });
-
-  it("applies only the migrations that have not run yet", async () => {
-    const directory = await migrationsDir({ "0001_a.sql": "create table a (id int primary key);" });
-    await migrate({ connectionString: database.url, directory });
-    await writeFile(join(directory, "0002_b.sql"), "create table b (id int primary key);");
-
-    const applied = await migrate({ connectionString: database.url, directory });
-
-    expect(applied).toEqual(["0002_b.sql"]);
-  });
-
-  it("rolls back a failing migration and leaves it unrecorded", async () => {
-    const directory = await migrationsDir({
-      "0001_a.sql": "create table a (id int primary key);",
-      "0002_bad.sql": "create table c (id int primary key); select * from missing_table;",
+    const extensions = await withClient(database.url, async (client) => {
+      const { rows } = await client.query<{ extname: string }>("select extname from pg_extension");
+      return rows.map((row) => row.extname);
     });
-
-    await expect(migrate({ connectionString: database.url, directory })).rejects.toThrow(
-      /0002_bad\.sql/,
-    );
-
-    const tables = await tableNames(database.url);
-    expect(tables).toContain("a");
-    expect(tables).not.toContain("c");
-
-    await writeFile(join(directory, "0002_bad.sql"), "create table c (id int primary key);");
-    expect(await migrate({ connectionString: database.url, directory })).toEqual(["0002_bad.sql"]);
+    expect(extensions).toEqual(expect.arrayContaining(["pg_trgm", "vector"]));
   });
 
-  it("creates the Better Auth tables with the shipped migrations", async () => {
-    await migrate({ connectionString: database.url });
-
-    expect(await tableNames(database.url)).toEqual(
-      expect.arrayContaining(["user", "session", "account", "verification"]),
+  it("adopts a database the old runner migrated: keeps its data, runs only what comes after", async () => {
+    await applyLegacyRunner(database.url, [
+      "0001_better_auth.sql",
+      "0002_extensions.sql",
+      "0003_clippings.sql",
+    ]);
+    await withClient(database.url, async (client) => {
+      await client.query(
+        `insert into "user" ("id", "name", "email", "emailVerified") values ('u1', 'U', 'u@example.com', true)`,
+      );
+      await client.query(
+        `insert into clippings (user_id, url, url_normalized, title, source, created_at, updated_at)
+         values ('u1', 'https://example.com', 'https://example.com', 'https://example.com', 'web', now(), now())`,
+      );
+    });
+    const { folder, extra } = foldersWithExtraMigration(
+      "alter table clippings add column probe text;",
     );
+
+    const applied = await migrate({ connectionString: database.url, migrationsFolder: folder });
+    const again = await migrate({ connectionString: database.url, migrationsFolder: folder });
+
+    expect(applied).toEqual([extra]);
+    expect(again).toEqual([]);
+    await withClient(database.url, async (client) => {
+      const { rows } = await client.query("select probe, title from clippings");
+      expect(rows).toEqual([{ probe: null, title: "https://example.com" }]);
+    });
+  });
+
+  it("refuses a database the old runner left before its last migration", async () => {
+    await applyLegacyRunner(database.url, ["0001_better_auth.sql"]);
+
+    await expect(migrate({ connectionString: database.url })).rejects.toThrow(/old runner/);
   });
 });

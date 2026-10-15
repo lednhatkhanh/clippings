@@ -1,5 +1,4 @@
 import { and, desc, eq, lt, or } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/node-postgres";
 import type pg from "pg";
 
 import {
@@ -9,6 +8,7 @@ import {
   type ClippingSource,
 } from "@clippings/shared";
 
+import { createDatabase } from "../database";
 import { clippings } from "../schema";
 
 /** Time, injected so tests decide what "now" is. */
@@ -115,7 +115,7 @@ export class InvalidUrlError extends Error {
  * them, so no caller can reach another user's rows.
  */
 export function createClippingsService({ pool, jobs, clock }: ClippingsServiceDeps) {
-  const db = drizzle({ client: pool });
+  const db = createDatabase(pool);
 
   async function saveClipping(
     userId: string,
