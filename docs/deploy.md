@@ -6,7 +6,7 @@ the deploying; the dashboards hold settings and secrets.
 
 |                 | Development                                  | Production                              |
 | --------------- | -------------------------------------------- | --------------------------------------- |
-| Git branch      | `main` (where work lands)                    | `production` (moved only to release)    |
+| Git branch      | `main` (where work lands)                    | `production` (moved by release PRs)     |
 | Deploys on      | every push to `main`                         | every push to `production`              |
 | Workflow        | [`development`](../.github/workflows/development.yml) | [`release`](../.github/workflows/release.yml) |
 | Vercel          | Preview environment, fixed alias `DEVELOPMENT_ALIAS` | Production environment, the production domain |
@@ -28,20 +28,24 @@ Besides those:
 
 ## Releasing
 
-`production` must only ever fast-forward to a commit that is already on `main` (so CI has run on it):
+A ruleset on `production` ("Protect default and production branches") requires a pull request and
+passing checks, with no bypass, so nothing is pushed to the branch directly. A release is a pull
+request from `main` into `production`:
 
 ```bash
-git fetch origin
-git push origin origin/main:production
+gh pr create --base production --head main --title "Release: <what ships>"
 ```
 
-That starts `release`: migrate production (direct URL), then `vercel pull`, `build --prod`,
-`deploy --prebuilt --prod`. The first time, the same command creates the branch. A non-fast-forward
-push is rejected; don't force it.
+Wait for its checks, then merge it with **Create a merge commit**. Merging pushes to `production`,
+which starts `release`: migrate production (direct URL), then `vercel pull`, `build --prod`,
+`deploy --prebuilt --prod`. Only commits that are on `main` (so CI has run on them) can be in the
+pull request; to release less than all of `main`, branch from the commit you want and use that as
+`--head`.
 
-Release a specific commit with `git push origin <sha>:production`. Roll back with **Instant
-Rollback** in Vercel, or fix forward on `main` and release again. A rollback doesn't undo
-migrations, which is why they're written expand/contract.
+Production now carries merge commits that `main` doesn't, so a direct fast-forward push is no longer
+possible and every release is a pull request. Roll back with **Instant Rollback** in Vercel, or fix
+forward on `main` and release again. A rollback doesn't undo migrations, which is why they're written
+expand/contract.
 
 ## What's already in place
 
@@ -121,9 +125,10 @@ Repo → Settings → Secrets and variables → Actions.
 development environment, such as `clippings-dev.vercel.app`. If it's unset, development still
 deploys, just without a stable URL.
 
-**Optional hardening**: Settings → Environments → `production` → add yourself as a required
-reviewer, and limit deployment branches to `production`. Settings → Rules: protect the
-`production` branch against force pushes and deletion.
+**Hardening**: Settings → Rules has "Protect default and production branches" (pull request, status
+checks, no force-push, no deletion) covering `main` and `production`. Optionally, Settings →
+Environments → `production` → add yourself as a required reviewer, and limit deployment branches to
+`production`.
 
 Runtime secrets live only in Vercel; deploy and database credentials live only in GitHub.
 Nothing goes in the repo. The development and preview databases need no stored URL: the workflows
