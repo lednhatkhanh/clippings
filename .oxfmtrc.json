@@ -16,9 +16,8 @@
     ".turbo",
     "node_modules",
     ".claude",
-    ".agents",
     "docs",
-    "AGENTS.md",
+    "CLAUDE.md",
     "skills-lock.json",
     "packages/ui/src/generated"
   ]

@@ -16,10 +16,10 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # A real Postgres for the `db` package's migration tests.
+    # A real Postgres with pgvector for the `db` package's migration and service tests.
     services:
       postgres:
-        image: postgres:18
+        image: pgvector/pgvector:pg18
         env:
           POSTGRES_PASSWORD: postgres
         ports:

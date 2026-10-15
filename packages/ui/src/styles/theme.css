@@ -186,3 +186,18 @@
 @utility pb-safe {
   padding-bottom: env(safe-area-inset-bottom);
 }
+
+/*
+ * Skeletons appear only if loading takes longer than 150 ms, so fast loads show nothing. The
+ * delay survives `prefers-reduced-motion`, which only shortens animation durations.
+ */
+@keyframes appear {
+  to {
+    opacity: 1;
+  }
+}
+
+@utility appear-delayed {
+  opacity: 0;
+  animation: appear 1ms linear 150ms forwards;
+}

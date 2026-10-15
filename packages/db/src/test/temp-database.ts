@@ -4,7 +4,7 @@ import pg from "pg";
 
 /**
  * A throwaway Postgres server: CI's service container, or locally
- * `docker run --rm -d -e POSTGRES_PASSWORD=postgres -p 55432:5432 postgres:18` with
+ * `docker run --rm -d -e POSTGRES_PASSWORD=postgres -p 55432:5432 pgvector/pgvector:pg18` with
  * `TEST_DATABASE_URL=postgres://postgres:postgres@localhost:55432/postgres`. Without it the
  * database tests are skipped.
  */

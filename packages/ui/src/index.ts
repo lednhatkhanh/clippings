@@ -5,6 +5,9 @@ export {
   NO_FLASH_SCRIPT,
   type AppearanceKey,
 } from "./appearance/appearance";
+export { Button, LinkButton, type ButtonProps, type LinkButtonProps } from "./components/button";
+export { Dialog, DialogTrigger, Heading, Modal } from "./components/modal";
+export { TextField, type TextFieldProps } from "./components/text-field";
 export { cn } from "./cn";
 export { ICON_NAMES, type IconName } from "./icons/icon-names";
 export { Icon, type IconProps } from "./icons/icon";
