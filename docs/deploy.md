@@ -19,8 +19,9 @@ Besides those:
   (a child of `development`), migrated, with its own Vercel preview. Deleted when the PR closes.
   Google sign-in isn't supported on per-deploy preview URLs.
 - **Backups** are Neon's instant restore on `production`: any point inside the restore window can
-  become a branch. Set the window in Neon → Project → Settings → Instant restore. There is no copy
-  outside Neon, so a lost Neon project or account is not recoverable from here.
+  become a branch. The window is set to 1 day (Neon → Project → Settings → Instant restore; Launch
+  allows up to 7 days), so a mistake older than a day is not recoverable. There is no copy outside
+  Neon, so a lost Neon project or account is not either.
 - Vercel's own Git deploys are off for every branch ([`apps/web/vercel.json`](../apps/web/vercel.json)),
   so the workflows above are the only way code reaches Vercel. Every migration runs before the
   code that needs it.
@@ -137,8 +138,8 @@ ask Neon for it.
 3. **Release**: run the `git push` above. `release` migrates production and deploys. Sign in on the
    production domain from an allowlisted account that isn't yours, to check Vercel
    Authentication is off for production.
-4. **Restore test** (once, then tick the issue's criterion). Branch `production` from a point in
-   time inside the restore window, check a few rows, then delete the branch:
+4. **Restore test** (optional; not run yet, the owner trusts Neon's restore). Branch `production`
+   from a point in time inside the restore window, check a few rows, then delete the branch:
 
    ```bash
    neon branches create --project-id young-forest-43160496 --name restore-test \
