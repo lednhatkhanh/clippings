@@ -36,7 +36,7 @@ Where a clipping was saved from: the web app, the extension, Claude, or a digest
 _Avoid_: Origin, channel, platform
 
 **Digest**:
-A planned daily roundup that saves clippings for the user. A source in v1; the feature itself is not built.
+A planned daily roundup, specified separately and out of scope for v1. Only its source value exists so far.
 _Avoid_: Newsletter, summary email
 
 **Search**:
@@ -54,7 +54,7 @@ A name a user files clippings under. Tags belong to one user, and a name is uniq
 _Avoid_: Label, category, folder, collection
 
 **Tag color**:
-One of eight named colors, or none, that a tag carries. The exact shade follows the user's palette, mode and contrast level.
+One of eight named colors, or none, that a tag carries. The exact shade follows the user's palette, theme and contrast level.
 _Avoid_: Hex color, tag hue
 
 ### Enrichment
@@ -96,19 +96,19 @@ _Avoid_: Authorized app, session
 ### Appearance
 
 **Appearance**:
-A user's choices of palette, mode, contrast level and density. They follow the user across devices and into the extension.
-_Avoid_: Theme, preferences, skin
+A user's choices of palette, theme, contrast level and density. They follow the user across devices and into the extension.
+_Avoid_: Preferences, skin
 
 **Palette**:
 One of four named color sets that recolors the whole app: olive (default), ochre, terracotta, ink.
-_Avoid_: Theme, color scheme, skin
+_Avoid_: Color scheme, skin
 
-**Mode**:
+**Theme**:
 Light, dark, or system (follow the OS).
-_Avoid_: Theme, dark mode (for the setting as a whole), color scheme
+_Avoid_: Mode, dark mode (for the setting as a whole), color scheme
 
 **Contrast level**:
-How strongly text and controls separate from their background: Standard, More or Most. Follows the OS request unless the user picks one.
+How strongly text and controls separate from their background: system (default, follows the OS request), standard, medium or high.
 _Avoid_: Accessibility mode, high-contrast theme
 
 **Density**:
