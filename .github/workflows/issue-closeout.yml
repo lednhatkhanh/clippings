@@ -1,0 +1,28 @@
+name: issue-closeout
+
+# Triage-role labels describe work that is still to do, so they come off when the issue closes.
+# Roles and label strings: docs/agents/triage-labels.md.
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  issues: write
+
+jobs:
+  strip-triage-labels:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Remove triage-role labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number }}
+          LABELS: ${{ join(github.event.issue.labels.*.name, '\n') }}
+        run: |
+          for label in needs-triage needs-info ready-for-agent ready-for-human; do
+            if printf '%b\n' "$LABELS" | grep -Fxq "$label"; then
+              gh issue edit "$NUMBER" --remove-label "$label"
+            fi
+          done

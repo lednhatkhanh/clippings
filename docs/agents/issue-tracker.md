@@ -14,6 +14,14 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
+## Close-out after a PR merges
+
+Run this when the user says a PR is merged. The agent isn't woken by a merge, so it has to be told.
+
+1. **Check state**: `gh pr view <pr> --json state,mergedAt` is `MERGED`, and `gh issue view <number> --json state` is `CLOSED`. If a `Closes #<number>` line didn't close it, close it with **Close** above.
+2. **Tick acceptance criteria**: tick only the criteria you verified against evidence (tests, CI, the running app). Edit the body, changing just the `- [ ]` markers of those lines, and leave the rest untouched. Say which criteria stay unticked and why; never tick the rest to make the list look done.
+3. **Labels**: nothing to do. `.github/workflows/issue-closeout.yml` removes the triage-role labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`) when an issue closes. Check them only if the workflow failed.
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
