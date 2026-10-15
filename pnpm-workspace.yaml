@@ -41,3 +41,8 @@ minimumReleaseAgeExclude:
   - next@16.4.1
   - react-dom@19.3.1
   - react@19.3.1
+
+# esbuild arrives transitively (tsx, vite). Its postinstall only validates the
+# platform binary, which resolves from optional dependencies without it.
+allowBuilds:
+  esbuild: false
