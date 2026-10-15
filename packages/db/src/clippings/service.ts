@@ -1,3 +1,4 @@
+import { and, desc, eq, lt, or } from "drizzle-orm";
 import type pg from "pg";
 
 import {
@@ -5,8 +6,10 @@ import {
   parseWebUrl,
   type Clipping,
   type ClippingSource,
-  type ClippingStatus,
 } from "@clippings/shared";
+
+import { createDatabase } from "../database";
+import { clippings } from "../schema";
 
 /** Time, injected so tests decide what "now" is. */
 export interface Clock {
@@ -49,17 +52,7 @@ export interface ClippingsServiceDeps {
   clock: Clock;
 }
 
-interface ClippingRow {
-  id: string;
-  user_id: string;
-  url: string;
-  title: string;
-  note: string;
-  status: ClippingStatus;
-  source: ClippingSource;
-  client_id: string | null;
-  created_at: Date;
-}
+type ClippingRow = typeof clippings.$inferSelect;
 
 const toClipping = (row: ClippingRow): Clipping => ({
   id: row.id,
@@ -68,15 +61,15 @@ const toClipping = (row: ClippingRow): Clipping => ({
   note: row.note,
   status: row.status,
   source: row.source,
-  clientId: row.client_id,
-  createdAt: row.created_at.toISOString(),
+  clientId: row.clientId,
+  createdAt: row.createdAt.toISOString(),
 });
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** A page boundary: the clipping the previous page ended on. Opaque to callers. */
 const encodeCursor = (row: ClippingRow) =>
-  Buffer.from(JSON.stringify({ at: row.created_at.toISOString(), id: row.id })).toString(
+  Buffer.from(JSON.stringify({ at: row.createdAt.toISOString(), id: row.id })).toString(
     "base64url",
   );
 
@@ -122,6 +115,8 @@ export class InvalidUrlError extends Error {
  * them, so no caller can reach another user's rows.
  */
 export function createClippingsService({ pool, jobs, clock }: ClippingsServiceDeps) {
+  const db = createDatabase(pool);
+
   async function saveClipping(
     userId: string,
     input: SaveClippingInput,
@@ -133,26 +128,32 @@ export function createClippingsService({ pool, jobs, clock }: ClippingsServiceDe
 
     const now = clock.now();
     const { url, normalized } = parsed;
-    const inserted = await pool.query<ClippingRow>(
-      `insert into clippings
-         (user_id, url, url_normalized, title, note, source, client_id, created_at, updated_at)
-       values ($1, $2, $3, $2, $4, $5, $6, $7, $7)
-       on conflict (user_id, url_normalized) do nothing
-       returning *`,
-      [userId, url, normalized, note, input.source, input.clientId ?? null, now],
-    );
+    const [created] = await db
+      .insert(clippings)
+      .values({
+        userId,
+        url,
+        urlNormalized: normalized,
+        title: url,
+        note,
+        source: input.source,
+        clientId: input.clientId ?? null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoNothing({ target: [clippings.userId, clippings.urlNormalized] })
+      .returning();
 
-    const row = inserted.rows[0];
-    if (row) {
-      await jobs.requestEnrichment(row.id);
-      return { status: "created", clipping: toClipping(row) };
+    if (created) {
+      await jobs.requestEnrichment(created.id);
+      return { status: "created", clipping: toClipping(created) };
     }
 
-    const existing = await pool.query<ClippingRow>(
-      "select * from clippings where user_id = $1 and url_normalized = $2",
-      [userId, normalized],
-    );
-    return { status: "existing", clipping: toClipping(existing.rows[0]!) };
+    const [existing] = await db
+      .select()
+      .from(clippings)
+      .where(and(eq(clippings.userId, userId), eq(clippings.urlNormalized, normalized)));
+    return { status: "existing", clipping: toClipping(existing!) };
   }
 
   async function listClippings(
@@ -161,14 +162,22 @@ export function createClippingsService({ pool, jobs, clock }: ClippingsServiceDe
   ): Promise<ClippingsPage> {
     const after = cursor ? decodeCursor(cursor) : null;
     // One extra row says whether another page follows without a second query.
-    const { rows } = await pool.query<ClippingRow>(
-      `select * from clippings
-       where user_id = $1
-         and ($2::timestamptz is null or (created_at, id) < ($2::timestamptz, $3::uuid))
-       order by created_at desc, id desc
-       limit $4`,
-      [userId, after?.at ?? null, after?.id ?? null, limit + 1],
-    );
+    const rows = await db
+      .select()
+      .from(clippings)
+      .where(
+        and(
+          eq(clippings.userId, userId),
+          after
+            ? or(
+                lt(clippings.createdAt, after.at),
+                and(eq(clippings.createdAt, after.at), lt(clippings.id, after.id)),
+              )
+            : undefined,
+        ),
+      )
+      .orderBy(desc(clippings.createdAt), desc(clippings.id))
+      .limit(limit + 1);
 
     const pageRows = rows.slice(0, limit);
     const last = pageRows.at(-1);
@@ -186,13 +195,12 @@ export function createClippingsService({ pool, jobs, clock }: ClippingsServiceDe
   ): Promise<Clipping | null> {
     if (note.length > MAX_NOTE_LENGTH) throw new NoteTooLongError();
     if (!UUID.test(clippingId)) return null;
-    const { rows } = await pool.query<ClippingRow>(
-      `update clippings set note = $3, updated_at = $4
-       where id = $2 and user_id = $1
-       returning *`,
-      [userId, clippingId, note, clock.now()],
-    );
-    return rows[0] ? toClipping(rows[0]) : null;
+    const [updated] = await db
+      .update(clippings)
+      .set({ note, updatedAt: clock.now() })
+      .where(and(eq(clippings.id, clippingId), eq(clippings.userId, userId)))
+      .returning();
+    return updated ? toClipping(updated) : null;
   }
 
   return { saveClipping, listClippings, updateNote };

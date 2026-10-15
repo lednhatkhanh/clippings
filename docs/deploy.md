@@ -138,7 +138,7 @@ ask Neon for it.
 
 1. **Development**: push to `main`. `development` creates branch `development`, migrates it and
    deploys; open `https://<DEVELOPMENT_ALIAS>` and sign in.
-2. **Preview DB**: open a PR. Neon shows `preview/pr-<n>` with `schema_migrations` filled, and the
+2. **Preview DB**: open a PR. Neon shows `preview/pr-<n>` with `drizzle.__drizzle_migrations` filled, and the
    run summary links the preview. Close the PR and the branch disappears.
 3. **Release**: run the `git push` above. `release` migrates production and deploys. Sign in on the
    production domain from an allowlisted account that isn't yours, to check Vercel

@@ -1,6 +1,8 @@
 // Schema, migrations and the Clippings service live here (server-only).
 // The migration runner is not exported from here: it is a deploy-time tool (`pnpm --filter @clippings/db migrate`).
+export { createDatabase, type Database } from "./database";
 export { createPool } from "./pool";
+export { account, session, user, verification } from "./schema";
 export {
   createClippingsService,
   InvalidCursorError,

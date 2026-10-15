@@ -29,13 +29,22 @@ type-aware) and types (`tsc`); this file holds what none of them says.
 
 ## Database
 
-- Add a new numbered file to `packages/db/migrations/`. Applied files are recorded by name, so edit
-  none of them.
+- `packages/db/src/schema.ts` is the schema, for every table including Better Auth's. Queries use
+  Drizzle (`drizzle-orm/node-postgres` on the shared `pg` pool, so tests run on plain Postgres and
+  Better Auth shares the pool).
+- Change the schema, then `pnpm --filter @clippings/db generate`. Review the SQL it writes to
+  `packages/db/drizzle/` before committing (edit it by hand when needed, for example to split a
+  drop into expand/contract steps). `check:schema`, part of `lint`, fails when `schema.ts` and the
+  migrations disagree.
+- Never edit a migration that has been applied; add a new one. Drizzle records each by hash.
 - Write expand/contract: the previous app version runs against the new schema during a deploy, and
   a rollback never undoes a migration.
+- `pnpm --filter @clippings/db migrate` applies them on Neon's direct URL (`DATABASE_URL_DIRECT`);
+  the app uses the pooled one. It takes an advisory lock and runs pending migrations in one
+  transaction.
+- Browse a local database with `pnpm --filter @clippings/db studio` (set `DATABASE_URL`).
 - Better Auth's tables use its camelCase column names, quoted.
 - Every row belongs to one user: scope every query by user id.
-- Migrations run on Neon's direct URL (`DATABASE_URL_DIRECT`); the app uses the pooled one.
 
 ## Auth
 
