@@ -1,11 +1,25 @@
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
 
 import { AppShell } from "../../components/app-shell";
+import { LoadError } from "../../components/load-error";
 import { getSession } from "../../lib/auth/session";
 
 async function SessionGate({ children }: { children: ReactNode }) {
-  if (!(await getSession())) redirect("/sign-in");
+  let session: Awaited<ReturnType<typeof getSession>>;
+  try {
+    session = await getSession();
+  } catch (error) {
+    // Prerendering postpones and redirects travel as errors; only real failures reach the banner.
+    unstable_rethrow(error);
+    // The session lives in the database, so a database outage lands here, before any page runs.
+    return (
+      <div className="mx-auto max-w-180 py-4">
+        <LoadError message="Couldn't load your account. Try again in a moment." />
+      </div>
+    );
+  }
+  if (!session) redirect("/sign-in");
   return children;
 }
 
