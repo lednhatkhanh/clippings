@@ -29,6 +29,11 @@ type-aware) and types (`tsc`); this file holds what none of them says.
 
 ## Database
 
+- Queries use Drizzle (`drizzle-orm/node-postgres` on the shared `pg` pool, so tests run on plain
+  Postgres and Better Auth shares the pool). Declare a table in `packages/db/src/schema.ts` when the
+  app queries it; the migrations stay hand-written SQL, and `schema.test.ts` fails when the two
+  drift. The schema leaves out foreign keys and check constraints: the migrations own those.
+- Browse the local database with `pnpm --filter @clippings/db studio` (set `DATABASE_URL`).
 - Add a new numbered file to `packages/db/migrations/`. Applied files are recorded by name, so edit
   none of them.
 - Write expand/contract: the previous app version runs against the new schema during a deploy, and

@@ -9,6 +9,7 @@
   },
   "scripts": {
     "migrate": "tsx src/migrate-cli.ts",
+    "studio": "drizzle-kit studio",
     "lint": "oxlint -c ../../.oxlintrc.json .",
     "format:check": "oxfmt --check -c ../../.oxfmtrc.json .",
     "typecheck": "tsc --noEmit",
@@ -16,12 +17,14 @@
   },
   "dependencies": {
     "@clippings/shared": "workspace:*",
+    "drizzle-orm": "catalog:",
     "pg": "catalog:"
   },
   "devDependencies": {
     "@clippings/config": "workspace:*",
     "@types/node": "catalog:",
     "@types/pg": "catalog:",
+    "drizzle-kit": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
