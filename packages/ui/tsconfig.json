@@ -1,0 +1,4 @@
+{
+  "extends": "@clippings/config/tsconfig/library.json",
+  "include": ["src"]
+}

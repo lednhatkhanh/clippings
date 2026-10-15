@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 100,
+  "sortImports": {
+    "internalPattern": ["@clippings/"]
+  },
+  "sortTailwindcss": {
+    "stylesheet": "./apps/web/app/globals.css",
+    "functions": ["cn"]
+  },
+  "ignorePatterns": [
+    "pnpm-lock.yaml",
+    ".next",
+    ".wxt",
+    ".output",
+    ".turbo",
+    "node_modules",
+    ".claude",
+    ".agents",
+    "docs",
+    "AGENTS.md",
+    "skills-lock.json"
+  ]
+}
