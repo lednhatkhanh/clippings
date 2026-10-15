@@ -14,7 +14,7 @@ v1 is under construction. What exists today:
 
 - Monorepo, CI, and the design system (Material 3 tokens, four palettes, light/dark/contrast).
 - The web app shell with Google sign-in and an email allowlist.
-- Environments on Vercel and Neon, nightly backups, and a database per PR.
+- Environments on Vercel and Neon, instant-restore backups, and a database per PR.
 
 Saving, enrichment, search, tags, the extension and the MCP server are open issues.
 
@@ -22,7 +22,7 @@ Saving, enrichment, search, tags, the extension and the MCP server are open issu
 
 Next.js 16 (App Router) · React 19 · TypeScript 7 · Tailwind 4 · React Aria Components ·
 Better Auth · Postgres 18 on Neon · WXT (extension) · pnpm 12 + Turborepo · oxlint/oxfmt · Vitest.
-Hosted on Vercel Hobby and Neon Free. The reasoning is in
+Hosted on Vercel Hobby and Neon Launch. The reasoning is in
 [`docs/research`](docs/research/2026-10-14-stack-and-design.md).
 
 ## Layout

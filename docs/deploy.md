@@ -1,7 +1,8 @@
 # Environments, releases and backups
 
-Clippings runs on Vercel Hobby, Neon Free and Cloudflare R2 for $0/month, in two long-lived
-environments. GitHub Actions does all the deploying; the dashboards hold settings and secrets.
+Clippings runs on Vercel Hobby and Neon Launch, in two long-lived environments. Neon is
+usage-based (storage, compute and instant restore); Vercel Hobby is free. GitHub Actions does all
+the deploying; the dashboards hold settings and secrets.
 
 |                 | Development                                  | Production                              |
 | --------------- | -------------------------------------------- | --------------------------------------- |
@@ -17,8 +18,9 @@ Besides those:
 - [`preview-db`](../.github/workflows/preview-db.yml): each PR gets Neon branch `preview/pr-<n>`
   (a child of `development`), migrated, with its own Vercel preview. Deleted when the PR closes.
   Google sign-in isn't supported on per-deploy preview URLs.
-- [`backup`](../.github/workflows/backup.yml): nightly `pg_dump` (postgres:18) of **production** to
-  R2 under `daily/`, expired after 30 days.
+- **Backups** are Neon's instant restore on `production`: any point inside the restore window can
+  become a branch. Set the window in Neon → Project → Settings → Instant restore. There is no copy
+  outside Neon, so a lost Neon project or account is not recoverable from here.
 - Vercel's own Git deploys are off for every branch ([`apps/web/vercel.json`](../apps/web/vercel.json)),
   so the workflows above are the only way code reaches Vercel. Every migration runs before the
   code that needs it.
@@ -99,32 +101,7 @@ origins** and **Authorized redirect URIs** (`<origin>/api/auth/callback/google`)
 - `https://<DEVELOPMENT_ALIAS>`
 - `http://localhost:3100`
 
-### 5. Cloudflare R2
-
-1. Create a bucket (for example `clippings-backups`).
-2. Create an API token scoped to that bucket with **Object Read & Write**.
-3. Add a 30-day lifecycle rule (Bucket → Settings → Object lifecycle rules, prefix `daily/`, delete
-   after 30 days), or with the S3 API using a token that has bucket admin rights:
-
-   ```bash
-   cat > lifecycle.json <<'JSON'
-   {
-     "Rules": [
-       {
-         "ID": "expire-daily-dumps",
-         "Status": "Enabled",
-         "Filter": { "Prefix": "daily/" },
-         "Expiration": { "Days": 30 }
-       }
-     ]
-   }
-   JSON
-   aws s3api put-bucket-lifecycle-configuration \
-     --endpoint-url "https://<account id>.r2.cloudflarestorage.com" \
-     --bucket clippings-backups --lifecycle-configuration file://lifecycle.json
-   ```
-
-### 6. GitHub
+### 5. GitHub
 
 Repo → Settings → Secrets and variables → Actions.
 
@@ -138,10 +115,6 @@ Repo → Settings → Secrets and variables → Actions.
 | `NEON_PROJECT_ID`                 | `young-forest-43160496`                                     |
 | `NEON_API_KEY`                    | the Neon API key from step 1                                |
 | `PRODUCTION_DATABASE_URL_DIRECT`  | Neon `production` branch, **direct** (not pooled) URL       |
-| `R2_ACCOUNT_ID`                   | Cloudflare dashboard → R2 → Account ID                      |
-| `R2_BUCKET`                       | the bucket name                                             |
-| `R2_ACCESS_KEY_ID`                | from the R2 API token                                       |
-| `R2_SECRET_ACCESS_KEY`            | from the R2 API token                                       |
 
 **Repository variable** (not a secret): `DEVELOPMENT_ALIAS`, a free `*.vercel.app` hostname for the
 development environment, such as `clippings-dev.vercel.app`. If it's unset, development still
@@ -151,7 +124,7 @@ deploys, just without a stable URL.
 reviewer, and limit deployment branches to `production`. Settings → Rules: protect the
 `production` branch against force pushes and deletion.
 
-Runtime secrets live only in Vercel; deploy, database and backup credentials live only in GitHub.
+Runtime secrets live only in Vercel; deploy and database credentials live only in GitHub.
 Nothing goes in the repo. The development and preview databases need no stored URL: the workflows
 ask Neon for it.
 
@@ -164,18 +137,17 @@ ask Neon for it.
 3. **Release**: run the `git push` above. `release` migrates production and deploys. Sign in on the
    production domain from an allowlisted account that isn't yours, to check Vercel
    Authentication is off for production.
-4. **Backup**: Actions → backup → Run workflow. `daily/clippings-<date>.dump` appears in the bucket.
-5. **Restore test** (once, then tick the issue's criterion):
+4. **Restore test** (once, then tick the issue's criterion). Branch `production` from a point in
+   time inside the restore window, check a few rows, then delete the branch:
 
    ```bash
-   aws s3 cp "s3://clippings-backups/daily/clippings-<date>.dump" restore.dump \
-     --endpoint-url "https://<account id>.r2.cloudflarestorage.com"
-   neon branches create --project-id young-forest-43160496 --name restore-test
-   docker run --rm -i -e URL="<restore-test direct URL>" postgres:18 \
-     sh -c 'pg_restore --no-owner --no-acl --clean --if-exists -d "$URL"' < restore.dump
-   # Check a few rows, then:
+   neon branches create --project-id young-forest-43160496 --name restore-test \
+     --parent <timestamp inside the window>
+   psql "<restore-test direct URL>" -c 'select count(*) from "user"'
    neon branches delete restore-test --project-id young-forest-43160496
    ```
+
+   Check `neon branches create --help` if the `--parent` form has changed.
 
 ## Things to know
 
@@ -186,8 +158,8 @@ ask Neon for it.
 - **Development drifts.** The `development` branch is created from production once and then
   evolves with `main`'s migrations. To refresh it from production: Neon → Branches →
   `development` → Reset from parent.
-- **Scheduled workflows pause** after 60 days without repo activity. A backup that stops is
-  silent; check the `backup` run list now and then.
-- **Free-tier ceilings.** Neon Free allows 10 branches: `production`, `development` and one per
-  open PR. Close PRs to free them.
+- **Branch limit.** Launch includes 10 branches per project: `production`, `development` and one
+  per open PR. Close PRs to free them.
+- **Cost.** Storage is $0.35/GB-month and instant restore $0.20/GB-month, so a longer restore window
+  raises the bill. Check Neon's billing page after changing it.
 - **Fork PRs** get no preview database or deploy: they have no access to secrets.
