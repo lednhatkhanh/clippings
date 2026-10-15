@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { DEFAULT_PALETTE, NO_FLASH_SCRIPT } from "@clippings/ui";
 import tokens from "@clippings/ui/tokens.json";
 
-import { AppShell } from "../components/app-shell";
 import { mono, sans, serif } from "./fonts";
 
 import "./globals.css";
@@ -37,9 +36,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH_SCRIPT }} />
       </head>
-      <body>
-        <AppShell>{children}</AppShell>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
