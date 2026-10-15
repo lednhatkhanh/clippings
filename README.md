@@ -97,4 +97,4 @@ restore test are in [`docs/deploy.md`](docs/deploy.md).
 - Issues and triage labels: [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md),
   [`docs/agents/triage-labels.md`](docs/agents/triage-labels.md).
 - How code is written: [`CODING_STANDARDS.md`](CODING_STANDARDS.md).
-- Workflow rules for people and coding agents: [`AGENTS.md`](AGENTS.md).
+- Workflow rules for people and Claude Code: [`CLAUDE.md`](CLAUDE.md).

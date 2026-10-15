@@ -8,7 +8,7 @@ GitHub issue #1.
 
 Before a PR, run `pnpm format`, then `pnpm check:root` and `node scripts/run-checks.mjs`: CI runs
 the same two, and the second runs lint, format, typecheck, test and build. Work is green only when
-both pass. `AGENTS.md` and `docs/` are outside oxfmt.
+both pass. `CLAUDE.md` and `docs/` are outside oxfmt.
 
 ### Dependencies
 
