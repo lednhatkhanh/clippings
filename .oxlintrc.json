@@ -1,0 +1,27 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "nextjs", "jsx-a11y", "import"],
+  "categories": {
+    "correctness": "error"
+  },
+  "options": {
+    "typeAware": true
+  },
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "error",
+    "react/purity": "error",
+    "react/refs": "error",
+    "react/set-state-in-render": "error",
+    "react/set-state-in-effect": "error",
+    "react/immutability": "error",
+    "react/static-components": "error",
+    "react/preserve-manual-memoization": "error",
+    "react/use-memo": "error",
+    "react/incompatible-library": "error",
+    "react/globals": "error",
+    "react/error-boundaries": "error",
+    "react/unsupported-syntax": "error"
+  },
+  "ignorePatterns": [".next", ".wxt", ".output", ".turbo", "node_modules"]
+}

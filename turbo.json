@@ -1,0 +1,20 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "globalDependencies": [
+    ".oxlintrc.json",
+    ".oxfmtrc.json",
+    ".node-version",
+    "scripts/*.mjs",
+    "pnpm-workspace.yaml"
+  ],
+  "tasks": {
+    "lint": {},
+    "format:check": {},
+    "typecheck": {},
+    "test": {},
+    "build": {
+      "dependsOn": ["^build", "typecheck"],
+      "outputs": [".next/**", "!.next/cache/**", ".output/**"]
+    }
+  }
+}

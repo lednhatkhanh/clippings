@@ -1,0 +1,19 @@
+{
+  "name": "@clippings/extension",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "postinstall": "wxt prepare",
+    "build": "wxt build",
+    "lint": "oxlint -c ../../.oxlintrc.json .",
+    "format:check": "oxfmt --check -c ../../.oxfmtrc.json .",
+    "typecheck": "wxt prepare && tsc --noEmit"
+  },
+  "devDependencies": {
+    "@clippings/config": "workspace:*",
+    "typescript": "catalog:",
+    "wxt": "catalog:"
+  }
+}

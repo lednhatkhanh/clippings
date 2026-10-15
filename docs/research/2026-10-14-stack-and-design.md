@@ -386,10 +386,10 @@ Chrome extension build tool:
   - Set `enablePreserveExistingMemoizationGuarantees` explicitly, because "defaults may differ between compiler implementations" (same page).
   - `panicThreshold` was ignored by the Rust path until [#99455](https://github.com/vercel/next.js/issues/99455) was closed (2026-09-30). Confirm it is honoured in 16.4.
 - **Proving Babel isn't in the build**:
-  1. Do **not** install `babel-plugin-react-compiler`. Fail CI if `pnpm why --filter web babel-plugin-react-compiler` finds it (a `scripts/assert-no-babel` step). `@babel/core` can still arrive transitively through unrelated tools; that's harmless as long as nothing configures Babel for `apps/web`.
+  1. Do **not** install `babel-plugin-react-compiler`. Check with `pnpm why --filter web babel-plugin-react-compiler` if in doubt (not enforced in CI). `@babel/core` can still arrive transitively through unrelated tools; that's harmless as long as nothing configures Babel for `apps/web`.
   2. Keep no `babel.config.*` / `.babelrc` anywhere. Next switches the whole app to Babel when one exists.
   3. Never pass `--webpack`. The webpack path only has the Babel compiler loader (`dist/build/webpack-config.js` → `getReactCompilerLoader`), and the Rust flag throws there.
-  4. Check that the compiler actually ran: production chunks for client components import `react/compiler-runtime` (`c as _c` / `_c(N)` memo-cache calls). Grep `.next/static/chunks` for `compiler-runtime` in a CI smoke step. With no Babel plugin installed, those can only come from the Rust port.
+  4. Check that the compiler actually ran. **Corrected 2026-10-15 after building it (Next 16.4.1):** production chunks do *not* contain the string `compiler-runtime`, and a bare grep for `react.memo_cache_sentinel` also matches React's own runtime chunk. What only compiled app code contains is a slot compared with the sentinel inline: `$[0]===Symbol.for("react.memo_cache_sentinel")`. Not enforced in CI (dropped as over-complication); grep for that pattern by hand if you need to confirm.
   5. React DevTools shows the "Memo ✨" badge on compiled components.
 - **Lint and diagnostics without eslint-plugin-react-hooks**: oxlint ships the compiler-derived rules **natively** in its `react` plugin, using its own vendored Rust port of the compiler ([oxc blog](https://oxc.rs/blog/2026-08-18-react-compiler-support), [rule example](https://oxc.rs/docs/guide/usage/linter/rules/react/purity.html)):
   - `react/purity`, `refs`, `set-state-in-render`, `set-state-in-effect`, `immutability`, `static-components`, `preserve-manual-memoization`, `use-memo`, `incompatible-library`, `globals`, `error-boundaries`, `unsupported-syntax`
@@ -512,7 +512,7 @@ Chrome extension build tool:
 **Recommendation**
 - **Lint**: oxlint with `react`, `nextjs`, `jsx-a11y`, `import`, plus `categories.correctness: error`, the compiler rules enabled explicitly, and `typeAware: true`.
 - **Format**: oxfmt with `sortImports`, and `sortTailwindcss` with `functions: ["cn"]`.
-- **Compiler**: `reactCompiler` + `experimental.turbopackRustReactCompiler`, no Babel anywhere, CI asserts there is no `babel-plugin-react-compiler` and checks for `compiler-runtime` in the output.
+- **Compiler**: `reactCompiler` + `experimental.turbopackRustReactCompiler`, no Babel anywhere, keep `babel-plugin-react-compiler` out of the dependencies (not enforced in CI; see §6 item 4).
 - **TypeScript**: TS 7 with `strict`, `erasableSyntaxOnly`, `verbatimModuleSyntax`, and no `baseUrl`.
 - **`cn()`**: the `cn` package with a `createCn` extension for M3 classes.
 - **Design-system lint**: `@shadcn/lint` as an oxlint jsPlugin.
