@@ -1,0 +1,71 @@
+name: Deploy to Vercel
+description: Pull the project's settings, build locally and deploy the prebuilt output. Run after setup.
+
+inputs:
+  token:
+    description: Vercel token.
+    required: true
+  org-id:
+    description: Vercel team id.
+    required: true
+  project-id:
+    description: Vercel project id.
+    required: true
+  production:
+    description: "'true' deploys to the Production environment, anything else to Preview."
+    default: "false"
+  database-url:
+    description: >-
+      Runtime DATABASE_URL for this deployment. Leave empty to use the one stored in Vercel, which
+      is how production gets its Sensitive value.
+    default: ""
+  alias:
+    description: A hostname to point at the new deployment, such as the development alias.
+    default: ""
+
+outputs:
+  url:
+    description: The deployment URL.
+    value: ${{ steps.deploy.outputs.url }}
+
+runs:
+  using: composite
+  steps:
+    - id: deploy
+      shell: bash
+      run: |
+        set -euo pipefail
+        vercel() { pnpm dlx vercel@64.2.0 "$@"; }
+
+        if [ "$PRODUCTION" = "true" ]; then
+          environment=production
+          flags=(--prod)
+        else
+          environment=preview
+          flags=()
+        fi
+
+        vercel pull --yes --environment="$environment"
+        vercel build "${flags[@]}"
+
+        # Runtime only: the build doesn't need the database (auth is created lazily).
+        if [ -n "$DATABASE_URL" ]; then
+          flags+=(--env "DATABASE_URL=$DATABASE_URL")
+        fi
+
+        # The CLI prints the URL on stdout and everything else on stderr, but pnpm may add noise
+        # to stdout, so take the last line.
+        vercel deploy --prebuilt "${flags[@]}" > deployment.txt
+        url=$(tail -n 1 deployment.txt)
+        echo "url=$url" >> "$GITHUB_OUTPUT"
+
+        if [ -n "$ALIAS" ]; then
+          vercel alias set "$url" "$ALIAS"
+        fi
+      env:
+        VERCEL_TOKEN: ${{ inputs.token }}
+        VERCEL_ORG_ID: ${{ inputs.org-id }}
+        VERCEL_PROJECT_ID: ${{ inputs.project-id }}
+        PRODUCTION: ${{ inputs.production }}
+        DATABASE_URL: ${{ inputs.database-url }}
+        ALIAS: ${{ inputs.alias }}

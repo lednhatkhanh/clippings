@@ -1,0 +1,48 @@
+name: release
+
+# Production changes only when `production` moves. Release by fast-forwarding it to a commit on
+# `main` (docs/deploy.md). Migrations run first, so the new code never meets an old schema; they
+# are written expand/contract, so the previous code keeps working while they apply.
+on:
+  push:
+    branches: [production]
+
+# One release at a time, and a running release is never cancelled (see development.yml).
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup
+
+      # Direct URL: the migrator holds an advisory lock, which Neon's pooler can't.
+      - name: Migrate the production database
+        run: pnpm --filter @clippings/db migrate
+        env:
+          DATABASE_URL_DIRECT: ${{ secrets.PRODUCTION_DATABASE_URL_DIRECT }}
+
+      # Production's DATABASE_URL is a Sensitive variable in Vercel, so none is passed here.
+      - name: Deploy
+        id: vercel
+        uses: ./.github/actions/vercel-deploy
+        with:
+          token: ${{ secrets.VERCEL_TOKEN }}
+          org-id: ${{ secrets.VERCEL_ORG_ID }}
+          project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          production: "true"
+
+      - name: Summary
+        run: |
+          echo "Released $GITHUB_SHA: $URL" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          URL: ${{ steps.vercel.outputs.url }}

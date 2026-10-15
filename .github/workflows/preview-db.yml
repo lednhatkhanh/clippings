@@ -1,0 +1,76 @@
+name: preview-db
+
+# One Neon branch per pull request (`preview/pr-<n>`), a child of `development`, so previews never
+# touch production data. The preview is deployed from here, with that branch's pooled URL as its
+# DATABASE_URL, because a Git-triggered preview would start building before the branch exists.
+# Google sign-in doesn't work on per-deploy preview URLs; previews skip it.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+concurrency:
+  group: preview-db-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  BRANCH_NAME: preview/pr-${{ github.event.pull_request.number }}
+
+jobs:
+  # Fork PRs get no secrets, and shouldn't be able to ask for any.
+  preview:
+    if: >-
+      github.event.action != 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup
+
+      # Reuses the branch on later pushes, so a PR keeps its data.
+      - name: Create the Neon branch
+        id: branch
+        uses: neondatabase/create-branch-action@v6
+        with:
+          project_id: ${{ secrets.NEON_PROJECT_ID }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+          branch_name: ${{ env.BRANCH_NAME }}
+          parent_branch: development
+
+      - name: Migrate the preview database
+        run: pnpm --filter @clippings/db migrate
+        env:
+          DATABASE_URL_DIRECT: ${{ steps.branch.outputs.db_url }}
+
+      - name: Deploy the preview
+        id: vercel
+        uses: ./.github/actions/vercel-deploy
+        with:
+          token: ${{ secrets.VERCEL_TOKEN }}
+          org-id: ${{ secrets.VERCEL_ORG_ID }}
+          project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          database-url: ${{ steps.branch.outputs.db_url_pooled }}
+
+      - name: Summary
+        run: |
+          echo "Preview: $URL (Neon branch \`$BRANCH_NAME\`)" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          URL: ${{ steps.vercel.outputs.url }}
+
+  cleanup:
+    if: >-
+      github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Delete the Neon branch
+        uses: neondatabase/delete-branch-action@v3
+        with:
+          project_id: ${{ secrets.NEON_PROJECT_ID }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+          branch: ${{ env.BRANCH_NAME }}
