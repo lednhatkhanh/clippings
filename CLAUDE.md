@@ -18,14 +18,23 @@ Versions live only in the `catalog:` of `pnpm-workspace.yaml` (`catalogMode: str
 
 ### Coding standards
 
-Read [CODING_STANDARDS.md](CODING_STANDARDS.md) before you write, change or review code: TypeScript,
-UI, database, auth and test rules live there.
+@CODING_STANDARDS.md
 
 ### Branches and releases
 
 `main` is the development environment and deploys on every push. `production` fast-forwards from
 `main` and only the user moves it (`docs/deploy.md`): never force-push it or push to it unasked.
 Secrets stay out of the repo: runtime secrets live in Vercel, deploy credentials in GitHub.
+
+### Claude Code setup
+
+- `.claude/settings.json` allows the repo's check and read-only git/gh commands, asks before
+  migrations and `vercel`, and denies force-push, pushes to `production`, reading `.env*` files and
+  editing `packages/ui/src/generated/`. A hook formats each file you edit with oxfmt.
+- `/check` runs the three check commands above and fixes what fails.
+- `.claude/launch.json` defines the `web` dev server on port 3100; start it with `preview_start`.
+- `.claude/skills/` is vendored and pinned by `skills-lock.json`: change a skill upstream, not here.
+- Personal overrides go in `.claude/settings.local.json`, which is gitignored.
 
 ## Agent skills
 
