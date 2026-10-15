@@ -1,0 +1,61 @@
+name: development
+
+# The shared development environment: every push to `main` migrates the Neon `development` branch
+# and deploys to Vercel's Preview environment, under a fixed alias so Google sign-in works there.
+# Production is released separately, from the `production` branch (release.yml).
+on:
+  push:
+    branches: [main]
+
+# One deploy at a time, and a running deploy is never cancelled. GitHub keeps one pending run per
+# group, so a run queued behind two newer pushes is replaced by the newest; that is safe because
+# the newest commit contains the earlier migrations.
+concurrency:
+  group: development
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: development
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: ./.github/actions/setup
+
+      # Reuses the branch if it exists. The first run creates it from production, so its schema
+      # matches; after that it is its own database.
+      - name: Get the Neon development branch
+        id: branch
+        uses: neondatabase/create-branch-action@fb620d43d4c565abaf088b848a4e28e5c4ea4d9c # 6.3.1
+        with:
+          project_id: ${{ secrets.NEON_PROJECT_ID }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+          branch_name: development
+
+      # Direct URL: the migrator holds an advisory lock, which Neon's pooler can't.
+      - name: Migrate the development database
+        run: pnpm --filter @clippings/db migrate
+        env:
+          DATABASE_URL_DIRECT: ${{ steps.branch.outputs.db_url }}
+
+      - name: Deploy
+        id: vercel
+        uses: ./.github/actions/vercel-deploy
+        with:
+          token: ${{ secrets.VERCEL_TOKEN }}
+          org-id: ${{ secrets.VERCEL_ORG_ID }}
+          project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          database-url: ${{ steps.branch.outputs.db_url_pooled }}
+          alias: ${{ vars.DEVELOPMENT_ALIAS }}
+
+      - name: Summary
+        run: |
+          echo "Development: $URL (alias ${ALIAS:-not set})" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          URL: ${{ steps.vercel.outputs.url }}
+          ALIAS: ${{ vars.DEVELOPMENT_ALIAS }}

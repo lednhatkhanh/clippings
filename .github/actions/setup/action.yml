@@ -1,0 +1,16 @@
+name: Set up the workspace
+description: Install pnpm and Node from the repo's pins, then the locked dependencies. Run after checkout.
+
+runs:
+  using: composite
+  steps:
+    # No `version` input: reads `packageManager` / `devEngines.packageManager` from package.json.
+    - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+      with:
+        node-version-file: .node-version
+        cache: pnpm
+
+    - run: pnpm install --frozen-lockfile
+      shell: bash
