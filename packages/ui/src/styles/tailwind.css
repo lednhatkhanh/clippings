@@ -1,0 +1,6 @@
+/*
+ * Tailwind plus the design system, for consumers without their own entry stylesheet (the
+ * extension popup). The web app imports "tailwindcss" itself and adds `styles.css`.
+ */
+@import "tailwindcss";
+@import "./index.css";

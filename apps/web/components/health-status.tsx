@@ -21,5 +21,7 @@ export function HealthStatus() {
     return () => controller.abort();
   }, []);
 
-  return <output className="block text-sm">Service: {state}</output>;
+  return (
+    <output className="block typescale-body-md text-on-surface-variant">Service: {state}</output>
+  );
 }

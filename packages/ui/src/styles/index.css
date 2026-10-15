@@ -1,0 +1,13 @@
+/*
+ * Design system styles. Import after `@import "tailwindcss"`:
+ *
+ *   @import "tailwindcss";
+ *   @import "@clippings/ui/styles.css";
+ */
+@import "../generated/themes.css";
+@import "../generated/springs.css";
+@import "../generated/typescale.css";
+@import "./tokens.css";
+@import "./theme.css";
+@import "./icons.css";
+@import "./base.css";

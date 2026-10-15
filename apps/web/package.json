@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@clippings/ui": "workspace:*",
     "next": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:"

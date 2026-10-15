@@ -1,0 +1,57 @@
+/* Self-hosted Material Symbols Rounded subset; see icons/icon-names.ts and scripts/build-icons.ts. */
+
+@font-face {
+  font-family: "Material Symbols Rounded";
+  font-style: normal;
+  font-weight: 300 500;
+  /* `block` hides ligature text until the font arrives instead of flashing "settings". */
+  font-display: block;
+  src: url("../fonts/material-symbols-rounded.woff2") format("woff2");
+}
+
+/* Light glyphs on dark paper read heavier, so dark mode lowers the grade (-25). */
+:root {
+  --icon-grade: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --icon-grade: -25;
+  }
+}
+
+:root[data-theme="dark"] {
+  --icon-grade: -25;
+}
+
+@utility icon {
+  font-family: "Material Symbols Rounded";
+  font-weight: 400;
+  font-style: normal;
+  font-size: 1.5rem;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  flex: none;
+  white-space: nowrap;
+  direction: ltr;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "liga";
+  font-variation-settings:
+    "FILL" 0,
+    "wght" 400,
+    "GRAD" var(--icon-grade),
+    "opsz" 24;
+  transition: font-variation-settings var(--md-sys-motion-duration-short3)
+    var(--md-sys-motion-easing-standard);
+
+  &[data-filled] {
+    font-variation-settings:
+      "FILL" 1,
+      "wght" 400,
+      "GRAD" var(--icon-grade),
+      "opsz" 24;
+  }
+}

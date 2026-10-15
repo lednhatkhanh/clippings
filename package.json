@@ -5,13 +5,14 @@
   "scripts": {
     "lint": "turbo run lint",
     "format:check": "turbo run format:check",
-    "check:root": "oxfmt --check package.json turbo.json pnpm-workspace.yaml .oxlintrc.json .oxfmtrc.json .github scripts && oxlint -c .oxlintrc.json scripts",
+    "check:root": "oxfmt --check package.json turbo.json pnpm-workspace.yaml .oxlintrc.json .oxfmtrc.json .github scripts && oxlint -c .oxlintrc.json scripts && pnpm --filter @clippings/ui check:icons",
     "format": "oxfmt --write apps packages scripts package.json turbo.json pnpm-workspace.yaml .oxlintrc.json .oxfmtrc.json .github",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "build": "turbo run build"
   },
   "devDependencies": {
+    "@shadcn/lint": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
