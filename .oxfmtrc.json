@@ -19,6 +19,7 @@
     ".agents",
     "docs",
     "AGENTS.md",
-    "skills-lock.json"
+    "skills-lock.json",
+    "packages/ui/src/generated"
   ]
 }

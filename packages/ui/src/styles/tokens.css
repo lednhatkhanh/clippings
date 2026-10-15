@@ -1,0 +1,84 @@
+/*
+ * Static design tokens: shape, elevation, state layers, motion and layout. Colors come from
+ * generated/themes.css, the type scale from generated/typescale.css and springs from
+ * generated/springs.css. Values are from the Material Web token sources.
+ */
+
+:root {
+  /* Shape */
+  --md-sys-shape-corner-none: 0;
+  --md-sys-shape-corner-extra-small: 0.25rem;
+  --md-sys-shape-corner-small: 0.5rem;
+  --md-sys-shape-corner-medium: 0.75rem;
+  --md-sys-shape-corner-large: 1rem;
+  --md-sys-shape-corner-large-increased: 1.25rem;
+  --md-sys-shape-corner-extra-large: 1.75rem;
+  --md-sys-shape-corner-extra-large-increased: 2rem;
+  --md-sys-shape-corner-extra-extra-large: 3rem;
+  --md-sys-shape-corner-full: 9999px;
+
+  /*
+   * Elevation. Tone carries hierarchy on paper, so only floating things get real shadows
+   * (menus, dialogs, snackbars). The elevated card uses `card`, level 1 at half alpha, so
+   * cards look laid flat.
+   */
+  --md-sys-elevation-shadow-0: none;
+  --md-sys-elevation-shadow-1:
+    0 1px 2px 0 color-mix(in srgb, var(--md-sys-color-shadow) 30%, transparent),
+    0 1px 3px 1px color-mix(in srgb, var(--md-sys-color-shadow) 15%, transparent);
+  --md-sys-elevation-shadow-card:
+    0 1px 2px 0 color-mix(in srgb, var(--md-sys-color-shadow) 15%, transparent),
+    0 1px 3px 1px color-mix(in srgb, var(--md-sys-color-shadow) 7.5%, transparent);
+  --md-sys-elevation-shadow-2:
+    0 1px 2px 0 color-mix(in srgb, var(--md-sys-color-shadow) 30%, transparent),
+    0 2px 6px 2px color-mix(in srgb, var(--md-sys-color-shadow) 15%, transparent);
+  --md-sys-elevation-shadow-3:
+    0 1px 3px 0 color-mix(in srgb, var(--md-sys-color-shadow) 30%, transparent),
+    0 4px 8px 3px color-mix(in srgb, var(--md-sys-color-shadow) 15%, transparent);
+  --md-sys-elevation-shadow-4:
+    0 2px 3px 0 color-mix(in srgb, var(--md-sys-color-shadow) 30%, transparent),
+    0 6px 10px 4px color-mix(in srgb, var(--md-sys-color-shadow) 15%, transparent);
+  --md-sys-elevation-shadow-5:
+    0 4px 4px 0 color-mix(in srgb, var(--md-sys-color-shadow) 30%, transparent),
+    0 8px 12px 6px color-mix(in srgb, var(--md-sys-color-shadow) 15%, transparent);
+
+  /* State layers */
+  --md-sys-state-hover-state-layer-opacity: 0.08;
+  --md-sys-state-focus-state-layer-opacity: 0.1;
+  --md-sys-state-pressed-state-layer-opacity: 0.1;
+  --md-sys-state-dragged-state-layer-opacity: 0.16;
+  --md-sys-state-disabled-content-opacity: 0.38;
+
+  /* Focus indicator */
+  --md-sys-state-focus-indicator-thickness: 3px;
+  --md-sys-state-focus-indicator-outer-offset: 2px;
+
+  /* Motion: durations */
+  --md-sys-motion-duration-short1: 50ms;
+  --md-sys-motion-duration-short2: 100ms;
+  --md-sys-motion-duration-short3: 150ms;
+  --md-sys-motion-duration-short4: 200ms;
+  --md-sys-motion-duration-medium1: 250ms;
+  --md-sys-motion-duration-medium2: 300ms;
+  --md-sys-motion-duration-medium3: 350ms;
+  --md-sys-motion-duration-medium4: 400ms;
+  --md-sys-motion-duration-long1: 450ms;
+  --md-sys-motion-duration-long2: 500ms;
+  --md-sys-motion-duration-long3: 550ms;
+  --md-sys-motion-duration-long4: 600ms;
+  --md-sys-motion-duration-extra-long1: 700ms;
+  --md-sys-motion-duration-extra-long2: 800ms;
+  --md-sys-motion-duration-extra-long3: 900ms;
+  --md-sys-motion-duration-extra-long4: 1000ms;
+
+  /* Motion: easings (the real emphasized curve is a path CSS can't express, so it aliases standard) */
+  --md-sys-motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --md-sys-motion-easing-standard-decelerate: cubic-bezier(0, 0, 0, 1);
+  --md-sys-motion-easing-standard-accelerate: cubic-bezier(0.3, 0, 1, 1);
+  --md-sys-motion-easing-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --md-sys-motion-easing-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --md-sys-motion-easing-emphasized-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
+
+  /* Top app bar height: the shell's `h-16`, and the scroll padding that keeps focus clear of it */
+  --top-bar-height: 4rem;
+}

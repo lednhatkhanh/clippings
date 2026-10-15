@@ -1,4 +1,4 @@
 {
-  "extends": "@clippings/config/tsconfig/library.json",
-  "include": ["src"]
+  "extends": "@clippings/config/tsconfig/react-library.json",
+  "include": ["src", "scripts", "vitest.config.ts"]
 }

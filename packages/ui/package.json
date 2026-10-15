@@ -4,15 +4,36 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./styles.css": "./src/styles/index.css",
+    "./tokens.json": "./src/generated/tokens.json",
+    "./tailwind.css": "./src/styles/tailwind.css"
   },
   "scripts": {
-    "lint": "oxlint -c ../../.oxlintrc.json .",
+    "generate": "tsx scripts/generate-theme.ts",
+    "build:icons": "tsx scripts/build-icons.ts",
+    "check:generated": "tsx scripts/generate-theme.ts --check",
+    "check:icons": "tsx scripts/check-icons.ts",
+    "lint": "oxlint -c ../../.oxlintrc.json . && pnpm check:generated && pnpm check:icons",
     "format:check": "oxfmt --check -c ../../.oxfmtrc.json .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@material/material-color-utilities": "catalog:",
+    "cn": "catalog:"
   },
   "devDependencies": {
     "@clippings/config": "workspace:*",
-    "typescript": "catalog:"
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "react": "catalog:",
+    "tailwindcss": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "react": "catalog:"
   }
 }

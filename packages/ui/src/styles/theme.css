@@ -1,0 +1,188 @@
+/*
+ * Maps design tokens to Tailwind. `inline` is required because the values reference other
+ * variables. Each `--x-*: initial` empties one of Tailwind's default namespaces, so the only
+ * classes that exist are the ones this vocabulary defines.
+ *
+ * Import after `@import "tailwindcss"`.
+ */
+
+/* `dark:` follows an explicit data-theme, or the OS when the theme is "system" (no attribute). */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme]), :root:not([data-theme]) *) {
+      @slot;
+    }
+  }
+}
+
+@theme inline {
+  --color-*: initial;
+  --color-primary: var(--md-sys-color-primary);
+  --color-on-primary: var(--md-sys-color-on-primary);
+  --color-primary-container: var(--md-sys-color-primary-container);
+  --color-on-primary-container: var(--md-sys-color-on-primary-container);
+  --color-secondary: var(--md-sys-color-secondary);
+  --color-on-secondary: var(--md-sys-color-on-secondary);
+  --color-secondary-container: var(--md-sys-color-secondary-container);
+  --color-on-secondary-container: var(--md-sys-color-on-secondary-container);
+  --color-tertiary: var(--md-sys-color-tertiary);
+  --color-on-tertiary: var(--md-sys-color-on-tertiary);
+  --color-tertiary-container: var(--md-sys-color-tertiary-container);
+  --color-on-tertiary-container: var(--md-sys-color-on-tertiary-container);
+  --color-error: var(--md-sys-color-error);
+  --color-on-error: var(--md-sys-color-on-error);
+  --color-error-container: var(--md-sys-color-error-container);
+  --color-on-error-container: var(--md-sys-color-on-error-container);
+  --color-background: var(--md-sys-color-background);
+  --color-on-background: var(--md-sys-color-on-background);
+  --color-surface: var(--md-sys-color-surface);
+  --color-on-surface: var(--md-sys-color-on-surface);
+  --color-surface-variant: var(--md-sys-color-surface-variant);
+  --color-on-surface-variant: var(--md-sys-color-on-surface-variant);
+  --color-outline: var(--md-sys-color-outline);
+  --color-outline-variant: var(--md-sys-color-outline-variant);
+  --color-shadow: var(--md-sys-color-shadow);
+  --color-scrim: var(--md-sys-color-scrim);
+  --color-inverse-surface: var(--md-sys-color-inverse-surface);
+  --color-inverse-on-surface: var(--md-sys-color-inverse-on-surface);
+  --color-inverse-primary: var(--md-sys-color-inverse-primary);
+  --color-primary-fixed: var(--md-sys-color-primary-fixed);
+  --color-on-primary-fixed: var(--md-sys-color-on-primary-fixed);
+  --color-primary-fixed-dim: var(--md-sys-color-primary-fixed-dim);
+  --color-on-primary-fixed-variant: var(--md-sys-color-on-primary-fixed-variant);
+  --color-secondary-fixed: var(--md-sys-color-secondary-fixed);
+  --color-on-secondary-fixed: var(--md-sys-color-on-secondary-fixed);
+  --color-secondary-fixed-dim: var(--md-sys-color-secondary-fixed-dim);
+  --color-on-secondary-fixed-variant: var(--md-sys-color-on-secondary-fixed-variant);
+  --color-tertiary-fixed: var(--md-sys-color-tertiary-fixed);
+  --color-on-tertiary-fixed: var(--md-sys-color-on-tertiary-fixed);
+  --color-tertiary-fixed-dim: var(--md-sys-color-tertiary-fixed-dim);
+  --color-on-tertiary-fixed-variant: var(--md-sys-color-on-tertiary-fixed-variant);
+  --color-surface-dim: var(--md-sys-color-surface-dim);
+  --color-surface-bright: var(--md-sys-color-surface-bright);
+  --color-surface-container-lowest: var(--md-sys-color-surface-container-lowest);
+  --color-surface-container-low: var(--md-sys-color-surface-container-low);
+  --color-surface-container: var(--md-sys-color-surface-container);
+  --color-surface-container-high: var(--md-sys-color-surface-container-high);
+  --color-surface-container-highest: var(--md-sys-color-surface-container-highest);
+  --color-surface-tint: var(--md-sys-color-surface-tint);
+
+  /* Tag colors: `bg-tag-red text-on-tag-red`, with `bg-tag-red-dot` for the 8px dot */
+  --color-tag-red: var(--tag-red-container);
+  --color-on-tag-red: var(--tag-red-on-container);
+  --color-tag-red-dot: var(--tag-red-dot);
+  --color-tag-orange: var(--tag-orange-container);
+  --color-on-tag-orange: var(--tag-orange-on-container);
+  --color-tag-orange-dot: var(--tag-orange-dot);
+  --color-tag-amber: var(--tag-amber-container);
+  --color-on-tag-amber: var(--tag-amber-on-container);
+  --color-tag-amber-dot: var(--tag-amber-dot);
+  --color-tag-green: var(--tag-green-container);
+  --color-on-tag-green: var(--tag-green-on-container);
+  --color-tag-green-dot: var(--tag-green-dot);
+  --color-tag-teal: var(--tag-teal-container);
+  --color-on-tag-teal: var(--tag-teal-on-container);
+  --color-tag-teal-dot: var(--tag-teal-dot);
+  --color-tag-blue: var(--tag-blue-container);
+  --color-on-tag-blue: var(--tag-blue-on-container);
+  --color-tag-blue-dot: var(--tag-blue-dot);
+  --color-tag-violet: var(--tag-violet-container);
+  --color-on-tag-violet: var(--tag-violet-on-container);
+  --color-tag-violet-dot: var(--tag-violet-dot);
+  --color-tag-pink: var(--tag-pink-container);
+  --color-on-tag-pink: var(--tag-pink-on-container);
+  --color-tag-pink-dot: var(--tag-pink-dot);
+
+  --font-*: initial;
+  --font-serif: var(--md-ref-typeface-brand, "Literata", Georgia, serif);
+  --font-sans: var(--md-ref-typeface-plain, "Roboto Flex", system-ui, sans-serif);
+  --font-mono: var(--md-ref-typeface-mono, "Roboto Mono", ui-monospace, monospace);
+
+  --radius-*: initial;
+  --radius-none: var(--md-sys-shape-corner-none);
+  --radius-xs: var(--md-sys-shape-corner-extra-small);
+  --radius-sm: var(--md-sys-shape-corner-small);
+  --radius-md: var(--md-sys-shape-corner-medium);
+  --radius-lg: var(--md-sys-shape-corner-large);
+  --radius-lg-increased: var(--md-sys-shape-corner-large-increased);
+  --radius-xl: var(--md-sys-shape-corner-extra-large);
+  --radius-xl-increased: var(--md-sys-shape-corner-extra-large-increased);
+  --radius-xxl: var(--md-sys-shape-corner-extra-extra-large);
+  --radius-full: var(--md-sys-shape-corner-full);
+
+  --shadow-*: initial;
+  --shadow-0: var(--md-sys-elevation-shadow-0);
+  --shadow-1: var(--md-sys-elevation-shadow-1);
+  --shadow-card: var(--md-sys-elevation-shadow-card);
+  --shadow-2: var(--md-sys-elevation-shadow-2);
+  --shadow-3: var(--md-sys-elevation-shadow-3);
+  --shadow-4: var(--md-sys-elevation-shadow-4);
+  --shadow-5: var(--md-sys-elevation-shadow-5);
+
+  --ease-*: initial;
+  --ease-standard: var(--md-sys-motion-easing-standard);
+  --ease-standard-decelerate: var(--md-sys-motion-easing-standard-decelerate);
+  --ease-standard-accelerate: var(--md-sys-motion-easing-standard-accelerate);
+  --ease-emphasized: var(--md-sys-motion-easing-emphasized);
+  --ease-emphasized-decelerate: var(--md-sys-motion-easing-emphasized-decelerate);
+  --ease-emphasized-accelerate: var(--md-sys-motion-easing-emphasized-accelerate);
+  --ease-spring: var(--md-sys-motion-spring-default-spatial);
+  --ease-spring-effects: var(--md-sys-motion-spring-default-effects);
+  --ease-spring-expressive: var(--md-sys-motion-spring-expressive-spatial);
+
+  /* M3 window size classes: medium 600, expanded 840, large 1200, extra-large 1600 */
+  --breakpoint-*: initial;
+  --breakpoint-medium: 37.5rem;
+  --breakpoint-expanded: 52.5rem;
+  --breakpoint-large: 75rem;
+  --breakpoint-xlarge: 100rem;
+}
+
+/*
+ * One `::before` overlay per interactive surface, driven by React Aria's `data-*` state
+ * attributes so touch and keyboard behave like hover. Apply with `state-layer`.
+ */
+@utility state-layer {
+  position: relative;
+  isolation: isolate;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-standard);
+  }
+
+  &[data-hovered]::before,
+  &:hover::before {
+    opacity: var(--md-sys-state-hover-state-layer-opacity);
+  }
+
+  &[data-focus-visible]::before,
+  &:focus-visible::before {
+    opacity: var(--md-sys-state-focus-state-layer-opacity);
+  }
+
+  &[data-pressed]::before,
+  &:active::before {
+    opacity: var(--md-sys-state-pressed-state-layer-opacity);
+  }
+
+  &[data-dragging]::before {
+    opacity: var(--md-sys-state-dragged-state-layer-opacity);
+  }
+}
+
+/* Bottom padding that clears the home indicator on notched phones (viewport-fit=cover). */
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}

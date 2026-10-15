@@ -6,6 +6,7 @@
   "exports": {
     "./tsconfig/base.json": "./tsconfig/base.json",
     "./tsconfig/library.json": "./tsconfig/library.json",
-    "./tsconfig/nextjs.json": "./tsconfig/nextjs.json"
+    "./tsconfig/nextjs.json": "./tsconfig/nextjs.json",
+    "./tsconfig/react-library.json": "./tsconfig/react-library.json"
   }
 }

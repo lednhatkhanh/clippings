@@ -21,7 +21,32 @@
     "react/incompatible-library": "error",
     "react/globals": "error",
     "react/error-boundaries": "error",
-    "react/unsupported-syntax": "error"
+    "react/unsupported-syntax": "error",
+    "shadcn/no-raw-colors": "error",
+    "shadcn/no-arbitrary-values": "error",
+    "shadcn/no-inline-styles": "warn",
+    "shadcn/no-unknown-classes": "error",
+    "shadcn/require-static-classes": "error",
+    "shadcn/no-restyle": [
+      "error",
+      {
+        "allow": ["layout"]
+      }
+    ]
   },
-  "ignorePatterns": [".next", ".wxt", ".output", ".turbo", "node_modules"]
+  "ignorePatterns": [
+    ".next",
+    ".wxt",
+    ".output",
+    ".turbo",
+    "node_modules",
+    "packages/ui/src/generated"
+  ],
+  "jsPlugins": ["@shadcn/lint"],
+  "settings": {
+    "shadcn": {
+      "ui": "@clippings/ui",
+      "themeImports": ["^@clippings/ui/"]
+    }
+  }
 }
