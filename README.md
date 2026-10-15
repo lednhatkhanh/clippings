@@ -81,12 +81,12 @@ TEST_DATABASE_URL=postgres://postgres:postgres@localhost:55432/postgres pnpm tes
 
 ## Environments and releases
 
-Work lands on `main`, which deploys to the development environment on every push. `production` only
-fast-forwards to a commit already on `main`:
+Work lands on `main`, which deploys to the development environment on every push. A release is a
+pull request from `main` into `production`; merging it migrates the production database and
+deploys:
 
 ```bash
-git fetch origin
-git push origin origin/main:production
+gh pr create --base production --head main --title "Release: <what ships>"
 ```
 
 Each PR gets its own Neon branch and Vercel preview. The one-time setup, secrets, backups and

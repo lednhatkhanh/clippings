@@ -22,8 +22,9 @@ Versions live only in the `catalog:` of `pnpm-workspace.yaml` (`catalogMode: str
 
 ### Branches and releases
 
-`main` is the development environment and deploys on every push. `production` fast-forwards from
-`main` and only the user moves it (`docs/deploy.md`): never force-push it or push to it unasked.
+`main` is the development environment and deploys on every push. `production` is released by a
+pull request from `main` that the user merges (`docs/deploy.md`): never push to it or force-push it,
+and don't merge a release PR unasked.
 Secrets stay out of the repo: runtime secrets live in Vercel, deploy credentials in GitHub.
 
 ### Claude Code setup
