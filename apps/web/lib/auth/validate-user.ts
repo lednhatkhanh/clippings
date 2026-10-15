@@ -1,6 +1,6 @@
 import type { BetterAuthOptions } from "better-auth";
 
-import { isAllowlisted, parseAllowlist } from "./allowlist";
+import { isAllowlisted, normalizeEmail, parseAllowlist } from "./allowlist";
 
 /** Holds the email of the last rejected account for the not-allowlisted page to name. */
 export const REJECTED_EMAIL_COOKIE = "clippings-rejected-email";
@@ -25,7 +25,7 @@ export function createUserValidator({ allowedEmails }: { allowedEmails: string |
     if (isAllowlisted(allowlist, email)) return;
 
     if (email) {
-      context.setCookie(REJECTED_EMAIL_COOKIE, email.trim().toLowerCase(), {
+      context.setCookie(REJECTED_EMAIL_COOKIE, normalizeEmail(email), {
         httpOnly: true,
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",

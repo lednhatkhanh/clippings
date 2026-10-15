@@ -29,6 +29,12 @@ function createAuth() {
       validateUserInfo: createUserValidator({ allowedEmails: process.env.ALLOWED_EMAILS }),
     },
     onAPIError: { errorURL: "/sign-in" },
+    // Deliberately left at Better Auth's defaults, for a Google-only, allowlisted app:
+    // - trustedOrigins: `BETTER_AUTH_URL` is trusted; previews don't sign in (spec, "Hosting").
+    //   Add the extension's origin when its sign-in lands.
+    // - rateLimit: on in production by default; the surface is one OAuth start and callback.
+    // - accountLinking: one provider, and `validateUserInfo` also gates linking.
+    // - email verification, passwords, 2FA: not enabled; there is no email/password sign-in.
     plugins: [nextCookies()],
   });
 }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 
 import { ClippingsStackIllustration, LetterboxIllustration } from "@clippings/ui";
 
@@ -12,24 +12,31 @@ import { signInWithGoogle } from "./actions";
 
 export const metadata: Metadata = { title: "Sign in · Clippings" };
 
-const button =
-  "state-layer inline-flex min-h-12 items-center justify-center rounded-full border border-outline px-6 typescale-label-lg text-primary";
+/** Posts to the sign-in action. Google shows its account chooser either way. */
+function GoogleButton({ children }: { children: ReactNode }) {
+  return (
+    <form action={signInWithGoogle}>
+      <button
+        type="submit"
+        className="state-layer inline-flex min-h-12 items-center justify-center rounded-full border border-outline px-6 typescale-label-lg text-primary"
+      >
+        {children}
+      </button>
+    </form>
+  );
+}
 
 function SignInCard({ failed = false }: { failed?: boolean }) {
   return (
     <AuthCard>
-      <ClippingsStackIllustration className="h-40 w-60" />
+      <ClippingsStackIllustration className="h-auto w-60" />
       <h1 className="typescale-headline-sm">Your clippings, kept.</h1>
       {failed ? (
         <p role="alert" className="typescale-body-md text-error">
           Couldn&apos;t sign you in. Try again.
         </p>
       ) : null}
-      <form action={signInWithGoogle}>
-        <button type="submit" className={button}>
-          Continue with Google
-        </button>
-      </form>
+      <GoogleButton>Continue with Google</GoogleButton>
     </AuthCard>
   );
 }
@@ -37,7 +44,7 @@ function SignInCard({ failed = false }: { failed?: boolean }) {
 function PrivateCard({ email }: { email: string | undefined }) {
   return (
     <AuthCard>
-      <LetterboxIllustration className="h-40 w-60" />
+      <LetterboxIllustration className="h-auto w-50" />
       <h1 className="typescale-headline-sm">This Clippings is private</h1>
       <p className="typescale-body-md text-on-surface-variant">
         {email ? (
@@ -48,11 +55,7 @@ function PrivateCard({ email }: { email: string | undefined }) {
           "That account isn't on the list."
         )}
       </p>
-      <form action={signInWithGoogle}>
-        <button type="submit" className={button}>
-          Use another account
-        </button>
-      </form>
+      <GoogleButton>Use another account</GoogleButton>
     </AuthCard>
   );
 }

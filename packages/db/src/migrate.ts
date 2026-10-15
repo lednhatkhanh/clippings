@@ -37,11 +37,11 @@ export async function migrate({
     );
 
     const { rows } = await client.query<{ name: string }>("select name from schema_migrations");
-    const done = new Set(rows.map((row) => row.name));
+    const appliedNames = new Set(rows.map((row) => row.name));
 
     const applied: string[] = [];
     for (const name of files) {
-      if (done.has(name)) continue;
+      if (appliedNames.has(name)) continue;
 
       const sql = await readFile(`${directory}/${name}`, "utf8");
       try {
