@@ -1,8 +1,7 @@
 import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
 
-import { createPool } from "@clippings/db";
-
+import { getPool } from "../db";
 import { createUserValidator } from "./validate-user";
 
 function requireEnv(name: string): string {
@@ -13,8 +12,8 @@ function requireEnv(name: string): string {
 
 function createAuth() {
   return betterAuth({
-    // Neon's pooled URL; migrations use the direct URL (see `@clippings/db`).
-    database: createPool(requireEnv("DATABASE_URL")),
+    // Neon's pooled URL, shared with the Clippings service; migrations use the direct URL.
+    database: getPool(),
     // `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are read from the environment by Better Auth.
     advanced: { useSecureCookies: process.env.NODE_ENV === "production" },
     socialProviders: {
