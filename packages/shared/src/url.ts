@@ -1,4 +1,6 @@
 const EXPLICIT_SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i;
+/** `mailto:`, `javascript:`, `data:` and the like. A digit after the colon is a port (`host:3000`). */
+const OTHER_SCHEME = /^[a-z][a-z0-9+.-]*:(?!\d|\/\/)/i;
 
 /** Query parameters that say how a link was reached, not which page it is. */
 const TRACKING_PARAMETERS = new Set([
@@ -17,14 +19,24 @@ const TRACKING_PARAMETERS = new Set([
 const isTracking = (name: string) =>
   name.startsWith("utm_") || TRACKING_PARAMETERS.has(name.toLowerCase());
 
+export interface WebUrl {
+  /** The address as the user gave it, made absolute: scheme added, host lowercased. */
+  url: string;
+  /**
+   * What two saves of "the same page" have in common. The host's case, default ports, the
+   * fragment, a trailing slash, tracking parameters and the order of the other parameters don't
+   * count.
+   */
+  normalized: string;
+}
+
 /**
- * The address two saves of "the same page" have in common, or null when `input` is not an
- * http(s) URL. A missing scheme is read as https. The host's case, default ports, the fragment,
- * a trailing slash, tracking parameters and the order of the remaining parameters don't count.
+ * Reads an http(s) address, or returns null for anything else: other schemes, addresses with
+ * credentials, text that isn't a URL. A missing scheme is read as https.
  */
-export function normalizeUrl(input: string): string | null {
+export function parseWebUrl(input: string): WebUrl | null {
   const trimmed = input.trim();
-  if (!trimmed) return null;
+  if (!trimmed || OTHER_SCHEME.test(trimmed)) return null;
 
   let url: URL;
   try {
@@ -33,12 +45,16 @@ export function normalizeUrl(input: string): string | null {
     return null;
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+  if (url.username || url.password) return null;
 
   const parameters = [...url.searchParams]
     .filter(([name]) => !isTracking(name))
     .toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
   const query = new URLSearchParams(parameters).toString();
-
   const path = url.pathname.replace(/\/+$/, "");
-  return `${url.protocol}//${url.host}${path}${query ? `?${query}` : ""}`;
+
+  return {
+    url: url.href,
+    normalized: `${url.protocol}//${url.host}${path}${query ? `?${query}` : ""}`,
+  };
 }

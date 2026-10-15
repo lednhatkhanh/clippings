@@ -3,6 +3,7 @@ import { Suspense } from "react";
 
 import { ClippingList } from "../../components/clippings/clipping-list";
 import { EmptyState } from "../../components/clippings/empty-state";
+import { ListLoadError } from "../../components/clippings/list-load-error";
 import { ListSkeleton } from "../../components/clippings/list-skeleton";
 import { NewClippingDialog } from "../../components/clippings/new-clipping-dialog";
 import { getSession } from "../../lib/auth/session";
@@ -12,7 +13,14 @@ async function Clippings() {
   const session = await getSession();
   if (!session) redirect("/sign-in");
 
-  const { rows, nextCursor } = await loadRows(session.user.id);
+  let page: Awaited<ReturnType<typeof loadRows>>;
+  try {
+    page = await loadRows(session.user.id);
+  } catch {
+    // Only the list is replaced, so the heading and "New clipping" stay in place.
+    return <ListLoadError />;
+  }
+  const { rows, nextCursor } = page;
 
   if (rows.length === 0) return <EmptyState />;
   // Keyed by the newest clipping, so a fresh save remounts the list with the new first page.

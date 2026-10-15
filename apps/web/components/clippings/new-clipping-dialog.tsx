@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useFormStatus } from "react-dom";
 
+import { MAX_NOTE_LENGTH } from "@clippings/shared";
 import {
   Button,
   Dialog,
@@ -15,7 +16,6 @@ import {
 } from "@clippings/ui";
 
 import { saveClippingAction, updateNoteAction, type SaveOutcome } from "../../app/(app)/actions";
-import { MAX_NOTE_LENGTH } from "../../lib/clippings/note";
 
 function SubmitButton({ children }: { children: string }) {
   const { pending } = useFormStatus();

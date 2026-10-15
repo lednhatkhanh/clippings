@@ -2,10 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 
-import { InvalidUrlError } from "@clippings/db";
+import { InvalidUrlError, NoteTooLongError } from "@clippings/db";
 
 import { getSession } from "../../lib/auth/session";
-import { MAX_NOTE_LENGTH } from "../../lib/clippings/note";
 import { loadRows, type RowsPage } from "../../lib/clippings/rows";
 import { getClippings } from "../../lib/clippings/service";
 import { formatAbsoluteDate } from "../../lib/format-date";
@@ -21,21 +20,18 @@ async function requireUserId(): Promise<string> {
   return session.user.id;
 }
 
-const text = (formData: FormData, name: string) => {
+const readString = (formData: FormData, name: string) => {
   const value = formData.get(name);
   return typeof value === "string" ? value : "";
 };
 
 export async function saveClippingAction(formData: FormData): Promise<SaveOutcome> {
   const userId = await requireUserId();
-  const url = text(formData, "url").trim();
-  const note = text(formData, "note").trim();
+  const url = readString(formData, "url").trim();
+  const note = readString(formData, "note").trim();
 
   if (!url) {
     return { status: "invalid", field: "url", message: "Paste the address of the page to save." };
-  }
-  if (note.length > MAX_NOTE_LENGTH) {
-    return { status: "invalid", field: "note", message: "That note is too long." };
   }
 
   try {
@@ -56,6 +52,9 @@ export async function saveClippingAction(formData: FormData): Promise<SaveOutcom
       savedOn: formatAbsoluteDate(clipping.createdAt, new Date()),
     };
   } catch (error) {
+    if (error instanceof NoteTooLongError) {
+      return { status: "invalid", field: "note", message: "That note is too long." };
+    }
     if (error instanceof InvalidUrlError) {
       return {
         status: "invalid",
@@ -69,12 +68,16 @@ export async function saveClippingAction(formData: FormData): Promise<SaveOutcom
 
 export async function updateNoteAction(clippingId: string, formData: FormData): Promise<boolean> {
   const userId = await requireUserId();
-  const note = text(formData, "note").trim();
-  if (note.length > MAX_NOTE_LENGTH) return false;
+  const note = readString(formData, "note").trim();
 
-  const updated = await getClippings().updateNote(userId, clippingId, note);
-  revalidatePath("/");
-  return updated !== null;
+  try {
+    const updated = await getClippings().updateNote(userId, clippingId, note);
+    revalidatePath("/");
+    return updated !== null;
+  } catch (error) {
+    if (error instanceof NoteTooLongError) return false;
+    throw error;
+  }
 }
 
 export async function loadMoreClippingsAction(cursor: string): Promise<RowsPage> {

@@ -1,7 +1,8 @@
 import type pg from "pg";
 
 import {
-  normalizeUrl,
+  MAX_NOTE_LENGTH,
+  parseWebUrl,
   type Clipping,
   type ClippingSource,
   type ClippingStatus,
@@ -102,6 +103,13 @@ export class InvalidCursorError extends Error {
   }
 }
 
+export class NoteTooLongError extends Error {
+  constructor() {
+    super(`A note can be at most ${MAX_NOTE_LENGTH} characters`);
+    this.name = "NoteTooLongError";
+  }
+}
+
 export class InvalidUrlError extends Error {
   constructor(url: string) {
     super(`Not a web address: ${url}`);
@@ -118,18 +126,20 @@ export function createClippingsService({ pool, jobs, clock }: ClippingsServiceDe
     userId: string,
     input: SaveClippingInput,
   ): Promise<SaveClippingResult> {
-    const normalized = normalizeUrl(input.url);
-    if (!normalized) throw new InvalidUrlError(input.url);
+    const parsed = parseWebUrl(input.url);
+    if (!parsed) throw new InvalidUrlError(input.url);
+    const note = input.note ?? "";
+    if (note.length > MAX_NOTE_LENGTH) throw new NoteTooLongError();
 
     const now = clock.now();
-    const url = input.url.trim();
+    const { url, normalized } = parsed;
     const inserted = await pool.query<ClippingRow>(
       `insert into clippings
          (user_id, url, url_normalized, title, note, source, client_id, created_at, updated_at)
        values ($1, $2, $3, $2, $4, $5, $6, $7, $7)
        on conflict (user_id, url_normalized) do nothing
        returning *`,
-      [userId, url, normalized, input.note ?? "", input.source, input.clientId ?? null, now],
+      [userId, url, normalized, note, input.source, input.clientId ?? null, now],
     );
 
     const row = inserted.rows[0];
@@ -174,6 +184,7 @@ export function createClippingsService({ pool, jobs, clock }: ClippingsServiceDe
     clippingId: string,
     note: string,
   ): Promise<Clipping | null> {
+    if (note.length > MAX_NOTE_LENGTH) throw new NoteTooLongError();
     if (!UUID.test(clippingId)) return null;
     const { rows } = await pool.query<ClippingRow>(
       `update clippings set note = $3, updated_at = $4

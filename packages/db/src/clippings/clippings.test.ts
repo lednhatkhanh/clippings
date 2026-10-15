@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { MAX_NOTE_LENGTH } from "@clippings/shared";
+
 import { createServiceFixture, type ServiceFixture } from "../test/service-fixture";
 import { TEST_DATABASE_URL } from "../test/temp-database";
-import { InvalidUrlError } from "./service";
+import { InvalidUrlError, NoteTooLongError } from "./service";
 
 describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
   let fixture: ServiceFixture;
@@ -64,6 +66,7 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
       expect(again.status, url).toBe("existing");
       expect(again.clipping.id, url).toBe(first.clipping.id);
       expect(again.clipping.note, url).toBe("original note");
+      expect(again.clipping.source, url).toBe("web");
     }
 
     expect(fixture.enrichmentRequests).toEqual([first.clipping.id]);
@@ -116,6 +119,14 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
     expect(anasPage.items.map((clipping) => clipping.note)).toEqual(["ana's note"]);
     const bensPage = await fixture.service.listClippings(ben, {});
     expect(bensPage.items.map((clipping) => clipping.note)).toEqual(["ben's note"]);
+
+    // A cursor taken from A's list gives B nothing of A's.
+    await fixture.service.saveClipping(ana, { url: "https://example.com/second", source: "web" });
+    const anasFirst = await fixture.service.listClippings(ana, { limit: 1 });
+    const bensWithAnasCursor = await fixture.service.listClippings(ben, {
+      cursor: anasFirst.nextCursor ?? undefined,
+    });
+    expect(bensWithAnasCursor.items.map((clipping) => clipping.note)).not.toContain("ana's note");
   });
 
   it("pages newest first by cursor, without gaps or duplicates", async () => {
@@ -150,6 +161,10 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
     expect(positions[5]).toBeLessThan(positions[4]!);
     expect(positions[2]).toBeLessThan(positions[1]!);
     expect(positions[1]).toBeLessThan(positions[0]!);
+
+    // Saves 3 and 4 share an instant: the higher id comes first, whichever page they fall on.
+    const [earlier, later] = [saved[3]!, saved[4]!].toSorted();
+    expect(seen.indexOf(later!)).toBeLessThan(seen.indexOf(earlier!));
   });
 
   it("updates the note of one's own clipping, and not anyone else's", async () => {
@@ -168,5 +183,54 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
     expect(own?.note).toBe("after");
     const page = await fixture.service.listClippings(ana, {});
     expect(page.items[0]?.note).toBe("after");
+  });
+
+  it("stores a bare domain with its scheme, so the clipping links to the page", async () => {
+    const ana = await fixture.createUser("ana");
+
+    const { clipping } = await fixture.service.saveClipping(ana, {
+      url: " example.com/essay ",
+      source: "web",
+    });
+
+    expect(clipping.url).toBe("https://example.com/essay");
+    expect(clipping.title).toBe("https://example.com/essay");
+  });
+
+  it("rejects addresses that only look like web addresses", async () => {
+    const ana = await fixture.createUser("ana");
+
+    for (const url of [
+      "mailto:ana@example.com",
+      'javascript:alert(1);"@example.com"',
+      "data:text/html,hello",
+      "https://ana:secret@example.com/private",
+    ]) {
+      await expect(fixture.service.saveClipping(ana, { url, source: "web" }), url).rejects.toThrow(
+        InvalidUrlError,
+      );
+    }
+  });
+
+  it("keeps a note within the limit", async () => {
+    const ana = await fixture.createUser("ana");
+    const tooLong = "x".repeat(MAX_NOTE_LENGTH + 1);
+
+    await expect(
+      fixture.service.saveClipping(ana, {
+        url: "https://example.com/a",
+        note: tooLong,
+        source: "web",
+      }),
+    ).rejects.toThrow(NoteTooLongError);
+
+    const { clipping } = await fixture.service.saveClipping(ana, {
+      url: "https://example.com/a",
+      note: "x".repeat(MAX_NOTE_LENGTH),
+      source: "web",
+    });
+    await expect(fixture.service.updateNote(ana, clipping.id, tooLong)).rejects.toThrow(
+      NoteTooLongError,
+    );
   });
 });

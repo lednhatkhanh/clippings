@@ -5,7 +5,7 @@ const DAY = 24 * HOUR;
 
 const relative = new Intl.RelativeTimeFormat(LOCALE, { numeric: "auto" });
 
-const parts = (date: Date, options: Intl.DateTimeFormatOptions) =>
+const dateParts = (date: Date, options: Intl.DateTimeFormatOptions) =>
   Object.fromEntries(
     new Intl.DateTimeFormat(LOCALE, { timeZone: "UTC", ...options })
       .formatToParts(date)
@@ -15,7 +15,7 @@ const parts = (date: Date, options: Intl.DateTimeFormatOptions) =>
 /** "3 Oct", or "3 Oct 2025" when the year isn't the current one. Days are UTC days. */
 export function formatAbsoluteDate(iso: string, now: Date): string {
   const date = new Date(iso);
-  const { day, month, year } = parts(date, { day: "numeric", month: "short", year: "numeric" });
+  const { day, month, year } = dateParts(date, { day: "numeric", month: "short", year: "numeric" });
   return date.getUTCFullYear() === now.getUTCFullYear()
     ? `${day} ${month}`
     : `${day} ${month} ${year}`;

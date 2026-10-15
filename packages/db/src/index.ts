@@ -5,6 +5,7 @@ export {
   createClippingsService,
   InvalidCursorError,
   InvalidUrlError,
+  NoteTooLongError,
   noopJobPublisher,
   systemClock,
   type ClippingsPage,

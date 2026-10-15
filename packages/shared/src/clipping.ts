@@ -6,6 +6,9 @@ export type ClippingSource = (typeof CLIPPING_SOURCES)[number];
 export const CLIPPING_STATUSES = ["pending", "ready", "failed"] as const;
 export type ClippingStatus = (typeof CLIPPING_STATUSES)[number];
 
+/** Longest note a clipping can carry, in characters. */
+export const MAX_NOTE_LENGTH = 10_000;
+
 /** A clipping as every delivery surface sees it. JSON-safe, so it crosses the server/client line. */
 export interface Clipping {
   id: string;
