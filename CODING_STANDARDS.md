@@ -18,6 +18,10 @@ type-aware) and types (`tsc`); this file holds what none of them says.
 - Build UI from `@clippings/ui` and React Aria Components.
 - The design-system lint is `error`-level: tokens and `typescale-*` utilities only, with no raw
   colors, arbitrary values or restyling of design-system components. Layout classes are allowed.
+- Design-system components that wrap React Aria Components start with `"use client"`: the root
+  layout imports `@clippings/ui` on the server, and RAC can't be evaluated there.
+- A `"use server"` file exports only async functions. Constants and helpers it shares with
+  components live in a separate module.
 - `packages/ui/src/generated/` is output. Edit `src/theme/` and run
   `pnpm --filter @clippings/ui generate`; CI fails on a stale file.
 - Add icons to the subset font with `pnpm --filter @clippings/ui build:icons`. `check:icons` fails

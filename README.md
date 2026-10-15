@@ -75,7 +75,7 @@ Run from the repo root.
 Database tests need a Postgres server and are skipped without one:
 
 ```bash
-docker run --rm -d -e POSTGRES_PASSWORD=postgres -p 55432:5432 postgres:18
+docker run --rm -d -e POSTGRES_PASSWORD=postgres -p 55432:5432 pgvector/pgvector:pg18
 TEST_DATABASE_URL=postgres://postgres:postgres@localhost:55432/postgres pnpm test
 ```
 
