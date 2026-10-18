@@ -7,4 +7,5 @@ export {
   type ClippingSource,
   type ClippingStatus,
 } from "./clipping.ts";
+export { formatIsoUtc } from "./dates.ts";
 export { parseWebUrl, type WebUrl } from "./url.ts";

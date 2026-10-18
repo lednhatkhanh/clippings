@@ -11,6 +11,10 @@
     "format:check": "oxfmt --check -c ../../.oxfmtrc.json .",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@date-fns/utc": "catalog:",
+    "date-fns": "catalog:"
+  },
   "devDependencies": {
     "@clippings/config": "workspace:*",
     "typescript": "catalog:"

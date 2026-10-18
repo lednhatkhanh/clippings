@@ -7,6 +7,7 @@ catalogMode: strict
 catalog:
   "@anthropic-ai/sdk": 0.135.0
   "@ast-grep/cli": 0.51.0
+  "@date-fns/utc": 2.1.1
   "@material/material-color-utilities": 0.4.0
   "@shadcn/lint": 0.2.1
   "@tailwindcss/postcss": 4.3.3
@@ -17,6 +18,7 @@ catalog:
   "@upstash/qstash": 2.12.0
   better-auth: 1.7.10
   cn: 0.4.0
+  date-fns: 4.4.0
   drizzle-kit: 1.0.0-rc.4
   drizzle-orm: 1.0.0-rc.4
   next: 16.4.1

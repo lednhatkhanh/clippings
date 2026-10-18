@@ -1,3 +1,4 @@
+import { addMilliseconds, parseISO } from "date-fns";
 import pg from "pg";
 
 import type {
@@ -22,7 +23,7 @@ export async function createServiceFixture() {
   await migrate({ connectionString: database.url });
   const pool: pg.Pool = createPool(database.url);
 
-  let now = new Date("2026-10-01T09:00:00.000Z");
+  let now = parseISO("2026-10-01T09:00:00.000Z");
   const clock: Clock = { now: () => now };
   const enrichmentRequests: string[] = [];
   let publishing: "up" | "down" = "up";
@@ -64,7 +65,7 @@ export async function createServiceFixture() {
     },
     /** Moves the clock forward; every save is stamped with the clock's current time. */
     advanceClock: (milliseconds: number) => {
-      now = new Date(now.getTime() + milliseconds);
+      now = addMilliseconds(now, milliseconds);
     },
     /** Inserts a row in Better Auth's `user` table and returns its id. */
     createUser: async (id: string) => {

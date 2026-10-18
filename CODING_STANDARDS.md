@@ -12,6 +12,11 @@ type-aware) and types (`tsc`); this file holds what none of them says.
 - In `apps/web`, reach a file outside the current directory with the `@/` alias for the app root
   (`@/lib/auth/session.ts`) instead of `../`; `import/no-relative-parent-imports` enforces it.
   Siblings stay `./`.
+- Dates and times go through `date-fns` (`@date-fns/utc` for UTC days), never the `Date` global:
+  `constructNow()` for now, `parseISO` to parse, `addHours`, `differenceInDays` and the like for
+  arithmetic, `format` to word one. `Date` stays a type (a column, a `Clock`). `no-restricted-globals`
+  flags `new Date`, `Date.now` and friends; `formatIsoUtc` in `@clippings/shared` is the DTO's
+  ISO string.
 - TypeScript 7 is the native compiler, so there is no JS compiler API to import.
 - Workspace packages are consumed as source (their `exports` point at `src/`): importing one needs
   no build step, and a new export is added to that package's `src/index.ts`.

@@ -8,6 +8,8 @@
 import { createHash, createHmac } from "node:crypto";
 import http from "node:http";
 
+import { constructNow, getTime, getUnixTime } from "date-fns";
+
 const SIGNING_KEY = "local-current-key"; // QSTASH_CURRENT_SIGNING_KEY in local.env
 const RETRY_AFTER_MS = 1000;
 const MODEL_DELAY_MS = 4000; // long enough to see the "Reading the page…" state
@@ -15,7 +17,7 @@ const MODEL_DELAY_MS = 4000; // long enough to see the "Reading the page…" sta
 const base64url = (input) => Buffer.from(input).toString("base64url");
 
 function sign(body, url) {
-  const now = Math.floor(Date.now() / 1000);
+  const now = getUnixTime(constructNow(undefined));
   const header = base64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const claims = base64url(
     JSON.stringify({
@@ -77,7 +79,7 @@ listen(8080, "fake qstash", (request, response, body) => {
   console.log(`[qstash] publish ${destination} retries=${retries} body=${body}`);
   setTimeout(() => deliver(destination, body, forwarded, retries), 300);
   response.writeHead(201, { "content-type": "application/json" });
-  response.end(JSON.stringify({ messageId: `msg_${Date.now()}` }));
+  response.end(JSON.stringify({ messageId: `msg_${getTime(constructNow(undefined))}` }));
 });
 
 listen(8081, "fake anthropic", (request, response, body) => {

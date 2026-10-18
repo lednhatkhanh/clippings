@@ -1,3 +1,4 @@
+import { constructNow } from "date-fns";
 import { notFound, redirect, unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 
@@ -56,7 +57,7 @@ function RawMetadata({ clipping }: { clipping: Clipping }) {
 async function loadClipping(userId: string, clippingId: string) {
   const clipping = await getClippings().getClipping(userId, clippingId);
   return clipping
-    ? { clipping, savedOn: formatAbsoluteDate(clipping.createdAt, new Date()) }
+    ? { clipping, savedOn: formatAbsoluteDate(clipping.createdAt, constructNow(undefined)) }
     : null;
 }
 
