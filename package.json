@@ -12,6 +12,7 @@
     "build": "turbo run build"
   },
   "devDependencies": {
+    "@ast-grep/cli": "catalog:",
     "@shadcn/lint": "catalog:",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
