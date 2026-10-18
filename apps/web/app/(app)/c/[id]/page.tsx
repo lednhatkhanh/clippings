@@ -10,16 +10,10 @@ import { LoadError } from "@/components/load-error.tsx";
 import { getSession } from "@/lib/auth/session.ts";
 import { domainOf } from "@/lib/clippings/rows.ts";
 import { getClippings } from "@/lib/clippings/service.ts";
+import { SOURCE_LABELS } from "@/lib/clippings/source-labels.ts";
 import { formatAbsoluteDate } from "@/lib/format-date.ts";
-import type { Clipping, ClippingSource, ClippingStatus } from "@clippings/shared";
+import type { Clipping, ClippingStatus } from "@clippings/shared";
 import { Disclosure, Icon, LinkButton } from "@clippings/ui";
-
-const SOURCE_LABELS: Record<ClippingSource, string> = {
-  web: "Web",
-  extension: "Extension",
-  mcp: "Claude",
-  digest: "Digest",
-};
 
 const STATUS_LABELS: Record<ClippingStatus, string> = {
   pending: "Pending: reading the page",

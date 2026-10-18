@@ -1,5 +1,15 @@
-import { sql } from "drizzle-orm";
-import { boolean, check, index, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { sql, type SQL } from "drizzle-orm";
+import {
+  boolean,
+  check,
+  customType,
+  index,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 import {
   APPEARANCE_DEFAULTS,
@@ -15,6 +25,9 @@ import {
  */
 
 const timestamptz = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
+
+/** Postgres's text-search document. Only queries read it, so its value stays an opaque string. */
+const tsvector = customType<{ data: string }>({ dataType: () => "tsvector" });
 
 // Better Auth's tables. Property and column names are the ones its Drizzle adapter looks up.
 
@@ -110,12 +123,21 @@ export const clippings = pgTable(
     updatedAt: timestamptz("updated_at").notNull(),
     // Set when the user deletes the clipping, cleared by Undo. Every read skips deleted rows.
     deletedAt: timestamptz("deleted_at"),
+    // What keyword search matches, kept up to date by Postgres. `simple` doesn't stem, so words
+    // in any language are matched as written. The weights rank title over note over excerpt.
+    searchTsv: tsvector("search_tsv").generatedAlwaysAs(
+      (): SQL =>
+        sql`setweight(to_tsvector('simple', ${clippings.title}), 'A') || setweight(to_tsvector('simple', ${clippings.note}), 'B') || setweight(to_tsvector('simple', coalesce(${clippings.excerpt}, '')), 'C')`,
+    ),
   },
   (table) => [
     unique("clippings_user_id_url_normalized_key").on(table.userId, table.urlNormalized),
     check("clippings_status_check", sql`${table.status} in (${inList(CLIPPING_STATUSES)})`),
     check("clippings_source_check", sql`${table.source} in (${inList(CLIPPING_SOURCES)})`),
     index("clippings_user_newest_idx").on(table.userId, table.createdAt.desc(), table.id.desc()),
+    index("clippings_search_tsv_idx").using("gin", table.searchTsv),
+    // Typo tolerance on titles: `<%` (word similarity) uses it.
+    index("clippings_title_trgm_idx").using("gin", table.title.op("gin_trgm_ops")),
   ],
 );
 

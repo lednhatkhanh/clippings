@@ -4,6 +4,7 @@ import { constructNow } from "date-fns";
 import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/auth/session.ts";
+import { loadBrowseParams } from "@/lib/clippings/browse-params.ts";
 import { loadRows, toRow, type ClippingRowData, type RowsPage } from "@/lib/clippings/rows.ts";
 import { getClippings } from "@/lib/clippings/service.ts";
 import { formatAbsoluteDate } from "@/lib/format-date.ts";
@@ -97,8 +98,9 @@ export async function restoreClippingAction(clippingId: string): Promise<boolean
   return restored;
 }
 
-export async function loadMoreClippingsAction(cursor: string): Promise<RowsPage> {
-  return loadRows(await requireUserId(), cursor);
+/** The page after `cursor` of the list that `query` (a `toQueryString` result) describes. */
+export async function loadMoreClippingsAction(query: string, cursor: string): Promise<RowsPage> {
+  return loadRows(await requireUserId(), loadBrowseParams(query), cursor);
 }
 
 /** Starts a failed clipping over. Returns its row as it now stands, or null if it isn't theirs. */

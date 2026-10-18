@@ -26,6 +26,8 @@ export {
   type ListClippingsInput,
   type SaveClippingInput,
   type SaveClippingResult,
+  type SearchClippingsInput,
+  type SearchResults,
   type UpdateClippingInput,
 } from "./clippings/service.ts";
 export {

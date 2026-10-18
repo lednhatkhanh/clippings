@@ -11,6 +11,7 @@ import { Button, ProgressBar } from "@clippings/ui";
 import { useHiddenClippings } from "./deleted-clippings.tsx";
 import { Favicon } from "./favicon.tsx";
 import { fetchRow, POLL_EVERY_MS } from "./fetch-row.ts";
+import { HighlightedText } from "./highlighted-text.tsx";
 
 function ClippingRow({ row: initialRow }: { row: ClippingRowData }) {
   const [row, setRow] = useState(initialRow);
@@ -42,11 +43,18 @@ function ClippingRow({ row: initialRow }: { row: ClippingRowData }) {
       <div className="flex items-start gap-3 py-row-block @lg:items-center">
         <Favicon url={row.url} />
         <div className="flex min-w-0 flex-1 flex-col gap-row-gap">
-          <span className="truncate typescale-clipping-title">{row.title}</span>
+          <span className="truncate typescale-clipping-title">
+            {row.highlights ? <HighlightedText segments={row.highlights.title} /> : row.title}
+          </span>
           <span className="flex flex-wrap gap-x-2 typescale-label-sm font-mono text-on-surface-variant">
             <span>{row.domain}</span>
             <time dateTime={row.dateTime}>{row.dateLabel}</time>
           </span>
+          {row.highlights?.snippet ? (
+            <span className="line-clamp-2 typescale-body-md text-on-surface-variant">
+              <HighlightedText segments={row.highlights.snippet} />
+            </span>
+          ) : null}
           {row.status === "pending" ? (
             <div className="flex flex-col gap-1 pt-1 @lg:max-w-xs">
               <span aria-hidden="true" className="typescale-label-sm text-on-surface-variant">
@@ -70,13 +78,16 @@ function ClippingRow({ row: initialRow }: { row: ClippingRowData }) {
 }
 
 /**
- * Newest first. The first page comes from the server; later pages load as the last row scrolls
- * into view. Remount it (change its `key`) when the first page changes.
+ * The rows the list shows. The first page is given; later pages of the list `query` describes
+ * (a `toQueryString` result) load as the last row scrolls into view. Remount it (change its
+ * `key`) when the first page changes.
  */
 export function ClippingList({
+  query,
   initialRows,
   initialCursor,
 }: {
+  query: string;
   initialRows: ClippingRowData[];
   initialCursor: string | null;
 }) {
@@ -91,7 +102,7 @@ export function ClippingList({
     setIsLoading(true);
     setFailed(false);
     try {
-      const page = await loadMoreClippingsAction(cursor);
+      const page = await loadMoreClippingsAction(query, cursor);
       setRows((current) => [...current, ...page.rows]);
       setCursor(page.nextCursor);
     } catch {

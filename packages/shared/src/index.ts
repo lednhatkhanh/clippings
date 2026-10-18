@@ -20,4 +20,13 @@ export {
   type ClippingStatus,
 } from "./clipping.ts";
 export { formatIsoUtc } from "./dates.ts";
+export {
+  MAX_QUERY_LENGTH,
+  SEARCH_RESULT_LIMIT,
+  SEARCH_SORTS,
+  type SearchHighlights,
+  type SearchHit,
+  type SearchSort,
+  type TextSegment,
+} from "./search.ts";
 export { parseWebUrl, type WebUrl } from "./url.ts";

@@ -1,13 +1,31 @@
 import { constructNow, isValid, parseISO, subHours } from "date-fns";
-import { and, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  getColumns,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  or,
+  sql,
+  type SQL,
+  type SQLWrapper,
+} from "drizzle-orm";
 import type pg from "pg";
 
 import {
   formatIsoUtc,
   MAX_NOTE_LENGTH,
+  MAX_QUERY_LENGTH,
   parseWebUrl,
+  SEARCH_RESULT_LIMIT,
   type Clipping,
   type ClippingSource,
+  type SearchHit,
+  type SearchSort,
+  type TextSegment,
 } from "@clippings/shared";
 
 import { createDatabase } from "../database.ts";
@@ -33,6 +51,21 @@ export interface UpdateClippingInput {
 export interface ListClippingsInput {
   cursor?: string;
   limit?: number;
+  /** Only clippings saved from these; all of them when empty or left out. */
+  sources?: readonly ClippingSource[];
+}
+
+export interface SearchClippingsInput {
+  /** Words to find, in web-search syntax: `"a phrase"`, `-without`, `this or that`. */
+  q: string;
+  /** Only clippings saved from these; all of them when empty or left out. */
+  sources?: readonly ClippingSource[];
+  sort?: SearchSort;
+  limit?: number;
+}
+
+export interface SearchResults {
+  items: SearchHit[];
 }
 
 export interface ClippingsPage {
@@ -75,7 +108,10 @@ export type EnrichmentOutcome =
   /** Reading failed on the last attempt, so the clipping is now failed. */
   | "failed";
 
-type ClippingRow = typeof clippings.$inferSelect;
+// Every column but `search_tsv`, which only search reads.
+const { searchTsv, ...clippingColumns } = getColumns(clippings);
+
+type ClippingRow = Omit<typeof clippings.$inferSelect, "searchTsv">;
 
 /** Not deleted: every read and edit the user makes sees only these. */
 const live = isNull(clippings.deletedAt);
@@ -100,6 +136,63 @@ const toClipping = (row: ClippingRow): Clipping => ({
   clientId: row.clientId,
   createdAt: formatIsoUtc(row.createdAt),
 });
+
+const fromSources = (sources: readonly ClippingSource[] = []) =>
+  sources.length > 0 ? inArray(clippings.source, [...sources]) : undefined;
+
+/**
+ * The query as Postgres reads it: web-search syntax, with the last word also matching as a
+ * prefix, so results appear while it is still being typed. A last word that is an operator, a
+ * negation or inside an open quote is left to web-search syntax.
+ */
+function keywordQuery(text: string): SQL {
+  const words = text.split(/\s+/);
+  const last = words.at(-1) ?? "";
+  const inOpenQuote = (text.split('"').length - 1) % 2 === 1;
+  if (!/^[\p{L}\p{N}]+$/u.test(last) || last.toLowerCase() === "or" || inOpenQuote) {
+    return sql`websearch_to_tsquery('simple', ${text})`;
+  }
+  const prefix = sql`to_tsquery('simple', ${`${last}:*`})`;
+  const head = words.slice(0, -1).join(" ");
+  return head ? sql`(websearch_to_tsquery('simple', ${head}) && ${prefix})` : prefix;
+}
+
+/**
+ * A title close to every word of the query, a typo or so apart (`<%`, word similarity of at
+ * least 0.6). Undefined for a query with a phrase or an excluded word, whose meaning plain words
+ * can't carry, and for one with no words.
+ */
+function typoInTitle(text: string): SQL | undefined {
+  if (text.includes('"') || text.split(/\s+/).some((word) => word.startsWith("-")))
+    return undefined;
+  const words = text.match(/[\p{L}\p{N}]+/gu) ?? [];
+  return and(...words.map((word) => sql`${word} <% ${clippings.title}`));
+}
+
+// `ts_headline` marks each matched term with these; neither occurs in text people write.
+const MARK_START = "\u0001";
+const MARK_END = "\u0002";
+const MARKS = `StartSel=${MARK_START}, StopSel=${MARK_END}`;
+const TITLE_HEADLINE = `${MARKS}, HighlightAll=true`;
+const SNIPPET_HEADLINE = `${MARKS}, MaxWords=24, MinWords=12`;
+
+/** The text without the marker characters, so a page that contains them can't fake a match. */
+const unmarked = (text: SQLWrapper) => sql`translate(${text}, ${MARK_START + MARK_END}, '')`;
+
+/** Splits a headline from `ts_headline` into runs of text, marking the matched terms. */
+function toSegments(headline: string): TextSegment[] {
+  const segments: TextSegment[] = [];
+  const push = (text: string | undefined, match: boolean) => {
+    if (text) segments.push({ text, match });
+  };
+  headline.split(MARK_START).forEach((chunk, index) => {
+    if (index === 0) return push(chunk, false);
+    const [marked, rest] = chunk.split(MARK_END);
+    push(marked, true);
+    push(rest, false);
+  });
+  return segments;
+}
 
 /** How long a clipping can sit pending or failed before the sweep requests it again. */
 const STUCK_AFTER_HOURS = 1;
@@ -203,7 +296,7 @@ export function createClippingsService({
         set: fresh,
         setWhere: isNotNull(clippings.deletedAt),
       })
-      .returning();
+      .returning(clippingColumns);
 
     if (created) {
       // The save stands even if the queue is down: the daily sweep requests the job again.
@@ -214,7 +307,7 @@ export function createClippingsService({
     }
 
     const [existing] = await db
-      .select()
+      .select(clippingColumns)
       .from(clippings)
       .where(and(eq(clippings.userId, userId), eq(clippings.urlNormalized, normalized)));
     return { status: "existing", clipping: toClipping(existing!) };
@@ -222,17 +315,18 @@ export function createClippingsService({
 
   async function listClippings(
     userId: string,
-    { cursor, limit = 20 }: ListClippingsInput,
+    { cursor, limit = 20, sources }: ListClippingsInput,
   ): Promise<ClippingsPage> {
     const after = cursor ? decodeCursor(cursor) : null;
     // One extra row says whether another page follows without a second query.
     const rows = await db
-      .select()
+      .select(clippingColumns)
       .from(clippings)
       .where(
         and(
           eq(clippings.userId, userId),
           live,
+          fromSources(sources),
           after
             ? or(
                 lt(clippings.createdAt, after.at),
@@ -253,13 +347,71 @@ export function createClippingsService({
   }
 
   /**
+   * The user's clippings that match `q` in their title, note or excerpt, best match first (title
+   * over note over excerpt) or newest first. A title one typo away from the query matches too,
+   * after every exact match. Words match as written, in any language: nothing is stemmed.
+   */
+  async function searchClippings(
+    userId: string,
+    { q, sources, sort = "relevance", limit = SEARCH_RESULT_LIMIT }: SearchClippingsInput,
+  ): Promise<SearchResults> {
+    const text = q.trim().slice(0, MAX_QUERY_LENGTH).trim();
+    if (!text) return { items: [] };
+
+    const query = keywordQuery(text);
+    const matches = (column: SQLWrapper) => sql`to_tsvector('simple', ${column}) @@ ${query}`;
+    const excerpt = sql`coalesce(${clippings.excerpt}, '')`;
+    const rows = await db
+      .select({
+        ...clippingColumns,
+        titleHeadline: sql<string>`ts_headline('simple', ${unmarked(clippings.title)}, ${query}, ${TITLE_HEADLINE})`,
+        snippetHeadline: sql<string | null>`case
+          when ${matches(clippings.note)}
+            then ts_headline('simple', ${unmarked(clippings.note)}, ${query}, ${SNIPPET_HEADLINE})
+          when ${matches(excerpt)}
+            then ts_headline('simple', ${unmarked(excerpt)}, ${query}, ${SNIPPET_HEADLINE})
+        end`,
+      })
+      .from(clippings)
+      .where(
+        and(
+          eq(clippings.userId, userId),
+          live,
+          fromSources(sources),
+          or(sql`${searchTsv} @@ ${query}`, typoInTitle(text)),
+        ),
+      )
+      .orderBy(
+        ...(sort === "relevance"
+          ? [
+              desc(sql`ts_rank_cd(${searchTsv}, ${query})`),
+              desc(sql`word_similarity(${text}, ${clippings.title})`),
+            ]
+          : []),
+        desc(clippings.createdAt),
+        desc(clippings.id),
+      )
+      .limit(limit);
+
+    return {
+      items: rows.map(({ titleHeadline, snippetHeadline, ...row }) => ({
+        clipping: toClipping(row),
+        highlights: {
+          title: toSegments(titleHeadline),
+          snippet: snippetHeadline === null ? null : toSegments(snippetHeadline),
+        },
+      })),
+    };
+  }
+
+  /**
    * All of the user's live clippings with their notes, newest first and unpaged, stamped with the
    * time of the export.
    */
   async function exportClippings(userId: string): Promise<ClippingsExport> {
     const exportedAt = formatIsoUtc(clock.now());
     const rows = await db
-      .select()
+      .select(clippingColumns)
       .from(clippings)
       .where(and(eq(clippings.userId, userId), live))
       .orderBy(desc(clippings.createdAt), desc(clippings.id));
@@ -285,7 +437,7 @@ export function createClippingsService({
       .update(clippings)
       .set({ ...(note === undefined ? {} : { note }), updatedAt: clock.now() })
       .where(and(eq(clippings.id, clippingId), eq(clippings.userId, userId), live))
-      .returning();
+      .returning(clippingColumns);
     return updated ? toClipping(updated) : null;
   }
 
@@ -293,7 +445,7 @@ export function createClippingsService({
   async function getClipping(userId: string, clippingId: string): Promise<Clipping | null> {
     if (!UUID.test(clippingId)) return null;
     const [row] = await db
-      .select()
+      .select(clippingColumns)
       .from(clippings)
       .where(and(eq(clippings.id, clippingId), eq(clippings.userId, userId), live));
     return row ? toClipping(row) : null;
@@ -341,7 +493,10 @@ export function createClippingsService({
     { lastAttempt = false }: EnrichClippingOptions = {},
   ): Promise<EnrichmentOutcome> {
     if (!UUID.test(clippingId)) return "skipped";
-    const [row] = await db.select().from(clippings).where(eq(clippings.id, clippingId));
+    const [row] = await db
+      .select(clippingColumns)
+      .from(clippings)
+      .where(eq(clippings.id, clippingId));
     if (!row || row.status !== "pending") return "skipped";
 
     let read: PageSummary;
@@ -390,7 +545,7 @@ export function createClippingsService({
           live,
         ),
       )
-      .returning();
+      .returning(clippingColumns);
     if (!restarted) return getClipping(userId, clippingId);
 
     try {
@@ -463,6 +618,7 @@ export function createClippingsService({
   return {
     saveClipping,
     listClippings,
+    searchClippings,
     exportClippings,
     updateClipping,
     getClipping,
