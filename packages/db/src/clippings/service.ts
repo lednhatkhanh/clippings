@@ -61,6 +61,13 @@ export type EnrichmentOutcome =
 
 type ClippingRow = typeof clippings.$inferSelect;
 
+/** The columns every status change writes together. */
+const statusChange = (status: ClippingRow["status"], at: Date) => ({
+  status,
+  statusChangedAt: at,
+  updatedAt: at,
+});
+
 const toClipping = (row: ClippingRow): Clipping => ({
   id: row.id,
   url: row.url,
@@ -124,8 +131,10 @@ export class InvalidUrlError extends Error {
 }
 
 /**
- * The rules about clippings. Every operation takes the acting user and scopes its queries by
- * them, so no caller can reach another user's rows.
+ * The rules about clippings. Every operation a user triggers takes the acting user and scopes its
+ * queries by them, so no caller can reach another user's rows. `enrichClipping` and `sweepStuck`
+ * are the exceptions: they are system jobs, reached only through the signed QStash handler and the
+ * cron secret, and they act on a clipping by id.
  */
 export function createClippingsService({
   pool,
@@ -258,7 +267,7 @@ export function createClippingsService({
       const now = clock.now();
       await db
         .update(clippings)
-        .set({ status: "failed", statusChangedAt: now, updatedAt: now })
+        .set(statusChange("failed", now))
         .where(and(eq(clippings.id, clippingId), eq(clippings.status, "pending")));
       return "failed";
     }
@@ -269,9 +278,7 @@ export function createClippingsService({
         title: read.title,
         summary: read.summary,
         excerpt: read.excerpt,
-        status: "ready",
-        statusChangedAt: now,
-        updatedAt: now,
+        ...statusChange("ready", now),
       })
       .where(and(eq(clippings.id, clippingId), eq(clippings.status, "pending")))
       .returning({ id: clippings.id });
@@ -288,7 +295,7 @@ export function createClippingsService({
     const now = clock.now();
     const [restarted] = await db
       .update(clippings)
-      .set({ status: "pending", statusChangedAt: now, updatedAt: now })
+      .set(statusChange("pending", now))
       .where(
         and(
           eq(clippings.id, clippingId),
@@ -302,7 +309,8 @@ export function createClippingsService({
     try {
       await jobs.requestEnrichment(restarted.id);
     } catch (error) {
-      // Don't leave it pending with no job behind it, and let the caller see the failure.
+      // Don't leave it pending with no job behind it, and let the caller see the failure. The
+      // restart above stamped the status time, so the sweep counts from there.
       await db
         .update(clippings)
         .set({ status: "failed" })
@@ -332,7 +340,7 @@ export function createClippingsService({
       .limit(SWEEP_BATCH_SIZE);
     const restarted = await db
       .update(clippings)
-      .set({ status: "pending", statusChangedAt: now, updatedAt: now })
+      .set(statusChange("pending", now))
       .where(inArray(clippings.id, stuck))
       .returning({ id: clippings.id });
 

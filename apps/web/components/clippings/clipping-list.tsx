@@ -58,7 +58,9 @@ function ClippingRow({ row: initialRow }: { row: ClippingRowData }) {
           </span>
           {row.status === "pending" ? (
             <div className="flex flex-col gap-1 pt-1 @lg:max-w-xs">
-              <span className="typescale-label-sm text-on-surface-variant">Reading the page…</span>
+              <span aria-hidden="true" className="typescale-label-sm text-on-surface-variant">
+                Reading the page…
+              </span>
               <ProgressBar label="Reading the page" />
             </div>
           ) : null}

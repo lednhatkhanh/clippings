@@ -1,4 +1,4 @@
-import { lookup as resolve, type LookupAddress } from "node:dns";
+import { lookup as dnsLookup, type LookupAddress } from "node:dns";
 import http from "node:http";
 import https from "node:https";
 import { isIP } from "node:net";
@@ -9,7 +9,10 @@ import { extractPage } from "./html-text";
 import { isPublicAddress } from "./public-address";
 
 const MAX_BYTES = 2_000_000;
-const TIMEOUT_MS = 15_000;
+// For the whole fetch, redirects included. With the summarizer's own limit it stays well inside
+// the enrichment route's 60 s, so a slow page ends as an error that reaches `failed`, not as a
+// function killed with the clipping still pending.
+const FETCH_BUDGET_MS = 20_000;
 const MAX_REDIRECTS = 5;
 
 export class PageFetchError extends Error {
@@ -34,7 +37,7 @@ function publicOnlyLookup(
   options: { all?: boolean },
   callback: LookupCallback,
 ): void {
-  resolve(hostname, { all: true }, (error, addresses) => {
+  dnsLookup(hostname, { all: true }, (error, addresses) => {
     if (error) return callback(error, "", 0);
     const internal = addresses.find(({ address }) => !isPublicAddress(address));
     if (internal || addresses.length === 0) {
@@ -52,11 +55,11 @@ interface RawResponse {
   body: Buffer;
 }
 
-function get(url: URL): Promise<RawResponse> {
-  if (
-    isIP(url.hostname.replace(/^\[|\]$/g, "")) &&
-    !isPublicAddress(url.hostname.replace(/^\[|\]$/g, ""))
-  ) {
+/** One request, without following a redirect. */
+function requestOnce(url: URL, signal: AbortSignal): Promise<RawResponse> {
+  // An IP in the URL skips DNS, so `publicOnlyLookup` never sees it.
+  const host = url.hostname.replace(/^\[|\]$/g, "");
+  if (isIP(host) && !isPublicAddress(host)) {
     return Promise.reject(new PageFetchError(`${url.hostname} is not a public address`));
   }
   return new Promise((resolveResponse, reject) => {
@@ -66,7 +69,7 @@ function get(url: URL): Promise<RawResponse> {
       {
         method: "GET",
         lookup: publicOnlyLookup as unknown as http.RequestOptions["lookup"],
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        signal,
         headers: {
           "user-agent": "Clippings/1.0 (reads pages people saved)",
           accept: "text/html,application/xhtml+xml,text/plain;q=0.8",
@@ -112,11 +115,12 @@ export function createPageFetcher(): PageFetcher {
   return {
     async fetchPage(address) {
       let url = new URL(address);
+      const signal = AbortSignal.timeout(FETCH_BUDGET_MS);
       for (let hops = 0; hops <= MAX_REDIRECTS; hops++) {
         if (url.protocol !== "http:" && url.protocol !== "https:") {
           throw new PageFetchError(`Not a web address: ${url.href}`);
         }
-        const { status, headers, body } = await get(url);
+        const { status, headers, body } = await requestOnce(url, signal);
 
         if (status >= 300 && status < 400 && headers.location) {
           url = new URL(headers.location, url);

@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { PageSummary, Summarizer } from "@clippings/db";
 
 export const SUMMARIZER_MODEL = "claude-haiku-5-5";
+const MODEL_TIMEOUT_MS = 25_000;
 
 const SYSTEM = `You read web pages that someone saved to find again later. Call save_reading with:
 - title: the page's real title, without the site name or boilerplate.
@@ -40,7 +41,9 @@ export function createSummarizer(): Summarizer {
   let client: Anthropic | undefined;
   return {
     async summarize({ url, title, text }): Promise<PageSummary> {
-      client ??= new Anthropic();
+      // No SDK retries and a hard limit: QStash retries the whole job, and the page fetch plus
+      // this call must stay inside the route's 60 s.
+      client ??= new Anthropic({ maxRetries: 0, timeout: MODEL_TIMEOUT_MS });
       const response = await client.messages.create({
         model: SUMMARIZER_MODEL,
         max_tokens: 1024,

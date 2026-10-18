@@ -357,6 +357,23 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
       expect(again?.status).toBe("ready");
       expect(fixture.enrichmentRequests).toEqual([]);
     });
+
+    it("retry that can't publish leaves the clipping failed and tells the caller", async () => {
+      const ana = await fixture.createUser("ana");
+      fixture.web.set("https://example.com/down", { error: new Error("503") });
+      const { clipping } = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/down",
+        source: "web",
+      });
+      await fixture.service.enrichClipping(clipping.id, { lastAttempt: true });
+      fixture.setPublishing("down");
+
+      await expect(fixture.service.retryEnrichment(ana, clipping.id)).rejects.toThrow(
+        "unreachable",
+      );
+
+      expect((await fixture.service.getClipping(ana, clipping.id))?.status).toBe("failed");
+    });
   });
 
   describe("saving while the queue is down", () => {
