@@ -10,7 +10,7 @@ taste. Run the app and the database for real, report what you saw, and don't han
 | Service, queries, migrations          | Vitest against Postgres (below)                                            |
 | Any edit in `apps/web`                | `next-dev-loop` skill: `/_next/mcp` plus `agent-browser`, headless         |
 | UI the user should see                | The Browser pane: `preview_start`, click, read, screenshot                 |
-| QStash and Anthropic calls            | The fakes in `scripts/local/fakes.mjs` (below)                             |
+| QStash, Anthropic and Voyage AI calls | The fakes in `scripts/local/fakes.mjs` (below)                             |
 | Route auth (signatures, cron secret)  | `curl` the route without and with the credential                           |
 
 What stays with the user: real Google sign-in, real QStash delivery and Haiku output quality,
@@ -56,6 +56,9 @@ It prints a cookie value. Set it, then load `/`:
   `Upstash-Retried`, retrying after a non-2xx answer like the real one. Its log shows each attempt.
 - **Anthropic** answers the page-reading tool call after four seconds, so the pending state is
   visible. Its title is the page's own, prefixed with `Read:`.
+- **Voyage AI** embeds a text as its words (one hashed axis per word), so search by meaning finds
+  texts that share a word even where keyword search wouldn't, such as a word in the summary.
+  Real semantic quality stays with the user.
 - Pages are fetched for real, so use a public URL such as `https://example.com`. The app refuses
   loopback and private addresses on purpose: a link to `http://127.0.0.1:...` ends as failed, which
   is also the way to see the failed row and Retry.

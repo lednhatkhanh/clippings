@@ -6,6 +6,7 @@ import { DeleteClippingButton } from "@/components/clippings/delete-clipping-but
 import { EnrichmentStatus } from "@/components/clippings/enrichment-status.tsx";
 import { Favicon } from "@/components/clippings/favicon.tsx";
 import { NoteEditor } from "@/components/clippings/note-editor.tsx";
+import { RelatedClippings } from "@/components/clippings/related-clippings.tsx";
 import { LoadError } from "@/components/load-error.tsx";
 import { getSession } from "@/lib/auth/session.ts";
 import { domainOf } from "@/lib/clippings/rows.ts";
@@ -71,50 +72,61 @@ async function ClippingDetail({ params }: { params: Promise<{ id: string }> }) {
   const { clipping, savedOn } = loaded;
 
   return (
-    <article className="mx-auto w-fit max-w-full rounded-lg border border-outline-variant bg-surface-container-lowest p-6 medium:p-12">
-      {/* The reading measure is set in the reading type, so 66ch means 66 of its characters. */}
-      <div className="flex w-reading max-w-full flex-col gap-6 typescale-reading">
-        <header className="flex flex-col gap-3">
-          <h1 className="typescale-headline-sm text-balance wrap-anywhere">{clipping.title}</h1>
-          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 typescale-label-md text-on-surface-variant">
-            <Favicon url={clipping.url} />
-            <span className="font-mono">{domainOf(clipping.url)}</span>
-            <span aria-hidden="true">·</span>
-            <time dateTime={clipping.createdAt}>Saved {savedOn}</time>
-            <span className="ms-1 inline-flex h-6 items-center rounded-sm border border-outline px-2 typescale-label-sm">
-              <span className="sr-only">Source:&nbsp;</span>
-              {SOURCE_LABELS[clipping.source]}
-            </span>
-          </p>
-        </header>
+    <>
+      <article className="mx-auto w-fit max-w-full rounded-lg border border-outline-variant bg-surface-container-lowest p-6 medium:p-12">
+        {/* The reading measure is set in the reading type, so 66ch means 66 of its characters. */}
+        <div className="flex w-reading max-w-full flex-col gap-6 typescale-reading">
+          <header className="flex flex-col gap-3">
+            <h1 className="typescale-headline-sm text-balance wrap-anywhere">{clipping.title}</h1>
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 typescale-label-md text-on-surface-variant">
+              <Favicon url={clipping.url} />
+              <span className="font-mono">{domainOf(clipping.url)}</span>
+              <span aria-hidden="true">·</span>
+              <time dateTime={clipping.createdAt}>Saved {savedOn}</time>
+              <span className="ms-1 inline-flex h-6 items-center rounded-sm border border-outline px-2 typescale-label-sm">
+                <span className="sr-only">Source:&nbsp;</span>
+                {SOURCE_LABELS[clipping.source]}
+              </span>
+            </p>
+          </header>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <LinkButton
-            variant="filled"
-            href={clipping.url}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Icon name="open_in_new" />
-            Open original
-            <span className="sr-only">(opens in a new tab)</span>
-          </LinkButton>
-          <DeleteClippingButton clippingId={clipping.id} />
+          <div className="flex flex-wrap items-center gap-2">
+            <LinkButton
+              variant="filled"
+              href={clipping.url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Icon name="open_in_new" />
+              Open original
+              <span className="sr-only">(opens in a new tab)</span>
+            </LinkButton>
+            <DeleteClippingButton clippingId={clipping.id} />
+          </div>
+
+          {clipping.status === "ready" ? (
+            clipping.summary ? (
+              <p className="typescale-reading text-pretty">{clipping.summary}</p>
+            ) : null
+          ) : (
+            <EnrichmentStatus clippingId={clipping.id} status={clipping.status} />
+          )}
+
+          <NoteEditor clippingId={clipping.id} note={clipping.note} />
+
+          <RawMetadata clipping={clipping} />
         </div>
-
-        {clipping.status === "ready" ? (
-          clipping.summary ? (
-            <p className="typescale-reading text-pretty">{clipping.summary}</p>
-          ) : null
-        ) : (
-          <EnrichmentStatus clippingId={clipping.id} status={clipping.status} />
-        )}
-
-        <NoteEditor clippingId={clipping.id} note={clipping.note} />
-
-        <RawMetadata clipping={clipping} />
+      </article>
+      {/* Streamed after the sheet, since finding neighbours is a second query, and lined up with
+          its text: the same padding, and the measure in the reading type. */}
+      <div className="mx-auto w-fit max-w-full px-6 pt-6 medium:px-12">
+        <div className="w-reading max-w-full typescale-reading">
+          <Suspense>
+            <RelatedClippings userId={session.user.id} clippingId={clipping.id} />
+          </Suspense>
+        </div>
       </div>
-    </article>
+    </>
   );
 }
 
