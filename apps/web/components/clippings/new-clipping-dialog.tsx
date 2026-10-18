@@ -15,7 +15,12 @@ import {
   TextField,
 } from "@clippings/ui";
 
-import { saveClippingAction, updateNoteAction, type SaveOutcome } from "../../app/(app)/actions";
+import {
+  saveClippingAction,
+  updateClippingAction,
+  type SaveOutcome,
+} from "../../app/(app)/actions";
+import { useShowClipping } from "./deleted-clippings";
 
 function SubmitButton({ children }: { children: string }) {
   const { pending } = useFormStatus();
@@ -34,8 +39,12 @@ function AlreadySaved({ existing, onDone }: { existing: Existing; onDone: () => 
   const [failed, setFailed] = useState(false);
 
   async function updateNote(formData: FormData) {
-    if (await updateNoteAction(existing.clippingId, formData)) onDone();
-    else setFailed(true);
+    const note = formData.get("note");
+    if (await updateClippingAction(existing.clippingId, typeof note === "string" ? note : "")) {
+      onDone();
+    } else {
+      setFailed(true);
+    }
   }
 
   if (editing) {
@@ -67,9 +76,7 @@ function AlreadySaved({ existing, onDone }: { existing: Existing; onDone: () => 
         <p className="typescale-body-md text-on-surface-variant">{existing.note}</p>
       ) : null}
       <div className="flex justify-end gap-2">
-        <LinkButton href={existing.url} target="_blank" rel="noopener noreferrer">
-          Open
-        </LinkButton>
+        <LinkButton href={`/c/${existing.clippingId}`}>Open</LinkButton>
         <Button variant="tonal" onPress={() => setEditing(true)}>
           Update note
         </Button>
@@ -80,11 +87,17 @@ function AlreadySaved({ existing, onDone }: { existing: Existing; onDone: () => 
 
 function SaveForm({ onSaved }: { onSaved: () => void }) {
   const [outcome, setOutcome] = useState<SaveOutcome | null>(null);
+  const showClipping = useShowClipping();
 
   async function save(formData: FormData) {
     const result = await saveClippingAction(formData);
-    if (result.status === "created") onSaved();
-    else setOutcome(result);
+    if (result.status === "created") {
+      // Saving a page deleted in this tab brings back the same clipping, so unhide it.
+      showClipping(result.clippingId);
+      onSaved();
+    } else {
+      setOutcome(result);
+    }
   }
 
   if (outcome?.status === "existing") {

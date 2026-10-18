@@ -10,7 +10,7 @@ import { getClippings } from "../../lib/clippings/service";
 import { formatAbsoluteDate } from "../../lib/format-date";
 
 export type SaveOutcome =
-  | { status: "created" }
+  | { status: "created"; clippingId: string }
   | { status: "existing"; clippingId: string; url: string; note: string; savedOn: string }
   | { status: "invalid"; field: "url" | "note"; message: string };
 
@@ -42,7 +42,7 @@ export async function saveClippingAction(formData: FormData): Promise<SaveOutcom
     });
     if (status === "created") {
       revalidatePath("/");
-      return { status: "created" };
+      return { status: "created", clippingId: clipping.id };
     }
     return {
       status: "existing",
@@ -66,18 +66,35 @@ export async function saveClippingAction(formData: FormData): Promise<SaveOutcom
   }
 }
 
-export async function updateNoteAction(clippingId: string, formData: FormData): Promise<boolean> {
+/** Saves the note on one of the user's clippings. False when it isn't theirs or is too long. */
+export async function updateClippingAction(clippingId: string, note: string): Promise<boolean> {
   const userId = await requireUserId();
-  const note = readString(formData, "note").trim();
 
   try {
-    const updated = await getClippings().updateNote(userId, clippingId, note);
-    revalidatePath("/");
+    const updated = await getClippings().updateClipping(userId, clippingId, { note: note.trim() });
+    // The detail page is rendered per request, but the router keeps a copy for Back.
+    revalidatePath(`/c/${clippingId}`);
     return updated !== null;
   } catch (error) {
     if (error instanceof NoteTooLongError) return false;
     throw error;
   }
+}
+
+/** Deletes one of the user's clippings, so that Undo can restore it. False if it isn't theirs. */
+export async function deleteClippingAction(clippingId: string): Promise<boolean> {
+  const deleted = await getClippings().deleteClipping(await requireUserId(), clippingId);
+  revalidatePath("/");
+  revalidatePath(`/c/${clippingId}`);
+  return deleted;
+}
+
+/** Undoes `deleteClippingAction`. False if the user has no such deleted clipping. */
+export async function restoreClippingAction(clippingId: string): Promise<boolean> {
+  const restored = await getClippings().restoreClipping(await requireUserId(), clippingId);
+  revalidatePath("/");
+  revalidatePath(`/c/${clippingId}`);
+  return restored;
 }
 
 export async function loadMoreClippingsAction(cursor: string): Promise<RowsPage> {

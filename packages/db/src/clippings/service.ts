@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, lt, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import type pg from "pg";
 
 import {
@@ -22,6 +22,11 @@ export interface SaveClippingInput {
 }
 
 export type SaveClippingResult = { status: "created" | "existing"; clipping: Clipping };
+
+/** What the user can change on a clipping. A field left out stays as it is. */
+export interface UpdateClippingInput {
+  note?: string;
+}
 
 export interface ListClippingsInput {
   cursor?: string;
@@ -61,6 +66,9 @@ export type EnrichmentOutcome =
 
 type ClippingRow = typeof clippings.$inferSelect;
 
+/** Not deleted: every read and edit the user makes sees only these. */
+const live = isNull(clippings.deletedAt);
+
 /** The columns every status change writes together. */
 const statusChange = (status: ClippingRow["status"], at: Date) => ({
   status,
@@ -71,6 +79,7 @@ const statusChange = (status: ClippingRow["status"], at: Date) => ({
 const toClipping = (row: ClippingRow): Clipping => ({
   id: row.id,
   url: row.url,
+  urlNormalized: row.urlNormalized,
   title: row.title,
   note: row.note,
   summary: row.summary,
@@ -156,21 +165,27 @@ export function createClippingsService({
 
     const now = clock.now();
     const { url, normalized } = parsed;
+    const fresh = {
+      url,
+      title: url,
+      note,
+      summary: null,
+      excerpt: null,
+      source: input.source,
+      clientId: input.clientId ?? null,
+      deletedAt: null,
+      createdAt: now,
+      ...statusChange("pending", now),
+    };
     const [created] = await db
       .insert(clippings)
-      .values({
-        userId,
-        url,
-        urlNormalized: normalized,
-        title: url,
-        note,
-        source: input.source,
-        clientId: input.clientId ?? null,
-        createdAt: now,
-        updatedAt: now,
-        statusChangedAt: now,
+      .values({ userId, urlNormalized: normalized, ...fresh })
+      // A deleted clipping of the same page still holds its row: saving again starts it over.
+      .onConflictDoUpdate({
+        target: [clippings.userId, clippings.urlNormalized],
+        set: fresh,
+        setWhere: isNotNull(clippings.deletedAt),
       })
-      .onConflictDoNothing({ target: [clippings.userId, clippings.urlNormalized] })
       .returning();
 
     if (created) {
@@ -200,6 +215,7 @@ export function createClippingsService({
       .where(
         and(
           eq(clippings.userId, userId),
+          live,
           after
             ? or(
                 lt(clippings.createdAt, after.at),
@@ -219,18 +235,21 @@ export function createClippingsService({
     };
   }
 
-  /** Sets the note, or returns null when the user has no such clipping. */
-  async function updateNote(
+  /**
+   * Changes what the user wrote on their clipping. Returns it as it now stands, or null when the
+   * user has no such clipping.
+   */
+  async function updateClipping(
     userId: string,
     clippingId: string,
-    note: string,
+    { note }: UpdateClippingInput,
   ): Promise<Clipping | null> {
-    if (note.length > MAX_NOTE_LENGTH) throw new NoteTooLongError();
+    if (note !== undefined && note.length > MAX_NOTE_LENGTH) throw new NoteTooLongError();
     if (!UUID.test(clippingId)) return null;
     const [updated] = await db
       .update(clippings)
-      .set({ note, updatedAt: clock.now() })
-      .where(and(eq(clippings.id, clippingId), eq(clippings.userId, userId)))
+      .set({ ...(note === undefined ? {} : { note }), updatedAt: clock.now() })
+      .where(and(eq(clippings.id, clippingId), eq(clippings.userId, userId), live))
       .returning();
     return updated ? toClipping(updated) : null;
   }
@@ -241,8 +260,40 @@ export function createClippingsService({
     const [row] = await db
       .select()
       .from(clippings)
-      .where(and(eq(clippings.id, clippingId), eq(clippings.userId, userId)));
+      .where(and(eq(clippings.id, clippingId), eq(clippings.userId, userId), live));
     return row ? toClipping(row) : null;
+  }
+
+  /**
+   * Hides the clipping from every read until `restoreClipping` brings it back, so a delete can be
+   * undone. Returns false when the user has no such clipping, or it is already deleted.
+   */
+  async function deleteClipping(userId: string, clippingId: string): Promise<boolean> {
+    if (!UUID.test(clippingId)) return false;
+    const now = clock.now();
+    const deleted = await db
+      .update(clippings)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(and(eq(clippings.id, clippingId), eq(clippings.userId, userId), live))
+      .returning({ id: clippings.id });
+    return deleted.length > 0;
+  }
+
+  /** Undoes `deleteClipping`. Returns false when the user has no such deleted clipping. */
+  async function restoreClipping(userId: string, clippingId: string): Promise<boolean> {
+    if (!UUID.test(clippingId)) return false;
+    const restored = await db
+      .update(clippings)
+      .set({ deletedAt: null, updatedAt: clock.now() })
+      .where(
+        and(
+          eq(clippings.id, clippingId),
+          eq(clippings.userId, userId),
+          isNotNull(clippings.deletedAt),
+        ),
+      )
+      .returning({ id: clippings.id });
+    return restored.length > 0;
   }
 
   /**
@@ -301,6 +352,7 @@ export function createClippingsService({
           eq(clippings.id, clippingId),
           eq(clippings.userId, userId),
           eq(clippings.status, "failed"),
+          live,
         ),
       )
       .returning();
@@ -335,6 +387,7 @@ export function createClippingsService({
         and(
           inArray(clippings.status, ["pending", "failed"]),
           lt(clippings.statusChangedAt, stuckBefore),
+          live,
         ),
       )
       .limit(SWEEP_BATCH_SIZE);
@@ -355,8 +408,10 @@ export function createClippingsService({
   return {
     saveClipping,
     listClippings,
-    updateNote,
+    updateClipping,
     getClipping,
+    deleteClipping,
+    restoreClipping,
     enrichClipping,
     retryEnrichment,
     sweepStuck,
