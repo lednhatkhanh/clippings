@@ -6,6 +6,21 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@clippings/web", "dev", "--port", "3100"],
       "port": 3100
+    },
+    {
+      "name": "web-local",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "set -a; . scripts/local/local.env; set +a; exec pnpm --filter @clippings/web dev --port 3100"
+      ],
+      "port": 3100
+    },
+    {
+      "name": "fakes",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["scripts/local/fakes.mjs"],
+      "port": 8080
     }
   ]
 }

@@ -11,6 +11,8 @@ import { TEST_DATABASE_URL, createTempDatabase, type TempDatabase } from "./test
 
 const SHIPPED = fileURLToPath(new URL("../drizzle", import.meta.url));
 const LEGACY = fileURLToPath(new URL("./test/legacy-migrations", import.meta.url));
+// What the old runner's three files add up to; it is adopted as already applied.
+const BASELINE = "20261015180735_baseline";
 
 async function withClient<T>(url: string, run: (client: pg.Client) => Promise<T>): Promise<T> {
   const client = new pg.Client({ connectionString: url });
@@ -70,7 +72,7 @@ describe.skipIf(!TEST_DATABASE_URL)("migrate", () => {
     const first = await migrate({ connectionString: database.url });
     const second = await migrate({ connectionString: database.url });
 
-    expect(first).toHaveLength(1);
+    expect(first).toEqual(readdirSync(SHIPPED).toSorted());
     expect(second).toEqual([]);
     expect(await tableNames(database.url)).toEqual(
       expect.arrayContaining(["user", "session", "account", "verification", "clippings"]),
@@ -104,7 +106,12 @@ describe.skipIf(!TEST_DATABASE_URL)("migrate", () => {
     const applied = await migrate({ connectionString: database.url, migrationsFolder: folder });
     const again = await migrate({ connectionString: database.url, migrationsFolder: folder });
 
-    expect(applied).toEqual([extra]);
+    expect(applied).toEqual([
+      ...readdirSync(SHIPPED)
+        .filter((name) => name !== BASELINE)
+        .toSorted(),
+      extra,
+    ]);
     expect(again).toEqual([]);
     await withClient(database.url, async (client) => {
       const { rows } = await client.query("select probe, title from clippings");
