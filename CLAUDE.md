@@ -50,6 +50,27 @@ pull request from `main` that the user merges (`docs/deploy.md`): never push to 
 and don't merge a release PR unasked.
 Secrets stay out of the repo: runtime secrets live in Vercel, deploy credentials in GitHub.
 
+### Skills
+
+Skill descriptions load on every turn, so each skill gets a trigger here and no more. Call a skill
+at its trigger, not before, and never for a one-line tweak.
+
+| Skill | Call it when |
+| --- | --- |
+| `react-aria` | Writing or changing a component in `packages/ui` or one that uses React Aria Components |
+| `vercel-react-best-practices` | Writing or reviewing `apps/web` data fetching, Server/Client Component splits or anything on a hot path. React Compiler is on, so skip its memoization advice |
+| `web-design-guidelines` | Asked to review UI or accessibility, or before opening a PR whose main change is UI |
+| `vercel-react-view-transitions` | Adding a page or element transition |
+| `next-bundle-optimizer` | A route's client bundle or first load is slow or large |
+| `next-cache-components-optimizer`, `next-partial-prefetching-optimizer` | Making a route or navigation instant or tuning prefetching (both are adopted: `cacheComponents`, `partialPrefetching`) |
+| `better-auth-best-practices` | Changing Better Auth config, sessions, plugins or `proxy.ts` |
+| `create-auth` | Adding a new sign-in method or provider, not for editing existing auth |
+| `chrome-extensions` | Any work in `apps/extension`: manifest, permissions, content scripts, background, publishing |
+| `modern-web-guidance` | Raw HTML, CSS or client JS outside `@clippings/ui` (the extension's pages, content scripts). Not for `apps/web` UI built from the design system, whatever its description says about running first |
+| `recommend` | Hand-writing a utility (debounce, groupBy, chunk, …) once `es-toolkit` is in the catalog; add it there first |
+| `tdd`, `diagnosing-bugs`, `research`, `domain-modeling` | As their descriptions say |
+| `code-review`, `pr` | Before a PR (`code-review`), and to write its body (`pr`) |
+
 ### Claude Code setup
 
 - `.claude/settings.json` allows the repo's check and read-only git/gh commands and the dev loop
