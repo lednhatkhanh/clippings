@@ -30,7 +30,10 @@
       "Bash(gh issue view *)",
       "Bash(gh issue list *)",
       "Bash(gh run view *)",
-      "Bash(gh run list *)"
+      "Bash(gh run list *)",
+      "Bash(agent-browser *)",
+      "Bash(curl * http://localhost:3100/_next/mcp*)",
+      "mcp__next-devtools"
     ],
     "ask": [
       "Bash(pnpm --filter @clippings/db migrate*)",
@@ -48,6 +51,7 @@
       "Edit(/packages/ui/src/generated/**)"
     ]
   },
+  "enabledMcpjsonServers": ["next-devtools"],
   "hooks": {
     "PostToolUse": [
       {

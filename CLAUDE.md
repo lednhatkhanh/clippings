@@ -13,10 +13,25 @@ both pass. `CLAUDE.md` and `docs/` are outside oxfmt.
 ### Verifying your work
 
 Check what you can check yourself and ask the user only for what needs their accounts, real
-credentials or taste. Drive UI changes in the Browser pane (`preview_start`), run database code
-against Postgres, and `curl` routes; `docs/agents/verifying.md` has the local setup, including
-fakes for QStash and Anthropic and a sign-in without Google. Report what you saw, and name what you
-couldn't check; don't hand the user a checklist.
+credentials or taste. After every edit in `apps/web`, verify at runtime with the `next-dev-loop`
+skill; show the user UI in the Browser pane (`preview_start`). Run database code against Postgres
+and `curl` routes; `docs/agents/verifying.md` has the local setup, including fakes for QStash and
+Anthropic and a sign-in without Google. Report what you saw, and name what you couldn't check;
+don't hand the user a checklist.
+
+### Next.js
+
+@apps/web/AGENTS.md
+
+- The dev server runs on port 3100: `NEXT_MCP_URL=http://localhost:3100/_next/mcp`. Reuse the one
+  `apps/web/.next/dev/lock` names rather than starting another.
+- An error's `Learn more` page reads as Markdown at its URL plus `.md`
+  (`https://nextjs.org/docs/messages/<name>.md`); those pages are not bundled.
+- `next dev` rewrites `apps/web/AGENTS.md` only when it detects an agent, and a `preview_start`
+  server doesn't. After a Next.js upgrade, run `next dev` once from your shell and commit the
+  change to `AGENTS.md`.
+- A prerender error in `next build` stops at the first route: rerun with
+  `next build --debug-prerender` for source maps and every failing route.
 
 ### Dependencies
 
@@ -37,11 +52,14 @@ Secrets stay out of the repo: runtime secrets live in Vercel, deploy credentials
 
 ### Claude Code setup
 
-- `.claude/settings.json` allows the repo's check and read-only git/gh commands, asks before
+- `.claude/settings.json` allows the repo's check and read-only git/gh commands and the dev loop
+  (`agent-browser`, `curl` to `/_next/mcp`, the `next-devtools` MCP server), asks before
   migrations and `vercel`, and denies force-push, pushes to `production`, reading `.env*` files and
   editing `packages/ui/src/generated/`. A hook formats each file you edit with oxfmt.
 - `/check` runs the three check commands above and fixes what fails.
 - `.claude/launch.json` defines the `web` dev server on port 3100; start it with `preview_start`.
+- `.mcp.json` adds `next-devtools` (the dev server's `/_next/mcp` as MCP tools). It runs through
+  `pnpm dlx`, pinned: `npx` fails here on the root `devEngines` check.
 - `.claude/skills/` is vendored and pinned by `skills-lock.json`: change a skill upstream, not here.
 - Personal overrides go in `.claude/settings.local.json`, which is gitignored.
 
