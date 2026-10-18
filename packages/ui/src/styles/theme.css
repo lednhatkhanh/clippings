@@ -97,10 +97,23 @@
   --color-on-tag-pink: var(--tag-pink-on-container);
   --color-tag-pink-dot: var(--tag-pink-dot);
 
+  /* Palette swatches for the settings page: `bg-palette-ochre`, `bg-palette-ochre-container` */
+  --color-palette-olive: var(--palette-olive-primary);
+  --color-palette-olive-container: var(--palette-olive-primary-container);
+  --color-palette-ochre: var(--palette-ochre-primary);
+  --color-palette-ochre-container: var(--palette-ochre-primary-container);
+  --color-palette-terracotta: var(--palette-terracotta-primary);
+  --color-palette-terracotta-container: var(--palette-terracotta-primary-container);
+  --color-palette-ink: var(--palette-ink-primary);
+  --color-palette-ink-container: var(--palette-ink-primary-container);
+
   --font-*: initial;
   --font-serif: var(--md-ref-typeface-brand, "Literata", Georgia, serif);
   --font-sans: var(--md-ref-typeface-plain, "Roboto Flex", system-ui, sans-serif);
   --font-mono: var(--md-ref-typeface-mono, "Roboto Mono", ui-monospace, monospace);
+
+  --spacing-row-block: var(--md-sys-density-row-block);
+  --spacing-row-gap: var(--md-sys-density-row-gap);
 
   --radius-*: initial;
   --radius-none: var(--md-sys-shape-corner-none);
@@ -133,6 +146,9 @@
   --ease-spring: var(--md-sys-motion-spring-default-spatial);
   --ease-spring-effects: var(--md-sys-motion-spring-default-effects);
   --ease-spring-expressive: var(--md-sys-motion-spring-expressive-spatial);
+
+  /* The reading measure: never wider, so lines stay easy to follow (WCAG 1.4.8). */
+  --container-reading: 66ch;
 
   /* M3 window size classes: medium 600, expanded 840, large 1200, extra-large 1600 */
   --breakpoint-*: initial;
@@ -200,4 +216,25 @@
 @utility appear-delayed {
   opacity: 0;
   animation: appear 1ms linear 150ms forwards;
+}
+
+/*
+ * The moving bar of an indeterminate progress bar: it sweeps across its track. Reduced motion
+ * leaves it parked at the start, since the 1 ms duration it would get makes a loop strobe.
+ */
+@keyframes progress-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+@utility progress-sweep {
+  animation: progress-sweep 1.5s var(--ease-standard) infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
 }

@@ -6,7 +6,7 @@ the deploying; the dashboards hold settings and secrets.
 
 |                 | Development                                  | Production                              |
 | --------------- | -------------------------------------------- | --------------------------------------- |
-| Git branch      | `main` (where work lands)                    | `production` (moved only to release)    |
+| Git branch      | `main` (where work lands)                    | `production` (moved by release PRs)     |
 | Deploys on      | every push to `main`                         | every push to `production`              |
 | Workflow        | [`development`](../.github/workflows/development.yml) | [`release`](../.github/workflows/release.yml) |
 | Vercel          | Preview environment, fixed alias `DEVELOPMENT_ALIAS` | Production environment, the production domain |
@@ -28,20 +28,24 @@ Besides those:
 
 ## Releasing
 
-`production` must only ever fast-forward to a commit that is already on `main` (so CI has run on it):
+A ruleset on `production` ("Protect default and production branches") requires a pull request and
+passing checks, with no bypass, so nothing is pushed to the branch directly. A release is a pull
+request from `main` into `production`:
 
 ```bash
-git fetch origin
-git push origin origin/main:production
+gh pr create --base production --head main --title "Release: <what ships>"
 ```
 
-That starts `release`: migrate production (direct URL), then `vercel pull`, `build --prod`,
-`deploy --prebuilt --prod`. The first time, the same command creates the branch. A non-fast-forward
-push is rejected; don't force it.
+Wait for its checks, then merge it with **Create a merge commit**. Merging pushes to `production`,
+which starts `release`: migrate production (direct URL), then `vercel pull`, `build --prod`,
+`deploy --prebuilt --prod`. Only commits that are on `main` (so CI has run on them) can be in the
+pull request; to release less than all of `main`, branch from the commit you want and use that as
+`--head`.
 
-Release a specific commit with `git push origin <sha>:production`. Roll back with **Instant
-Rollback** in Vercel, or fix forward on `main` and release again. A rollback doesn't undo
-migrations, which is why they're written expand/contract.
+Production now carries merge commits that `main` doesn't, so a direct fast-forward push is no longer
+possible and every release is a pull request. Roll back with **Instant Rollback** in Vercel, or fix
+forward on `main` and release again. A rollback doesn't undo migrations, which is why they're written
+expand/contract.
 
 ## What's already in place
 
@@ -90,8 +94,22 @@ be pulled into a build, which is fine: the web app reads them only at runtime.
 | `GOOGLE_CLIENT_ID`     | the Google OAuth client             | same                                    |
 | `GOOGLE_CLIENT_SECRET` | the Google OAuth client             | same                                    |
 | `ALLOWED_EMAILS`       | comma-separated emails              | same                                    |
+| `QSTASH_TOKEN`         | the QStash token                    | same                                    |
+| `QSTASH_CURRENT_SIGNING_KEY` | QStash signing key            | same                                    |
+| `QSTASH_NEXT_SIGNING_KEY`    | QStash next signing key       | same                                    |
+| `QSTASH_URL`           | only if the QStash console shows one (a regional endpoint); not a secret | same |
+| `ANTHROPIC_API_KEY`    | an Anthropic key (Haiku)            | same                                    |
+| `CRON_SECRET`          | `openssl rand -base64 32`           | a different value                       |
+| `VERCEL_AUTOMATION_BYPASS_SECRET` | none: production isn't protected | the project's "Protection Bypass for Automation" secret |
 
-QStash and Anthropic keys arrive with the issues that use them.
+Enrichment runs through QStash: saving publishes `{ clippingId }`, and QStash calls
+`/api/jobs/enrich` on `BETTER_AUTH_URL` with a signature the handler checks, so that variable must be
+the environment's public origin. The development alias is behind Vercel Authentication, which would
+block QStash; the bypass secret lets it through. `QSTASH_URL` is where the app publishes to: the SDK
+defaults to `https://qstash.upstash.io`, so an account in another region must set the endpoint its
+console lists, or the token is rejected. A daily Vercel Cron (`vercel.json`, 04:00 UTC) calls
+`/api/cron/sweep` with `CRON_SECRET` as a bearer token and re-publishes clippings stuck in pending or
+failed for more than an hour. Vercel only runs crons on the production deployment.
 
 ### 4. Google OAuth client
 
@@ -121,9 +139,10 @@ Repo → Settings → Secrets and variables → Actions.
 development environment, such as `clippings-dev.vercel.app`. If it's unset, development still
 deploys, just without a stable URL.
 
-**Optional hardening**: Settings → Environments → `production` → add yourself as a required
-reviewer, and limit deployment branches to `production`. Settings → Rules: protect the
-`production` branch against force pushes and deletion.
+**Hardening**: Settings → Rules has "Protect default and production branches" (pull request, status
+checks, no force-push, no deletion) covering `main` and `production`. Optionally, Settings →
+Environments → `production` → add yourself as a required reviewer, and limit deployment branches to
+`production`.
 
 Runtime secrets live only in Vercel; deploy and database credentials live only in GitHub.
 Nothing goes in the repo. The development and preview databases need no stored URL: the workflows
@@ -133,7 +152,7 @@ ask Neon for it.
 
 1. **Development**: push to `main`. `development` creates branch `development`, migrates it and
    deploys; open `https://<DEVELOPMENT_ALIAS>` and sign in.
-2. **Preview DB**: open a PR. Neon shows `preview/pr-<n>` with `schema_migrations` filled, and the
+2. **Preview DB**: open a PR. Neon shows `preview/pr-<n>` with `drizzle.__drizzle_migrations` filled, and the
    run summary links the preview. Close the PR and the branch disappears.
 3. **Release**: run the `git push` above. `release` migrates production and deploys. Sign in on the
    production domain from an allowlisted account that isn't yours, to check Vercel

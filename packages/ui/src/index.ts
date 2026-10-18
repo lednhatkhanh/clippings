@@ -1,19 +1,43 @@
 export {
-  APPEARANCE_DEFAULTS,
+  APPEARANCE_COOKIE,
   APPEARANCE_STORAGE_KEYS,
-  APPEARANCE_VALUES,
   NO_FLASH_SCRIPT,
-  type AppearanceKey,
-} from "./appearance/appearance";
-export { Button, LinkButton, type ButtonProps, type LinkButtonProps } from "./components/button";
-export { Dialog, DialogTrigger, Heading, Modal } from "./components/modal";
-export { TextField, type TextFieldProps } from "./components/text-field";
-export { cn } from "./cn";
-export { ICON_NAMES, type IconName } from "./icons/icon-names";
-export { Icon, type IconProps } from "./icons/icon";
-export { ClippingsStackIllustration } from "./illustrations/clippings-stack";
-export { type IllustrationProps } from "./illustrations/illustration";
-export { LetterboxIllustration } from "./illustrations/letterbox";
-export { NotebookIllustration } from "./illustrations/notebook";
-export { DEFAULT_PALETTE, PALETTE_NAMES, type PaletteName } from "./theme/palettes";
-export { TYPESCALE_NAMES, type TypescaleName } from "./tokens/typescale";
+  applyAppearance,
+  encodeAppearanceCookie,
+  transitionAppearance,
+} from "./appearance/appearance.ts";
+export {
+  Button,
+  LinkButton,
+  type ButtonProps,
+  type LinkButtonProps,
+} from "./components/button.tsx";
+export { Disclosure, type DisclosureProps } from "./components/disclosure.tsx";
+export { Dialog, DialogTrigger, Heading, Modal } from "./components/modal.tsx";
+export { ProgressBar, type ProgressBarProps } from "./components/progress-bar.tsx";
+export {
+  Segment,
+  SegmentedButtons,
+  type SegmentProps,
+  type SegmentedButtonsProps,
+} from "./components/segmented-buttons.tsx";
+export {
+  Tab,
+  TabList,
+  TabPanel,
+  Tabs,
+  type TabListProps,
+  type TabPanelProps,
+  type TabProps,
+  type TabsProps,
+} from "./components/tabs.tsx";
+export { TextField, type TextFieldProps } from "./components/text-field.tsx";
+export { ToastRegion, toasts, type ToastMessage } from "./components/toast.tsx";
+export { cn } from "./cn.ts";
+export { ICON_NAMES, type IconName } from "./icons/icon-names.ts";
+export { Icon, type IconProps } from "./icons/icon.tsx";
+export { ClippingsStackIllustration } from "./illustrations/clippings-stack.tsx";
+export { type IllustrationProps } from "./illustrations/illustration.tsx";
+export { LetterboxIllustration } from "./illustrations/letterbox.tsx";
+export { NotebookIllustration } from "./illustrations/notebook.tsx";
+export { TYPESCALE_NAMES, type TypescaleName } from "./tokens/typescale.ts";

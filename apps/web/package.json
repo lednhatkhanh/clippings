@@ -13,14 +13,19 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "catalog:",
     "@clippings/db": "workspace:*",
     "@clippings/shared": "workspace:*",
     "@clippings/ui": "workspace:*",
+    "@date-fns/utc": "catalog:",
+    "@upstash/qstash": "catalog:",
     "better-auth": "catalog:",
+    "date-fns": "catalog:",
     "next": "catalog:",
     "react": "catalog:",
     "react-aria-components": "catalog:",
-    "react-dom": "catalog:"
+    "react-dom": "catalog:",
+    "swr": "catalog:"
   },
   "devDependencies": {
     "@clippings/config": "workspace:*",

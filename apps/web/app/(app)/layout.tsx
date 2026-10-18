@@ -1,9 +1,11 @@
 import { redirect, unstable_rethrow } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
 
-import { AppShell } from "../../components/app-shell";
-import { LoadError } from "../../components/load-error";
-import { getSession } from "../../lib/auth/session";
+import { AppShell } from "@/components/app-shell.tsx";
+import { LoadError } from "@/components/load-error.tsx";
+import { AppProviders } from "@/components/providers.tsx";
+import { AppearanceSync } from "@/components/settings/appearance-sync.tsx";
+import { getSession } from "@/lib/auth/session.ts";
 
 async function SessionGate({ children }: { children: ReactNode }) {
   let session: Awaited<ReturnType<typeof getSession>>;
@@ -20,16 +22,26 @@ async function SessionGate({ children }: { children: ReactNode }) {
     );
   }
   if (!session) redirect("/sign-in");
-  return children;
+  return (
+    <>
+      {/* Its own boundary, so the settings lookup never holds up the page. */}
+      <Suspense fallback={null}>
+        <AppearanceSync userId={session.user.id} />
+      </Suspense>
+      {children}
+    </>
+  );
 }
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
-    <AppShell>
-      {/* The shell prerenders; only the session check waits for the request. */}
-      <Suspense fallback={null}>
-        <SessionGate>{children}</SessionGate>
-      </Suspense>
-    </AppShell>
+    <AppProviders>
+      <AppShell>
+        {/* The shell prerenders; only the session check waits for the request. */}
+        <Suspense fallback={null}>
+          <SessionGate>{children}</SessionGate>
+        </Suspense>
+      </AppShell>
+    </AppProviders>
   );
 }

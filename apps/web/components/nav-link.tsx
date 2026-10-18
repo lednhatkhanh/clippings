@@ -3,15 +3,23 @@
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Suspense } from "react";
 
 import { Icon, cn, type IconName } from "@clippings/ui";
 
+/** The list owns its detail pages (`/c/[id]`), so "Clippings" stays marked on them. */
 const matches = (pathname: string, href: string) =>
-  href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+  href === "/"
+    ? pathname === "/" || pathname.startsWith("/c/")
+    : pathname === href || pathname.startsWith(`${href}/`);
 
-export function NavLink({ href, icon, label }: { href: Route; icon: IconName; label: string }) {
-  const active = matches(usePathname(), href);
+interface NavLinkProps {
+  href: Route;
+  icon: IconName;
+  label: string;
+}
 
+function NavLinkView({ href, icon, label, active }: NavLinkProps & { active: boolean }) {
   return (
     <Link
       href={href}
@@ -35,5 +43,21 @@ export function NavLink({ href, icon, label }: { href: Route; icon: IconName; la
       </span>
       <span className="typescale-label-md large:typescale-label-lg">{label}</span>
     </Link>
+  );
+}
+
+function CurrentNavLink(props: NavLinkProps) {
+  return <NavLinkView {...props} active={matches(usePathname(), props.href)} />;
+}
+
+/**
+ * A destination in the navigation, marked when it is the current page. On a route with a dynamic
+ * param the pathname is known only per request, so the prerendered shell shows the link unmarked.
+ */
+export function NavLink(props: NavLinkProps) {
+  return (
+    <Suspense fallback={<NavLinkView {...props} active={false} />}>
+      <CurrentNavLink {...props} />
+    </Suspense>
   );
 }

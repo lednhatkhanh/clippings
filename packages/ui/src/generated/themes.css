@@ -920,6 +920,17 @@
   --tag-pink-dot: light-dark(#68355c, #ffd7f0);
 }
 
+:root {
+  --palette-olive-primary: light-dark(#636117, #ceca75);
+  --palette-olive-primary-container: light-dark(#eae68e, #4b4900);
+  --palette-ochre-primary: light-dark(#735c0c, #e3c46d);
+  --palette-ochre-primary-container: light-dark(#ffe08a, #574400);
+  --palette-terracotta-primary: light-dark(#8b4f25, #ffb689);
+  --palette-terracotta-primary-container: light-dark(#ffdbc7, #6e380f);
+  --palette-ink-primary: light-dark(#3b608f, #a5c8fe);
+  --palette-ink-primary-container: light-dark(#d4e3ff, #214876);
+}
+
 @media (prefers-contrast: more) {
   :root[data-palette="olive"]:not([data-contrast]),
   :root:not([data-palette]):not([data-contrast]) {

@@ -1,10 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 
-import { DEFAULT_PALETTE, NO_FLASH_SCRIPT } from "@clippings/ui";
+import { DEFAULT_PALETTE } from "@clippings/shared";
+import { NO_FLASH_SCRIPT } from "@clippings/ui";
 import tokens from "@clippings/ui/tokens.json";
 
-import { mono, sans, serif } from "./fonts";
+import { mono, sans, serif } from "./fonts.ts";
 
 import "./globals.css";
 

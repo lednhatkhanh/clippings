@@ -1,18 +1,35 @@
 // Schema, migrations and the Clippings service live here (server-only).
 // The migration runner is not exported from here: it is a deploy-time tool (`pnpm --filter @clippings/db migrate`).
-export { createPool } from "./pool";
+export { createDatabase, type Database } from "./database.ts";
+export { createPool } from "./pool.ts";
+export { account, session, user, verification } from "./schema.ts";
+export type {
+  Clock,
+  Embedder,
+  FetchedPage,
+  JobPublisher,
+  PageFetcher,
+  PageSummary,
+  Summarizer,
+} from "./clippings/ports.ts";
 export {
   createClippingsService,
   InvalidCursorError,
   InvalidUrlError,
   NoteTooLongError,
-  noopJobPublisher,
   systemClock,
+  type ClippingsExport,
   type ClippingsPage,
   type ClippingsService,
-  type Clock,
-  type JobPublisher,
+  type EnrichmentOutcome,
+  type ExportedClipping,
   type ListClippingsInput,
   type SaveClippingInput,
   type SaveClippingResult,
-} from "./clippings/service";
+  type UpdateClippingInput,
+} from "./clippings/service.ts";
+export {
+  createSettingsService,
+  InvalidSettingsError,
+  type SettingsService,
+} from "./settings/service.ts";

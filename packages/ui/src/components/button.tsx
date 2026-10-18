@@ -6,7 +6,7 @@ import type {
   LinkProps as AriaLinkProps,
 } from "react-aria-components";
 
-import { cn } from "../cn";
+import { cn } from "../cn.ts";
 
 const VARIANTS = {
   filled: "bg-primary text-on-primary",

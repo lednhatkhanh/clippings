@@ -13,9 +13,15 @@ export const MAX_NOTE_LENGTH = 10_000;
 export interface Clipping {
   id: string;
   url: string;
+  /** What duplicate detection compares: `url` without tracking parameters, fragment and the like. */
+  urlNormalized: string;
   /** The URL until enrichment reads the page. */
   title: string;
   note: string;
+  /** What the page is about, once enrichment has read it. */
+  summary: string | null;
+  /** A passage worth keeping, once enrichment has read the page. */
+  excerpt: string | null;
   status: ClippingStatus;
   source: ClippingSource;
   /** The OAuth client that saved it, when one did. */

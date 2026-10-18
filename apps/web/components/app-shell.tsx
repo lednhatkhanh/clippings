@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { NavLink } from "./nav-link";
+import { NavLink } from "./nav-link.tsx";
 
 /**
  * Navigation by window size class, from one `<nav>`:

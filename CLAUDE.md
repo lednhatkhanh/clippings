@@ -1,14 +1,24 @@
 ## Working in this repo
 
-Clippings is a pnpm + Turborepo monorepo: `apps/web` (Next.js), `apps/extension` (WXT), and
-`packages/{ui,db,shared,config}`. [README](README.md) has the layout and commands; the v1 spec is
-GitHub issue #1.
+Clippings is a pnpm + Turborepo monorepo. [README](README.md) has the layout and commands; the v1
+spec is GitHub issue #1. `apps/web` has its own [CLAUDE.md](apps/web/CLAUDE.md) with the Next.js
+rules.
 
 ### Checks
 
 Before a PR, run `pnpm format`, then `pnpm check:root` and `node scripts/run-checks.mjs`: CI runs
 the same two, and the second runs lint, format, typecheck, test and build. Work is green only when
 both pass. `CLAUDE.md` and `docs/` are outside oxfmt.
+
+### Verifying your work
+
+Check what you can check yourself and ask the user only for what needs their accounts, real
+credentials or taste. After every edit in `apps/web`, verify at runtime with the `next-dev-loop`
+skill against the `web` dev server (`preview_start`, port 3100,
+`NEXT_MCP_URL=http://localhost:3100/_next/mcp`) and show the user UI in the Browser pane. Run
+database code against Postgres and `curl` routes; `docs/agents/verifying.md` has the local setup,
+including fakes for QStash and Anthropic and a sign-in without Google. Report what you saw, and
+name what you couldn't check; don't hand the user a checklist.
 
 ### Dependencies
 
@@ -22,19 +32,65 @@ Versions live only in the `catalog:` of `pnpm-workspace.yaml` (`catalogMode: str
 
 ### Branches and releases
 
-`main` is the development environment and deploys on every push. `production` fast-forwards from
-`main` and only the user moves it (`docs/deploy.md`): never force-push it or push to it unasked.
-Secrets stay out of the repo: runtime secrets live in Vercel, deploy credentials in GitHub.
+`main` is the development environment and deploys on every push. `production` is released by a
+pull request from `main` that the user merges (`docs/deploy.md`): never push to it or force-push it,
+and don't merge a release PR unasked. Secrets stay out of the repo: runtime secrets live in Vercel,
+deploy credentials in GitHub.
+
+### Skills
+
+Call a skill at its trigger; a one-line tweak needs none.
+
+| Skill | Trigger |
+| --- | --- |
+| `react-aria` | Changing a component in `packages/ui` or one built on React Aria Components |
+| `vercel-react-best-practices` | Writing or reviewing `apps/web` data fetching, Server/Client Component splits or hot paths (React Compiler is on: skip its memoization advice) |
+| `web-design-guidelines` | A UI or accessibility review, or a PR whose main change is UI |
+| `vercel-react-view-transitions` | Adding a page or element transition |
+| `next-bundle-optimizer` | A route's client bundle or first load is large or slow |
+| `next-cache-components-optimizer`, `next-partial-prefetching-optimizer` | Making a navigation instant or tuning prefetching (`cacheComponents` and `partialPrefetching` are on) |
+| `better-auth-best-practices` | Changing Better Auth config, sessions, plugins or `proxy.ts` |
+| `create-auth` | Adding a new sign-in method or provider |
+| `chrome-extensions` | Any work in `apps/extension` |
+| `modern-web-guidance` | Raw HTML, CSS or client JS outside `@clippings/ui`, such as the extension's pages and content scripts; skip it for `apps/web` UI despite its "run first" wording |
+| `recommend` | Hand-writing a utility (debounce, groupBy, chunk) once `es-toolkit` is in the catalog |
+| `code-review`, `pr` | Before a PR, and to write its body |
 
 ### Claude Code setup
 
-- `.claude/settings.json` allows the repo's check and read-only git/gh commands, asks before
-  migrations and `vercel`, and denies force-push, pushes to `production`, reading `.env*` files and
-  editing `packages/ui/src/generated/`. A hook formats each file you edit with oxfmt.
-- `/check` runs the three check commands above and fixes what fails.
-- `.claude/launch.json` defines the `web` dev server on port 3100; start it with `preview_start`.
+- A hook formats each file you edit with oxfmt, and `.claude/hooks/remind-verifier.mjs` reminds you
+  once per session to launch `verifier` after an edit in `apps/web` or `packages/db`.
+- Run pinned tools through `pnpm dlx`: `npx` fails here on the root `devEngines` check.
 - `.claude/skills/` is vendored and pinned by `skills-lock.json`: change a skill upstream, not here.
-- Personal overrides go in `.claude/settings.local.json`, which is gitignored.
+
+### Code search
+
+Find code by its structure with ast-grep (`ast-grep outline` for what a file defines,
+`ast-grep run -p` for calls, imports, JSX and definitions), and text with Grep: strings, comments,
+config and docs. `docs/agents/code-search.md` has tested commands for this repo, including
+rewrites.
+
+### Sub-agents
+
+The main session runs on Opus 5.5 (`model` in `.claude/settings.json`) and keeps the judgement: the
+design, the plan, reading results, talking to the user. It hands legwork to the agents in
+`.claude/agents/`, which override the user-level ones of the same name:
+
+| Agent         | Model         | Hand it                                                        |
+| ------------- | ------------- | -------------------------------------------------------------- |
+| `scout`       | Haiku 5.5     | one lookup: where is X, who calls Y                            |
+| `Explore`     | Sonnet 5.5    | a broad sweep across packages                                  |
+| `checker`     | Haiku 5.5     | the CI checks, returning only failures                         |
+| `implementer` | Sonnet 5.5    | a planned change, with tests; several run in parallel          |
+| `verifier`    | Sonnet 5.5    | runtime checks after an `apps/web` or `packages/db` change     |
+| `reviewer`    | Opus 5.5      | auth, schema, migrations, per-user access, shared interfaces   |
+| `Plan`        | Opus (main)   | a plan for a change across several packages                    |
+
+Any other agent (`general-purpose`, `claude`) defaults to Sonnet 5.5 via `CLAUDE_CODE_SUBAGENT_MODEL`.
+Do a task yourself when it is a few tool calls; a sub-agent pays off when its output would flood
+your context or when independent pieces can run at once. Brief each one with the plan and file
+pointers, since it starts without this conversation. `verifier` checks headless with
+`agent-browser`; showing the user UI in the Browser pane (`preview_start`) stays with you.
 
 ## Agent skills
 

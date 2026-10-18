@@ -7,6 +7,16 @@ type-aware) and types (`tsc`); this file holds what none of them says.
 
 - `erasableSyntaxOnly` is on: use unions and `as const` objects where you would reach for `enum`,
   `namespace` or constructor parameter properties.
+- Relative imports name the file with its `.ts` or `.tsx` extension (`allowImportingTsExtensions`);
+  `import/extensions` enforces it. Packages (`@clippings/ui`) and CSS keep their usual specifiers.
+- In `apps/web`, reach a file outside the current directory with the `@/` alias for the app root
+  (`@/lib/auth/session.ts`) instead of `../`; `import/no-relative-parent-imports` enforces it.
+  Siblings stay `./`.
+- Dates and times go through `date-fns` (`@date-fns/utc` for UTC days), never the `Date` global:
+  `constructNow()` for now, `parseISO` to parse, `addHours`, `differenceInDays` and the like for
+  arithmetic, `format` to word one. `Date` stays a type (a column, a `Clock`). `no-restricted-globals`
+  flags `new Date`, `Date.now` and friends; `formatIsoUtc` in `@clippings/shared` is the DTO's
+  ISO string.
 - TypeScript 7 is the native compiler, so there is no JS compiler API to import.
 - Workspace packages are consumed as source (their `exports` point at `src/`): importing one needs
   no build step, and a new export is added to that package's `src/index.ts`.
@@ -29,13 +39,22 @@ type-aware) and types (`tsc`); this file holds what none of them says.
 
 ## Database
 
-- Add a new numbered file to `packages/db/migrations/`. Applied files are recorded by name, so edit
-  none of them.
+- `packages/db/src/schema.ts` is the schema, for every table including Better Auth's. Queries use
+  Drizzle (`drizzle-orm/node-postgres` on the shared `pg` pool, so tests run on plain Postgres and
+  Better Auth shares the pool).
+- Change the schema, then `pnpm --filter @clippings/db generate`. Review the SQL it writes to
+  `packages/db/drizzle/` before committing (edit it by hand when needed, for example to split a
+  drop into expand/contract steps). `check:schema`, part of `lint`, fails when `schema.ts` and the
+  migrations disagree.
+- Never edit a migration that has been applied; add a new one. Drizzle records each by hash.
 - Write expand/contract: the previous app version runs against the new schema during a deploy, and
   a rollback never undoes a migration.
+- `pnpm --filter @clippings/db migrate` applies them on Neon's direct URL (`DATABASE_URL_DIRECT`);
+  the app uses the pooled one. It takes an advisory lock and runs pending migrations in one
+  transaction.
+- Browse a local database with `pnpm --filter @clippings/db studio` (set `DATABASE_URL`).
 - Better Auth's tables use its camelCase column names, quoted.
 - Every row belongs to one user: scope every query by user id.
-- Migrations run on Neon's direct URL (`DATABASE_URL_DIRECT`); the app uses the pooled one.
 
 ## Auth
 

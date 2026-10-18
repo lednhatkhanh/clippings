@@ -1,6 +1,7 @@
-import { createPool } from "@clippings/db";
+import { createDatabase, createPool } from "@clippings/db";
 
 let pool: ReturnType<typeof createPool> | undefined;
+let database: ReturnType<typeof createDatabase> | undefined;
 
 /** One pool per server instance, on Neon's pooled URL. Lazy, so `next build` needs no secrets. */
 export function getPool() {
@@ -10,4 +11,9 @@ export function getPool() {
     pool = createPool(url);
   }
   return pool;
+}
+
+/** The Drizzle client on that pool, shared by Better Auth and the Clippings service. */
+export function getDatabase() {
+  return (database ??= createDatabase(getPool()));
 }

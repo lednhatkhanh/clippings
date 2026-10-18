@@ -1,7 +1,7 @@
 import { Hct, argbFromHex } from "@material/material-color-utilities";
 import { describe, expect, it } from "vitest";
 
-import { generateTheme, renderThemesCss, renderTokensJson } from "./generate";
+import { generateTheme, renderThemesCss, renderTokensJson } from "./generate.ts";
 
 // The system roles Material Theme Builder exports (49), spelled out here as the
 // spec rather than read back from the generator.
@@ -294,6 +294,23 @@ describe("generateTheme", () => {
     expect(declarations.get("--md-sys-color-primary")).toBe(
       lightDark(olive.light.roles.primary, olive.dark.roles.primary),
     );
+  });
+
+  it("emits every palette's primary swatch from its standard scheme in one :root block", () => {
+    const theme = generateTheme();
+    const rules = parseRules(renderThemesCss(theme));
+    const swatches = findRule(rules, ":root");
+
+    for (const palette of PALETTES) {
+      const { light, dark } = theme.palettes[palette].schemes.standard;
+      expect(swatches.get(`--palette-${palette}-primary`)).toBe(
+        lightDark(light.roles.primary, dark.roles.primary),
+      );
+      expect(swatches.get(`--palette-${palette}-primary-container`)).toBe(
+        lightDark(light.roles["primary-container"], dark.roles["primary-container"]),
+      );
+    }
+    expect(swatches.size).toBe(PALETTES.length * 2);
   });
 
   it("writes tokens.json with the same colors as the generated CSS", () => {

@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { MAX_NOTE_LENGTH } from "@clippings/shared";
 
-import { createServiceFixture, type ServiceFixture } from "../test/service-fixture";
-import { TEST_DATABASE_URL } from "../test/temp-database";
-import { InvalidUrlError, NoteTooLongError } from "./service";
+import { createServiceFixture, type ServiceFixture } from "../test/service-fixture.ts";
+import { TEST_DATABASE_URL } from "../test/temp-database.ts";
+import { InvalidUrlError, NoteTooLongError } from "./service.ts";
 
 describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
   let fixture: ServiceFixture;
@@ -16,6 +16,15 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
   afterEach(async () => {
     await fixture.close();
   });
+
+  const essay = {
+    page: { title: "Essay | Example", text: "A long essay about gardening, from start to end." },
+    summary: {
+      title: "An essay about gardening",
+      summary: "Why small gardens beat big ones.",
+      excerpt: "A long essay about gardening",
+    },
+  };
 
   it("saves a new URL as a pending clipping titled by its URL, and lists it", async () => {
     const ana = await fixture.createUser("ana");
@@ -167,22 +176,229 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
     expect(seen.indexOf(later!)).toBeLessThan(seen.indexOf(earlier!));
   });
 
-  it("updates the note of one's own clipping, and not anyone else's", async () => {
+  it("updates the note of one's own clipping, and a later read returns it", async () => {
     const ana = await fixture.createUser("ana");
-    const ben = await fixture.createUser("ben");
     const { clipping } = await fixture.service.saveClipping(ana, {
       url: "https://example.com/a",
       note: "before",
       source: "web",
     });
 
-    const foreign = await fixture.service.updateNote(ben, clipping.id, "hijacked");
-    const own = await fixture.service.updateNote(ana, clipping.id, "after");
+    const updated = await fixture.service.updateClipping(ana, clipping.id, { note: "after" });
 
-    expect(foreign).toBeNull();
-    expect(own?.note).toBe("after");
+    expect(updated?.note).toBe("after");
+    expect((await fixture.service.getClipping(ana, clipping.id))?.note).toBe("after");
     const page = await fixture.service.listClippings(ana, {});
     expect(page.items[0]?.note).toBe("after");
+  });
+
+  it("keeps users apart: B can't read, update, delete or restore A's clipping", async () => {
+    const ana = await fixture.createUser("ana");
+    const ben = await fixture.createUser("ben");
+    const { clipping } = await fixture.service.saveClipping(ana, {
+      url: "https://example.com/a",
+      note: "ana's note",
+      source: "web",
+    });
+
+    expect(await fixture.service.getClipping(ben, clipping.id)).toBeNull();
+    expect(await fixture.service.updateClipping(ben, clipping.id, { note: "hijacked" })).toBeNull();
+    expect(await fixture.service.deleteClipping(ben, clipping.id)).toBe(false);
+    expect(await fixture.service.getClipping(ana, clipping.id)).toEqual(clipping);
+
+    await fixture.service.deleteClipping(ana, clipping.id);
+    expect(await fixture.service.restoreClipping(ben, clipping.id)).toBe(false);
+    expect(await fixture.service.getClipping(ana, clipping.id)).toBeNull();
+  });
+
+  describe("exporting", () => {
+    it("exports exactly the user's own live clippings, newest first, with notes and no tags yet", async () => {
+      const ana = await fixture.createUser("ana");
+      const ben = await fixture.createUser("ben");
+      const { clipping: first } = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/first",
+        note: "read on the train",
+        source: "web",
+      });
+      fixture.advanceClock(1000);
+      const { clipping: removed } = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/removed",
+        source: "web",
+      });
+      fixture.advanceClock(1000);
+      const { clipping: last } = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/last",
+        source: "extension",
+      });
+      await fixture.service.saveClipping(ben, {
+        url: "https://example.com/bens",
+        note: "ben's note",
+        source: "web",
+      });
+      await fixture.service.deleteClipping(ana, removed.id);
+      fixture.advanceClock(5000);
+
+      const exported = await fixture.service.exportClippings(ana);
+
+      expect(exported.exportedAt).toBe("2026-10-01T09:00:07.000Z");
+      expect(exported.clippings).toEqual([
+        { ...last, tags: [] },
+        { ...first, tags: [] },
+      ]);
+      expect(exported.clippings[1]?.note).toBe("read on the train");
+    });
+
+    it("exports every clipping, not just a first page", async () => {
+      const ana = await fixture.createUser("ana");
+      for (let index = 0; index < 25; index++) {
+        fixture.advanceClock(1000);
+        await fixture.service.saveClipping(ana, {
+          url: `https://example.com/page-${index}`,
+          source: "web",
+        });
+      }
+
+      const exported = await fixture.service.exportClippings(ana);
+
+      expect(exported.clippings).toHaveLength(25);
+    });
+
+    it("exports an empty list for a user with no clippings", async () => {
+      const ana = await fixture.createUser("ana");
+
+      const exported = await fixture.service.exportClippings(ana);
+
+      expect(exported.clippings).toEqual([]);
+    });
+  });
+
+  describe("deleting and restoring", () => {
+    it("hides a deleted clipping from list and get, and restore brings it back as it was", async () => {
+      const ana = await fixture.createUser("ana");
+      const { clipping: kept } = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/kept",
+        source: "web",
+      });
+      fixture.advanceClock(1000);
+      const { clipping } = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/gone",
+        note: "remember this",
+        source: "web",
+      });
+
+      expect(await fixture.service.deleteClipping(ana, clipping.id)).toBe(true);
+
+      expect(await fixture.service.getClipping(ana, clipping.id)).toBeNull();
+      const afterDelete = await fixture.service.listClippings(ana, {});
+      expect(afterDelete.items.map((item) => item.id)).toEqual([kept.id]);
+
+      expect(await fixture.service.restoreClipping(ana, clipping.id)).toBe(true);
+
+      expect(await fixture.service.getClipping(ana, clipping.id)).toEqual(clipping);
+      const afterRestore = await fixture.service.listClippings(ana, {});
+      expect(afterRestore.items.map((item) => item.id)).toEqual([clipping.id, kept.id]);
+    });
+
+    it("saving a deleted clipping's URL again starts the clipping over", async () => {
+      const ana = await fixture.createUser("ana");
+      fixture.web.set("https://example.com/essay", essay);
+      const { clipping: old } = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/essay",
+        note: "old note",
+        source: "web",
+      });
+      await fixture.service.enrichClipping(old.id);
+      await fixture.service.deleteClipping(ana, old.id);
+      fixture.advanceClock(60_000);
+      fixture.enrichmentRequests.length = 0;
+
+      const again = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/essay/",
+        note: "new note",
+        source: "extension",
+      });
+
+      expect(again.status).toBe("created");
+      expect(again.clipping).toMatchObject({
+        title: "https://example.com/essay/",
+        note: "new note",
+        summary: null,
+        status: "pending",
+        source: "extension",
+        createdAt: "2026-10-01T09:01:00.000Z",
+      });
+      expect(fixture.enrichmentRequests).toEqual([again.clipping.id]);
+      const page = await fixture.service.listClippings(ana, {});
+      expect(page.items.map((item) => item.note)).toEqual(["new note"]);
+    });
+
+    it("a deleted clipping can't be edited or retried, and isn't swept", async () => {
+      const ana = await fixture.createUser("ana");
+      fixture.web.set("https://example.com/down", { error: new Error("503") });
+      const { clipping } = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/down",
+        source: "web",
+      });
+      await fixture.service.enrichClipping(clipping.id, { lastAttempt: true });
+      await fixture.service.deleteClipping(ana, clipping.id);
+      fixture.advanceClock(2 * 60 * 60 * 1000);
+      fixture.enrichmentRequests.length = 0;
+
+      expect(await fixture.service.updateClipping(ana, clipping.id, { note: "x" })).toBeNull();
+      expect(await fixture.service.retryEnrichment(ana, clipping.id)).toBeNull();
+      expect(await fixture.service.deleteClipping(ana, clipping.id)).toBe(false);
+      expect(await fixture.service.sweepStuck()).toEqual([]);
+      expect(fixture.enrichmentRequests).toEqual([]);
+    });
+  });
+
+  describe("purging deleted clippings", () => {
+    const DAY = 24 * 60 * 60 * 1000;
+
+    it("removes clippings deleted more than a day ago, leaving recent deletes restorable and live ones alone", async () => {
+      const ana = await fixture.createUser("ana");
+      const save = async (name: string) =>
+        (
+          await fixture.service.saveClipping(ana, {
+            url: `https://example.com/${name}`,
+            source: "web",
+          })
+        ).clipping;
+      const live = await save("live");
+      const deletedOld = await save("deleted-old");
+      await fixture.service.deleteClipping(ana, deletedOld.id);
+      fixture.advanceClock(DAY - 1000);
+      const deletedRecent = await save("deleted-recent");
+      await fixture.service.deleteClipping(ana, deletedRecent.id);
+      fixture.advanceClock(2000);
+
+      expect(await fixture.service.purgeDeleted()).toBe(1);
+
+      expect(await fixture.service.restoreClipping(ana, deletedOld.id)).toBe(false);
+      expect(await fixture.service.restoreClipping(ana, deletedRecent.id)).toBe(true);
+      const page = await fixture.service.listClippings(ana, {});
+      expect(page.items.map((item) => item.id)).toEqual([deletedRecent.id, live.id]);
+      expect(await fixture.service.purgeDeleted()).toBe(0);
+    });
+
+    it("lets the purged clipping's URL be saved again as a new clipping", async () => {
+      const ana = await fixture.createUser("ana");
+      const { clipping } = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/essay",
+        source: "web",
+      });
+      await fixture.service.deleteClipping(ana, clipping.id);
+      fixture.advanceClock(DAY + 1);
+      await fixture.service.purgeDeleted();
+
+      const again = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/essay",
+        source: "web",
+      });
+
+      expect(again.status).toBe("created");
+      expect(again.clipping.id).not.toBe(clipping.id);
+    });
   });
 
   it("stores a bare domain with its scheme, so the clipping links to the page", async () => {
@@ -195,6 +411,20 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
 
     expect(clipping.url).toBe("https://example.com/essay");
     expect(clipping.title).toBe("https://example.com/essay");
+  });
+
+  it("returns the normalized URL alongside the one the user gave", async () => {
+    const ana = await fixture.createUser("ana");
+
+    const { clipping } = await fixture.service.saveClipping(ana, {
+      url: "https://EXAMPLE.com/essay/?utm_source=newsletter&id=7#part-2",
+      source: "web",
+    });
+
+    expect(await fixture.service.getClipping(ana, clipping.id)).toMatchObject({
+      url: "https://example.com/essay/?utm_source=newsletter&id=7#part-2",
+      urlNormalized: "https://example.com/essay?id=7",
+    });
   });
 
   it("rejects addresses that only look like web addresses", async () => {
@@ -229,8 +459,205 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
       note: "x".repeat(MAX_NOTE_LENGTH),
       source: "web",
     });
-    await expect(fixture.service.updateNote(ana, clipping.id, tooLong)).rejects.toThrow(
-      NoteTooLongError,
-    );
+    await expect(
+      fixture.service.updateClipping(ana, clipping.id, { note: tooLong }),
+    ).rejects.toThrow(NoteTooLongError);
+  });
+
+  describe("enrichment", () => {
+    it("reads a pending clipping: title, summary and excerpt are written and it is ready", async () => {
+      const ana = await fixture.createUser("ana");
+      fixture.web.set("https://example.com/essay", essay);
+      const { clipping } = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/essay",
+        source: "web",
+      });
+
+      const outcome = await fixture.service.enrichClipping(clipping.id);
+
+      expect(outcome).toBe("ready");
+      expect(await fixture.service.getClipping(ana, clipping.id)).toMatchObject({
+        status: "ready",
+        title: "An essay about gardening",
+        summary: "Why small gardens beat big ones.",
+        excerpt: "A long essay about gardening",
+      });
+    });
+
+    it("does nothing when the same job is delivered again after the clipping is read", async () => {
+      const ana = await fixture.createUser("ana");
+      fixture.web.set("https://example.com/essay", essay);
+      const { clipping } = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/essay",
+        source: "web",
+      });
+      await fixture.service.enrichClipping(clipping.id);
+      fixture.web.set("https://example.com/essay", {
+        page: { title: "Rewritten", text: "The page changed." },
+        summary: { title: "Something else", summary: "Other.", excerpt: "Other" },
+      });
+
+      const outcome = await fixture.service.enrichClipping(clipping.id);
+
+      expect(outcome).toBe("skipped");
+      expect((await fixture.service.getClipping(ana, clipping.id))?.title).toBe(
+        "An essay about gardening",
+      );
+    });
+
+    it("ignores a job for a clipping that does not exist", async () => {
+      expect(await fixture.service.enrichClipping("00000000-0000-4000-8000-000000000000")).toBe(
+        "skipped",
+      );
+      expect(await fixture.service.enrichClipping("not-an-id")).toBe("skipped");
+    });
+
+    it("leaves the user's note alone, whether it was written before or during enrichment", async () => {
+      const ana = await fixture.createUser("ana");
+      fixture.web.set("https://example.com/essay", essay);
+      const { clipping } = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/essay",
+        note: "for the weekend",
+        source: "web",
+      });
+      await fixture.service.updateClipping(ana, clipping.id, {
+        note: "for the weekend, then share with Ben",
+      });
+
+      await fixture.service.enrichClipping(clipping.id);
+
+      expect((await fixture.service.getClipping(ana, clipping.id))?.note).toBe(
+        "for the weekend, then share with Ben",
+      );
+    });
+
+    it("fails on a page that can't be read: an early attempt throws and stays pending, the last one marks it failed", async () => {
+      const ana = await fixture.createUser("ana");
+      fixture.web.set("https://example.com/down", { error: new Error("503 from the site") });
+      const { clipping } = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/down",
+        note: "keep this",
+        source: "web",
+      });
+
+      await expect(fixture.service.enrichClipping(clipping.id)).rejects.toThrow("503");
+      expect((await fixture.service.getClipping(ana, clipping.id))?.status).toBe("pending");
+
+      const outcome = await fixture.service.enrichClipping(clipping.id, { lastAttempt: true });
+
+      expect(outcome).toBe("failed");
+      expect(await fixture.service.getClipping(ana, clipping.id)).toMatchObject({
+        status: "failed",
+        title: "https://example.com/down",
+        note: "keep this",
+        summary: null,
+      });
+    });
+
+    it("retry puts a failed clipping back to pending and publishes it again; it leaves others alone", async () => {
+      const ana = await fixture.createUser("ana");
+      const ben = await fixture.createUser("ben");
+      fixture.web.set("https://example.com/down", { error: new Error("503") });
+      const { clipping } = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/down",
+        source: "web",
+      });
+      await fixture.service.enrichClipping(clipping.id, { lastAttempt: true });
+      fixture.enrichmentRequests.length = 0;
+
+      expect(await fixture.service.retryEnrichment(ben, clipping.id)).toBeNull();
+      expect(fixture.enrichmentRequests).toEqual([]);
+      const retried = await fixture.service.retryEnrichment(ana, clipping.id);
+
+      expect(retried?.status).toBe("pending");
+      expect(fixture.enrichmentRequests).toEqual([clipping.id]);
+
+      // Retrying a clipping that isn't failed changes nothing and publishes nothing.
+      fixture.web.set("https://example.com/down", essay);
+      await fixture.service.enrichClipping(clipping.id);
+      fixture.enrichmentRequests.length = 0;
+      const again = await fixture.service.retryEnrichment(ana, clipping.id);
+      expect(again?.status).toBe("ready");
+      expect(fixture.enrichmentRequests).toEqual([]);
+    });
+
+    it("retry that can't publish leaves the clipping failed and tells the caller", async () => {
+      const ana = await fixture.createUser("ana");
+      fixture.web.set("https://example.com/down", { error: new Error("503") });
+      const { clipping } = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/down",
+        source: "web",
+      });
+      await fixture.service.enrichClipping(clipping.id, { lastAttempt: true });
+      fixture.setPublishing("down");
+
+      await expect(fixture.service.retryEnrichment(ana, clipping.id)).rejects.toThrow(
+        "unreachable",
+      );
+
+      expect((await fixture.service.getClipping(ana, clipping.id))?.status).toBe("failed");
+    });
+  });
+
+  describe("saving while the queue is down", () => {
+    it("keeps the clipping, since enrichment can be requested again later", async () => {
+      const ana = await fixture.createUser("ana");
+      fixture.setPublishing("down");
+
+      const saved = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/essay",
+        source: "web",
+      });
+
+      expect(saved.status).toBe("created");
+      const page = await fixture.service.listClippings(ana, {});
+      expect(page.items.map((clipping) => clipping.status)).toEqual(["pending"]);
+    });
+  });
+
+  describe("sweeping stuck clippings", () => {
+    const HOUR = 60 * 60 * 1000;
+
+    it("re-publishes only clippings pending or failed for more than an hour, and starts failed ones over", async () => {
+      const ana = await fixture.createUser("ana");
+      const save = async (name: string) =>
+        (
+          await fixture.service.saveClipping(ana, {
+            url: `https://example.com/${name}`,
+            source: "web",
+          })
+        ).clipping;
+      fixture.web.set("https://example.com/failed-old", { error: new Error("503") });
+      fixture.web.set("https://example.com/failed-new", { error: new Error("503") });
+      fixture.web.set("https://example.com/ready-old", essay);
+
+      const pendingOld = await save("pending-old");
+      const failedOld = await save("failed-old");
+      const readyOld = await save("ready-old");
+      await fixture.service.enrichClipping(failedOld.id, { lastAttempt: true });
+      await fixture.service.enrichClipping(readyOld.id);
+      fixture.advanceClock(HOUR + 1);
+      const pendingNew = await save("pending-new");
+      const failedNew = await save("failed-new");
+      await fixture.service.enrichClipping(failedNew.id, { lastAttempt: true });
+      fixture.advanceClock(HOUR - 1000);
+      fixture.enrichmentRequests.length = 0;
+
+      const swept = await fixture.service.sweepStuck();
+
+      expect(swept.toSorted()).toEqual([pendingOld.id, failedOld.id].toSorted());
+      expect(fixture.enrichmentRequests.toSorted()).toEqual(
+        [pendingOld.id, failedOld.id].toSorted(),
+      );
+      const statusOf = async (id: string) => (await fixture.service.getClipping(ana, id))?.status;
+      expect(await statusOf(failedOld.id)).toBe("pending");
+      expect(await statusOf(failedNew.id)).toBe("failed");
+      expect(await statusOf(pendingNew.id)).toBe("pending");
+      expect(await statusOf(readyOld.id)).toBe("ready");
+
+      // Swept just now, so the next sweep leaves them alone until another hour has passed.
+      fixture.enrichmentRequests.length = 0;
+      expect(await fixture.service.sweepStuck()).toEqual([]);
+    });
   });
 });

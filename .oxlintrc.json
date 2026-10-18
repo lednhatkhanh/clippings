@@ -8,6 +8,14 @@
     "typeAware": true
   },
   "rules": {
+    "import/extensions": ["error", "always", { "ignorePackages": true }],
+    "no-restricted-globals": [
+      "error",
+      {
+        "name": "Date",
+        "message": "Use date-fns (constructNow, parseISO, addDays, format) instead of the Date global."
+      }
+    ],
     "react/rules-of-hooks": "error",
     "react/exhaustive-deps": "error",
     "react/purity": "error",
@@ -34,6 +42,12 @@
       }
     ]
   },
+  "overrides": [
+    {
+      "files": ["apps/web/**"],
+      "rules": { "import/no-relative-parent-imports": "error" }
+    }
+  ],
   "ignorePatterns": [
     ".next",
     ".wxt",

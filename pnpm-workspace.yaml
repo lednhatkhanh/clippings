@@ -5,6 +5,9 @@ packages:
 catalogMode: strict
 
 catalog:
+  "@anthropic-ai/sdk": 0.135.0
+  "@ast-grep/cli": 0.51.0
+  "@date-fns/utc": 2.1.1
   "@material/material-color-utilities": 0.4.0
   "@shadcn/lint": 0.2.1
   "@tailwindcss/postcss": 4.3.3
@@ -12,8 +15,12 @@ catalog:
   "@types/pg": 8.23.1
   "@types/react": 19.3.0
   "@types/react-dom": 19.3.0
+  "@upstash/qstash": 2.12.0
   better-auth: 1.7.10
   cn: 0.4.0
+  date-fns: 4.4.0
+  drizzle-kit: 1.0.0-rc.4
+  drizzle-orm: 1.0.0-rc.4
   next: 16.4.1
   oxfmt: 0.73.0
   oxlint: 1.88.0
@@ -22,6 +29,7 @@ catalog:
   react: 19.3.1
   react-aria-components: 1.22.1
   react-dom: 19.3.1
+  swr: 2.5.1
   tailwindcss: 4.3.3
   tsx: 4.23.15
   turbo: 2.11.8
@@ -58,3 +66,6 @@ minimumReleaseAgeExclude:
 # platform binary, which resolves from optional dependencies without it.
 allowBuilds:
   esbuild: false
+  # Its postinstall only links the platform binary over the JS shim, so each
+  # ast-grep run skips a Node startup.
+  "@ast-grep/cli": true

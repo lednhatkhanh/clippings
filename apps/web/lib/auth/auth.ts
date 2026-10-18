@@ -1,8 +1,11 @@
 import { betterAuth } from "better-auth";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 
-import { getPool } from "../db";
-import { createUserValidator } from "./validate-user";
+import { getDatabase } from "@/lib/db.ts";
+import { account, session, user, verification } from "@clippings/db";
+
+import { createUserValidator } from "./validate-user.ts";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -13,7 +16,10 @@ function requireEnv(name: string): string {
 function createAuth() {
   return betterAuth({
     // Neon's pooled URL, shared with the Clippings service; migrations use the direct URL.
-    database: getPool(),
+    database: drizzleAdapter(getDatabase(), {
+      provider: "pg",
+      schema: { user, session, account, verification },
+    }),
     // `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` are read from the environment by Better Auth.
     advanced: { useSecureCookies: process.env.NODE_ENV === "production" },
     socialProviders: {
