@@ -2,7 +2,7 @@
 name: scout
 description: Fast, read-only search of the Clippings repo. Use before a change to find files, symbols, usages and config, or to answer "where is X / how is Y wired up".
 tools: Read, Grep, Glob
-model: haiku
+model: claude-haiku-5-5
 effort: low
 ---
 

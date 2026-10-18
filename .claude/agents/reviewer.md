@@ -2,7 +2,7 @@
 name: reviewer
 description: Deep, read-only review of risky changes in this repo. Use before merging anything touching auth, the database schema or migrations, per-user data access, the extension's permissions, or a shared package's public interface.
 tools: Read, Grep, Glob, Bash
-model: opus
+model: claude-opus-5-5
 effort: high
 ---
 

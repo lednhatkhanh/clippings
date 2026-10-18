@@ -1,7 +1,7 @@
 ---
 name: implementer
 description: Implements a planned, well-scoped change in this repo, with tests. Use once the approach is decided: features, fixes, refactors, test additions.
-model: sonnet
+model: claude-sonnet-5-5
 effort: high
 ---
 

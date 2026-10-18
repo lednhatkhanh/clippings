@@ -2,7 +2,7 @@
 name: verifier
 description: Verifies a change at runtime and reports what it saw — the running Next.js app via /_next/mcp and agent-browser, database code against local Postgres, routes with curl. Use after an edit in apps/web or packages/db, so dev-server and browser output stays out of the caller's context.
 disallowedTools: Edit, Write, NotebookEdit
-model: sonnet
+model: claude-sonnet-5-5
 effort: medium
 skills:
   - next-dev-loop

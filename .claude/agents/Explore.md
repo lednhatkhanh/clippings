@@ -2,7 +2,7 @@
 name: Explore
 description: Read-only search agent for broad fan-out searches — when answering means sweeping many files, directories or naming conventions and the caller needs only the conclusion. Say the breadth wanted ("medium" or "very thorough"). For a single lookup, use scout.
 tools: Read, Grep, Glob, Bash
-model: sonnet
+model: claude-sonnet-5-5
 effort: medium
 ---
 

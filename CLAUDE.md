@@ -65,21 +65,21 @@ Secrets stay out of the repo: runtime secrets live in Vercel, deploy credentials
 
 ### Sub-agents
 
-The main session runs on Opus (`model` in `.claude/settings.json`) and keeps the judgement: the
+The main session runs on Opus 5.5 (`model` in `.claude/settings.json`) and keeps the judgement: the
 design, the plan, reading results, talking to the user. It hands legwork to the agents in
 `.claude/agents/`, which override the user-level ones of the same name:
 
 | Agent         | Model         | Hand it                                                        |
 | ------------- | ------------- | -------------------------------------------------------------- |
-| `scout`       | Haiku         | one lookup: where is X, who calls Y                            |
-| `Explore`     | Sonnet        | a broad sweep across packages                                  |
-| `checker`     | Haiku         | the CI checks, returning only failures                         |
-| `implementer` | Sonnet        | a planned change, with tests; several run in parallel          |
-| `verifier`    | Sonnet        | runtime checks after an `apps/web` or `packages/db` change     |
-| `reviewer`    | Opus          | auth, schema, migrations, per-user access, shared interfaces   |
+| `scout`       | Haiku 5.5     | one lookup: where is X, who calls Y                            |
+| `Explore`     | Sonnet 5.5    | a broad sweep across packages                                  |
+| `checker`     | Haiku 5.5     | the CI checks, returning only failures                         |
+| `implementer` | Sonnet 5.5    | a planned change, with tests; several run in parallel          |
+| `verifier`    | Sonnet 5.5    | runtime checks after an `apps/web` or `packages/db` change     |
+| `reviewer`    | Opus 5.5      | auth, schema, migrations, per-user access, shared interfaces   |
 | `Plan`        | Opus (main)   | a plan for a change across several packages                    |
 
-Any other agent (`general-purpose`, `claude`) defaults to Sonnet via `CLAUDE_CODE_SUBAGENT_MODEL`.
+Any other agent (`general-purpose`, `claude`) defaults to Sonnet 5.5 via `CLAUDE_CODE_SUBAGENT_MODEL`.
 Do a task yourself when it is a few tool calls; a sub-agent pays off when its output would flood
 your context or when independent pieces can run at once. Brief each one with the plan and file
 pointers, since it starts without this conversation. `verifier` checks headless with
