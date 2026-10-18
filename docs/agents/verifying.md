@@ -8,7 +8,8 @@ taste. Run the app and the database for real, report what you saw, and don't han
 | Change                                | How                                                                        |
 | ------------------------------------- | -------------------------------------------------------------------------- |
 | Service, queries, migrations          | Vitest against Postgres (below)                                            |
-| UI, polling, server actions, routes   | Drive the app in the Browser pane: `preview_start`, click, read, screenshot |
+| Any edit in `apps/web`                | `next-dev-loop` skill: `/_next/mcp` plus `agent-browser`, headless         |
+| UI the user should see                | The Browser pane: `preview_start`, click, read, screenshot                 |
 | QStash and Anthropic calls            | The fakes in `scripts/local/fakes.mjs` (below)                             |
 | Route auth (signatures, cron secret)  | `curl` the route without and with the credential                           |
 
@@ -38,8 +39,16 @@ Start the fakes and the app with `preview_start` (`fakes`, then `web-local`; bot
 node scripts/local/sign-in.mjs
 ```
 
-It prints a cookie value. Set it in the page with the browser's `javascript_tool`
-(`document.cookie = "better-auth.session_token=<value>; path=/"`) and load `/`.
+It prints a cookie value. Set it, then load `/`:
+
+- `agent-browser`, after the `next-dev-loop` preflight `open`:
+  `agent-browser cookies set better-auth.session_token <value> --url http://localhost:3100`.
+  `--restore` keeps it for later loops.
+- The Browser pane, with `javascript_tool`:
+  `document.cookie = "better-auth.session_token=<value>; path=/"`.
+
+`get_request_insights` on `/_next/mcp` shows each request's render, fetch and cache spans
+(`experimental.requestInsights`, dev only): use it when a page is slow or a cache misses.
 
 ## The fakes
 
@@ -52,4 +61,5 @@ It prints a cookie value. Set it in the page with the browser's `javascript_tool
   is also the way to see the failed row and Retry.
 
 Read the fakes' output with `preview_logs`. Stop what you started when you are done:
-`preview_stop` for the servers and `docker stop clippings-pg` for the container.
+`preview_stop` for the servers, `agent-browser close` for the browser session, and
+`docker stop clippings-pg` for the container.
