@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { InvalidUrlError, NoteTooLongError } from "@clippings/db";
 
 import { getSession } from "../../lib/auth/session";
-import { loadRows, type RowsPage } from "../../lib/clippings/rows";
+import { loadRows, toRow, type ClippingRowData, type RowsPage } from "../../lib/clippings/rows";
 import { getClippings } from "../../lib/clippings/service";
 import { formatAbsoluteDate } from "../../lib/format-date";
 
@@ -82,4 +82,11 @@ export async function updateNoteAction(clippingId: string, formData: FormData): 
 
 export async function loadMoreClippingsAction(cursor: string): Promise<RowsPage> {
   return loadRows(await requireUserId(), cursor);
+}
+
+/** Starts a failed clipping over. Returns its row as it now stands, or null if it isn't theirs. */
+export async function retryEnrichmentAction(clippingId: string): Promise<ClippingRowData | null> {
+  const clipping = await getClippings().retryEnrichment(await requireUserId(), clippingId);
+  revalidatePath("/");
+  return clipping ? toRow(clipping, new Date()) : null;
 }

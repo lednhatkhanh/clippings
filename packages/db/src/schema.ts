@@ -90,9 +90,15 @@ export const clippings = pgTable(
     urlNormalized: text("url_normalized").notNull(),
     title: text("title").notNull(),
     note: text("note").notNull().default(""),
+    // Written by enrichment; null until the page has been read.
+    summary: text("summary"),
+    excerpt: text("excerpt"),
     status: text("status", { enum: CLIPPING_STATUSES }).notNull().default("pending"),
     source: text("source", { enum: CLIPPING_SOURCES }).notNull(),
     clientId: text("client_id"),
+    // When enrichment was last requested or the status last changed: the sweep's "stuck for an
+    // hour". Not `updated_at`, which an edit to the note moves too.
+    statusChangedAt: timestamptz("status_changed_at").notNull().defaultNow(),
     // No default: the service stamps both from its clock, so tests control time and the list
     // cursor round-trips exactly.
     createdAt: timestamptz("created_at").notNull(),

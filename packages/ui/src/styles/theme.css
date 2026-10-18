@@ -201,3 +201,24 @@
   opacity: 0;
   animation: appear 1ms linear 150ms forwards;
 }
+
+/*
+ * The moving bar of an indeterminate progress bar: it sweeps across its track. Reduced motion
+ * leaves it parked at the start, since the 1 ms duration it would get makes a loop strobe.
+ */
+@keyframes progress-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+@utility progress-sweep {
+  animation: progress-sweep 1.5s var(--ease-standard) infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}

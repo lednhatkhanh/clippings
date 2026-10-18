@@ -1,4 +1,4 @@
-import type { Clipping } from "@clippings/shared";
+import type { Clipping, ClippingStatus } from "@clippings/shared";
 
 import { formatClippingDate } from "../format-date";
 import { getClippings } from "./service";
@@ -13,7 +13,7 @@ export interface ClippingRowData {
   dateLabel: string;
   /** ISO 8601, for the `<time>` element. */
   dateTime: string;
-  pending: boolean;
+  status: ClippingStatus;
 }
 
 export interface RowsPage {
@@ -37,7 +37,7 @@ export function toRow(clipping: Clipping, now: Date): ClippingRowData {
     domain: domainOf(clipping.url),
     dateLabel: formatClippingDate(clipping.createdAt, now),
     dateTime: clipping.createdAt,
-    pending: clipping.status === "pending",
+    status: clipping.status,
   };
 }
 
@@ -46,4 +46,10 @@ export async function loadRows(userId: string, cursor?: string): Promise<RowsPag
   const page = await getClippings().listClippings(userId, { cursor });
   const now = new Date();
   return { rows: page.items.map((clipping) => toRow(clipping, now)), nextCursor: page.nextCursor };
+}
+
+/** One of the user's clippings as a list row, or null when they have no such clipping. */
+export async function loadRow(userId: string, clippingId: string): Promise<ClippingRowData | null> {
+  const clipping = await getClippings().getClipping(userId, clippingId);
+  return clipping ? toRow(clipping, new Date()) : null;
 }

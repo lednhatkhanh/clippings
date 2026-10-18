@@ -2,14 +2,42 @@
 
 import { useState } from "react";
 import { GridList, GridListItem, GridListLoadMoreItem } from "react-aria-components";
+import useSWR from "swr";
 
-import { Button } from "@clippings/ui";
+import { Button, ProgressBar } from "@clippings/ui";
 
-import { loadMoreClippingsAction } from "../../app/(app)/actions";
+import { loadMoreClippingsAction, retryEnrichmentAction } from "../../app/(app)/actions";
 import type { ClippingRowData } from "../../lib/clippings/rows";
 import { Favicon } from "./favicon";
 
-function ClippingRow({ row }: { row: ClippingRowData }) {
+const POLL_EVERY_MS = 2000;
+
+async function fetchRow(url: string): Promise<ClippingRowData> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Couldn't load the clipping (${response.status})`);
+  return response.json();
+}
+
+function ClippingRow({ row: initialRow }: { row: ClippingRowData }) {
+  const [row, setRow] = useState(initialRow);
+  const [retrying, setRetrying] = useState(false);
+
+  // A pending row asks for itself until enrichment has finished, then shows the result in place.
+  useSWR(row.status === "pending" ? `/api/clippings/${row.id}` : null, fetchRow, {
+    refreshInterval: POLL_EVERY_MS,
+    onSuccess: setRow,
+  });
+
+  async function retry() {
+    setRetrying(true);
+    try {
+      const restarted = await retryEnrichmentAction(row.id);
+      if (restarted) setRow(restarted);
+    } finally {
+      setRetrying(false);
+    }
+  }
+
   return (
     <GridListItem
       id={row.id}
@@ -27,8 +55,21 @@ function ClippingRow({ row }: { row: ClippingRowData }) {
           <span className="flex flex-wrap gap-x-2 typescale-label-sm font-mono text-on-surface-variant">
             <span>{row.domain}</span>
             <time dateTime={row.dateTime}>{row.dateLabel}</time>
-            {row.pending ? <span>Reading the page…</span> : null}
           </span>
+          {row.status === "pending" ? (
+            <div className="flex flex-col gap-1 pt-1 @lg:max-w-xs">
+              <span className="typescale-label-sm text-on-surface-variant">Reading the page…</span>
+              <ProgressBar label="Reading the page" />
+            </div>
+          ) : null}
+          {row.status === "failed" ? (
+            <div className="flex flex-wrap items-center gap-x-3 typescale-body-sm text-on-surface-variant">
+              <span>Couldn&apos;t read this page. Your link and note are saved.</span>
+              <Button variant="text" onPress={retry} isPending={retrying}>
+                Retry
+              </Button>
+            </div>
+          ) : null}
         </div>
       </div>
     </GridListItem>

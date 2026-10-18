@@ -94,8 +94,19 @@ be pulled into a build, which is fine: the web app reads them only at runtime.
 | `GOOGLE_CLIENT_ID`     | the Google OAuth client             | same                                    |
 | `GOOGLE_CLIENT_SECRET` | the Google OAuth client             | same                                    |
 | `ALLOWED_EMAILS`       | comma-separated emails              | same                                    |
+| `QSTASH_TOKEN`         | the QStash token                    | same                                    |
+| `QSTASH_CURRENT_SIGNING_KEY` | QStash signing key            | same                                    |
+| `QSTASH_NEXT_SIGNING_KEY`    | QStash next signing key       | same                                    |
+| `ANTHROPIC_API_KEY`    | an Anthropic key (Haiku)            | same                                    |
+| `CRON_SECRET`          | `openssl rand -base64 32`           | a different value                       |
+| `VERCEL_AUTOMATION_BYPASS_SECRET` | none: production isn't protected | the project's "Protection Bypass for Automation" secret |
 
-QStash and Anthropic keys arrive with the issues that use them.
+Enrichment runs through QStash: saving publishes `{ clippingId }`, and QStash calls
+`/api/jobs/enrich` on `BETTER_AUTH_URL` with a signature the handler checks, so that variable must be
+the environment's public origin. The development alias is behind Vercel Authentication, which would
+block QStash; the bypass secret lets it through. A daily Vercel Cron (`vercel.json`, 04:00 UTC) calls
+`/api/cron/sweep` with `CRON_SECRET` as a bearer token and re-publishes clippings stuck in pending or
+failed for more than an hour. Vercel only runs crons on the production deployment.
 
 ### 4. Google OAuth client
 

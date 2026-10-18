@@ -10,6 +10,14 @@ Before a PR, run `pnpm format`, then `pnpm check:root` and `node scripts/run-che
 the same two, and the second runs lint, format, typecheck, test and build. Work is green only when
 both pass. `CLAUDE.md` and `docs/` are outside oxfmt.
 
+### Verifying your work
+
+Check what you can check yourself and ask the user only for what needs their accounts, real
+credentials or taste. Drive UI changes in the Browser pane (`preview_start`), run database code
+against Postgres, and `curl` routes; `docs/agents/verifying.md` has the local setup, including
+fakes for QStash and Anthropic and a sign-in without Google. Report what you saw, and name what you
+couldn't check; don't hand the user a checklist.
+
 ### Dependencies
 
 Versions live only in the `catalog:` of `pnpm-workspace.yaml` (`catalogMode: strict`); a package's
