@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: Deep, read-only review of risky changes in this repo. Use before merging anything touching auth, the database schema or migrations, per-user data access, the extension's permissions, or a shared package's public interface.
+description: "Use proactively before committing or opening a PR for any change that touches auth, the database schema or migrations, per-user data access, the extension's permissions, or a shared package's public interface. Deep, read-only review."
 tools: Read, Grep, Glob, Bash
 model: claude-opus-5-5
 effort: high

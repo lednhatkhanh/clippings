@@ -1,6 +1,6 @@
 ---
 name: scout
-description: Fast, read-only search of the Clippings repo. Use before a change to find files, symbols, usages and config, or to answer "where is X / how is Y wired up".
+description: "Use proactively when finding something takes more than a couple of searches: where a file, symbol, usage or config lives, or how a piece is wired up. Read-only and fast; returns path:line answers."
 tools: Read, Grep, Glob
 model: claude-haiku-5-5
 effort: low

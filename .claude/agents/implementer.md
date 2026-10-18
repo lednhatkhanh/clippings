@@ -1,6 +1,6 @@
 ---
 name: implementer
-description: Implements a planned, well-scoped change in this repo, with tests. Use once the approach is decided: features, fixes, refactors, test additions.
+description: "Use proactively once the approach is decided and the change is more than a few edits: features, fixes, refactors, tests. Run one per independent piece, in parallel. Implements the plan with tests; the caller keeps the design."
 model: claude-sonnet-5-5
 effort: high
 ---

@@ -1,6 +1,6 @@
 ---
 name: checker
-description: Runs the CI checks (format, root checks, lint, format:check, typecheck, test, build) and returns only the failures. Use after a change, before a PR, or to confirm a tree is green, so long check output stays out of the caller's context.
+description: "Use proactively after finishing a change and before every commit or PR: runs the CI checks (format, root checks, lint, format:check, typecheck, test, build) and returns only the failures, so check output stays out of the caller's context."
 tools: Bash, Read, Grep, Glob
 model: claude-haiku-5-5
 effort: low

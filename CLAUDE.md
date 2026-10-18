@@ -55,8 +55,10 @@ Secrets stay out of the repo: runtime secrets live in Vercel, deploy credentials
 - `.claude/settings.json` allows the repo's check and read-only git/gh commands and the dev loop
   (`agent-browser`, `curl` to `/_next/mcp`, the `next-devtools` MCP server), asks before
   migrations and `vercel`, and denies force-push, pushes to `production`, reading `.env*` files and
-  editing `packages/ui/src/generated/`. A hook formats each file you edit with oxfmt.
-- `/check` runs the three check commands above and fixes what fails.
+  editing `packages/ui/src/generated/`. A hook formats each file you edit with oxfmt, and
+  `.claude/hooks/remind-verifier.mjs` reminds you once per session to launch `verifier` after an
+  edit in `apps/web` or `packages/db`.
+- `/check` hands the three check commands above to the `checker` agent and fixes what fails.
 - `.claude/launch.json` defines the `web` dev server on port 3100; start it with `preview_start`.
 - `.mcp.json` adds `next-devtools` (the dev server's `/_next/mcp` as MCP tools). It runs through
   `pnpm dlx`, pinned: `npx` fails here on the root `devEngines` check.
