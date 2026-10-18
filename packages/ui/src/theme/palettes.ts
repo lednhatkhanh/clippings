@@ -1,7 +1,4 @@
-export const PALETTE_NAMES = ["olive", "ochre", "terracotta", "ink"] as const;
-export type PaletteName = (typeof PALETTE_NAMES)[number];
-
-export const DEFAULT_PALETTE: PaletteName = "olive";
+import type { PaletteName } from "@clippings/shared";
 
 export interface PaletteSeed {
   /** Source color the Tonal Spot scheme is built from. */

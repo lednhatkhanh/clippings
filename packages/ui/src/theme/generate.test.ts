@@ -296,6 +296,23 @@ describe("generateTheme", () => {
     );
   });
 
+  it("emits every palette's primary swatch from its standard scheme in one :root block", () => {
+    const theme = generateTheme();
+    const rules = parseRules(renderThemesCss(theme));
+    const swatches = findRule(rules, ":root");
+
+    for (const palette of PALETTES) {
+      const { light, dark } = theme.palettes[palette].schemes.standard;
+      expect(swatches.get(`--palette-${palette}-primary`)).toBe(
+        lightDark(light.roles.primary, dark.roles.primary),
+      );
+      expect(swatches.get(`--palette-${palette}-primary-container`)).toBe(
+        lightDark(light.roles["primary-container"], dark.roles["primary-container"]),
+      );
+    }
+    expect(swatches.size).toBe(PALETTES.length * 2);
+  });
+
   it("writes tokens.json with the same colors as the generated CSS", () => {
     const theme = generateTheme();
     const rules = parseRules(renderThemesCss(theme));

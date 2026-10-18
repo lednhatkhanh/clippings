@@ -9,7 +9,7 @@ import { getAuth } from "@/lib/auth/auth.ts";
 /** Starts Google sign-in. Also behind "Use another account": Google shows its chooser. */
 export async function signInWithGoogle() {
   const { url } = await getAuth().api.signInSocial({
-    body: { provider: "google", callbackURL: "/", errorCallbackURL: "/sign-in" },
+    body: { provider: "google", callbackURL: "/sign-in/complete", errorCallbackURL: "/sign-in" },
     headers: await headers(),
   });
   if (!url) throw new Error("Google sign-in did not return a URL");

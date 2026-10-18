@@ -97,10 +97,23 @@
   --color-on-tag-pink: var(--tag-pink-on-container);
   --color-tag-pink-dot: var(--tag-pink-dot);
 
+  /* Palette swatches for the settings page: `bg-palette-ochre`, `bg-palette-ochre-container` */
+  --color-palette-olive: var(--palette-olive-primary);
+  --color-palette-olive-container: var(--palette-olive-primary-container);
+  --color-palette-ochre: var(--palette-ochre-primary);
+  --color-palette-ochre-container: var(--palette-ochre-primary-container);
+  --color-palette-terracotta: var(--palette-terracotta-primary);
+  --color-palette-terracotta-container: var(--palette-terracotta-primary-container);
+  --color-palette-ink: var(--palette-ink-primary);
+  --color-palette-ink-container: var(--palette-ink-primary-container);
+
   --font-*: initial;
   --font-serif: var(--md-ref-typeface-brand, "Literata", Georgia, serif);
   --font-sans: var(--md-ref-typeface-plain, "Roboto Flex", system-ui, sans-serif);
   --font-mono: var(--md-ref-typeface-mono, "Roboto Mono", ui-monospace, monospace);
+
+  --spacing-row-block: var(--md-sys-density-row-block);
+  --spacing-row-gap: var(--md-sys-density-row-gap);
 
   --radius-*: initial;
   --radius-none: var(--md-sys-shape-corner-none);

@@ -211,6 +211,67 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
     expect(await fixture.service.getClipping(ana, clipping.id)).toBeNull();
   });
 
+  describe("exporting", () => {
+    it("exports exactly the user's own live clippings, newest first, with notes and no tags yet", async () => {
+      const ana = await fixture.createUser("ana");
+      const ben = await fixture.createUser("ben");
+      const { clipping: first } = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/first",
+        note: "read on the train",
+        source: "web",
+      });
+      fixture.advanceClock(1000);
+      const { clipping: removed } = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/removed",
+        source: "web",
+      });
+      fixture.advanceClock(1000);
+      const { clipping: last } = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/last",
+        source: "extension",
+      });
+      await fixture.service.saveClipping(ben, {
+        url: "https://example.com/bens",
+        note: "ben's note",
+        source: "web",
+      });
+      await fixture.service.deleteClipping(ana, removed.id);
+      fixture.advanceClock(5000);
+
+      const exported = await fixture.service.exportClippings(ana);
+
+      expect(exported.exportedAt).toBe("2026-10-01T09:00:07.000Z");
+      expect(exported.clippings).toEqual([
+        { ...last, tags: [] },
+        { ...first, tags: [] },
+      ]);
+      expect(exported.clippings[1]?.note).toBe("read on the train");
+    });
+
+    it("exports every clipping, not just a first page", async () => {
+      const ana = await fixture.createUser("ana");
+      for (let index = 0; index < 25; index++) {
+        fixture.advanceClock(1000);
+        await fixture.service.saveClipping(ana, {
+          url: `https://example.com/page-${index}`,
+          source: "web",
+        });
+      }
+
+      const exported = await fixture.service.exportClippings(ana);
+
+      expect(exported.clippings).toHaveLength(25);
+    });
+
+    it("exports an empty list for a user with no clippings", async () => {
+      const ana = await fixture.createUser("ana");
+
+      const exported = await fixture.service.exportClippings(ana);
+
+      expect(exported.clippings).toEqual([]);
+    });
+  });
+
   describe("deleting and restoring", () => {
     it("hides a deleted clipping from list and get, and restore brings it back as it was", async () => {
       const ana = await fixture.createUser("ana");

@@ -1,4 +1,16 @@
-// Shared by web and extension: DTO types and the URL normalizer.
+// Shared by web and extension: DTO types, appearance settings and the URL normalizer.
+export {
+  APPEARANCE_DEFAULTS,
+  APPEARANCE_KEYS,
+  APPEARANCE_VALUES,
+  DEFAULT_PALETTE,
+  isAppearanceValue,
+  PALETTE_NAMES,
+  pickAppearance,
+  type Appearance,
+  type AppearanceKey,
+  type PaletteName,
+} from "./appearance.ts";
 export {
   CLIPPING_SOURCES,
   CLIPPING_STATUSES,

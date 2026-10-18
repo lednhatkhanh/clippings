@@ -39,9 +39,9 @@ function ClippingRow({ row: initialRow }: { row: ClippingRowData }) {
       href={`/c/${row.id}`}
       className="@container state-layer block rounded-sm border-b border-outline-variant px-2 data-focus-visible:outline-solid"
     >
-      <div className="flex items-start gap-3 py-3 @lg:items-center">
+      <div className="flex items-start gap-3 py-row-block @lg:items-center">
         <Favicon url={row.url} />
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex min-w-0 flex-1 flex-col gap-row-gap">
           <span className="truncate typescale-clipping-title">{row.title}</span>
           <span className="flex flex-wrap gap-x-2 typescale-label-sm font-mono text-on-surface-variant">
             <span>{row.domain}</span>
