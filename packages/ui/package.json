@@ -20,6 +20,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@clippings/shared": "workspace:*",
     "@material/material-color-utilities": "catalog:",
     "cn": "catalog:",
     "react-aria-components": "catalog:"

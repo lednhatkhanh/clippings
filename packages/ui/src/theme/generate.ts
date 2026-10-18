@@ -12,12 +12,12 @@ import {
   sanitizeDegreesDouble,
 } from "@material/material-color-utilities";
 
+import { DEFAULT_PALETTE, PALETTE_NAMES, type PaletteName } from "@clippings/shared";
+
 import {
   CONTRAST_LEVELS,
   CONTRAST_NAMES,
-  DEFAULT_PALETTE,
   MODES,
-  PALETTE_NAMES,
   PALETTES,
   TAG_CHROMA,
   TAG_HUES,
@@ -25,7 +25,6 @@ import {
   TAG_TONES,
   type ContrastName,
   type Mode,
-  type PaletteName,
   type TagName,
 } from "./palettes.ts";
 
@@ -239,6 +238,22 @@ const rule = (selectors: string[], scheme: Record<Mode, SchemeColors>, indent = 
   ].join("\n");
 
 /**
+ * The theme CSS is scoped to the active `data-palette`, so a settings page can't read another
+ * palette's colors from it. This `:root` block holds each palette's primary and primary container
+ * (standard contrast), always available as `--palette-<name>-primary[-container]`.
+ */
+const swatchesRule = (theme: Theme): string => {
+  const lines = PALETTE_NAMES.flatMap((palette) => {
+    const { light, dark } = theme.palettes[palette].schemes.standard;
+    return (["primary", "primary-container"] as const).map(
+      (role) =>
+        `  --palette-${palette}-${role}: ${lightDark(light.roles[role], dark.roles[role])};`,
+    );
+  });
+  return [":root {", ...lines, "}"].join("\n");
+};
+
+/**
  * `themes.css`: every role and tag color as `light-dark(L, D)`, per palette and contrast level.
  * Mode comes from `color-scheme`. Without `data-contrast` the standard level applies, and
  * `prefers-contrast: more` raises that default to medium. An explicit `data-contrast` always wins.
@@ -279,6 +294,7 @@ export const renderThemesCss = (theme: Theme): string => {
     );
   }
 
+  blocks.push(swatchesRule(theme));
   blocks.push(`@media (prefers-contrast: more) {\n${raised.join("\n\n")}\n}`);
   return `${blocks.join("\n\n")}\n`;
 };

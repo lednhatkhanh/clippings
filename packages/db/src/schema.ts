@@ -1,7 +1,12 @@
 import { sql } from "drizzle-orm";
 import { boolean, check, index, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 
-import { CLIPPING_SOURCES, CLIPPING_STATUSES } from "@clippings/shared";
+import {
+  APPEARANCE_DEFAULTS,
+  APPEARANCE_VALUES,
+  CLIPPING_SOURCES,
+  CLIPPING_STATUSES,
+} from "@clippings/shared";
 
 /**
  * Every table in the database. This file is the source of truth: `drizzle-kit generate` turns a
@@ -111,5 +116,44 @@ export const clippings = pgTable(
     check("clippings_status_check", sql`${table.status} in (${inList(CLIPPING_STATUSES)})`),
     check("clippings_source_check", sql`${table.source} in (${inList(CLIPPING_SOURCES)})`),
     index("clippings_user_newest_idx").on(table.userId, table.createdAt.desc(), table.id.desc()),
+  ],
+);
+
+/** A user's appearance settings: one row per user, created the first time they change one. */
+export const userSettings = pgTable(
+  "user_settings",
+  {
+    userId: text("user_id")
+      .primaryKey()
+      .references(() => user.id, { onDelete: "cascade" }),
+    theme: text("theme", { enum: APPEARANCE_VALUES.theme })
+      .notNull()
+      .default(APPEARANCE_DEFAULTS.theme),
+    palette: text("palette", { enum: APPEARANCE_VALUES.palette })
+      .notNull()
+      .default(APPEARANCE_DEFAULTS.palette),
+    contrast: text("contrast", { enum: APPEARANCE_VALUES.contrast })
+      .notNull()
+      .default(APPEARANCE_DEFAULTS.contrast),
+    density: text("density", { enum: APPEARANCE_VALUES.density })
+      .notNull()
+      .default(APPEARANCE_DEFAULTS.density),
+    // No default: the service stamps it from its clock.
+    updatedAt: timestamptz("updated_at").notNull(),
+  },
+  (table) => [
+    check("user_settings_theme_check", sql`${table.theme} in (${inList(APPEARANCE_VALUES.theme)})`),
+    check(
+      "user_settings_palette_check",
+      sql`${table.palette} in (${inList(APPEARANCE_VALUES.palette)})`,
+    ),
+    check(
+      "user_settings_contrast_check",
+      sql`${table.contrast} in (${inList(APPEARANCE_VALUES.contrast)})`,
+    ),
+    check(
+      "user_settings_density_check",
+      sql`${table.density} in (${inList(APPEARANCE_VALUES.density)})`,
+    ),
   ],
 );

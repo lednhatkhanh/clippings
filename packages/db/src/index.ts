@@ -18,11 +18,18 @@ export {
   InvalidUrlError,
   NoteTooLongError,
   systemClock,
+  type ClippingsExport,
   type ClippingsPage,
   type ClippingsService,
   type EnrichmentOutcome,
+  type ExportedClipping,
   type ListClippingsInput,
   type SaveClippingInput,
   type SaveClippingResult,
   type UpdateClippingInput,
 } from "./clippings/service.ts";
+export {
+  createSettingsService,
+  InvalidSettingsError,
+  type SettingsService,
+} from "./settings/service.ts";

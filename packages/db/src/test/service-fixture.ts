@@ -11,6 +11,7 @@ import type {
 import { createClippingsService } from "../clippings/service.ts";
 import { migrate } from "../migrate.ts";
 import { createPool } from "../pool.ts";
+import { createSettingsService } from "../settings/service.ts";
 import { createTempDatabase, type TempDatabase } from "./temp-database.ts";
 
 /**
@@ -57,6 +58,7 @@ export async function createServiceFixture() {
 
   return {
     service: createClippingsService({ pool, jobs, clock, fetcher, summarizer }),
+    settings: createSettingsService({ pool, clock }),
     web,
     enrichmentRequests,
     /** Makes the publisher throw (or work again), the way an unreachable queue does. */
@@ -74,6 +76,10 @@ export async function createServiceFixture() {
         [id, `${id}@example.com`],
       );
       return id;
+    },
+    /** Deletes a user from Better Auth's `user` table, as account deletion does. */
+    deleteUser: async (id: string) => {
+      await pool.query(`delete from "user" where "id" = $1`, [id]);
     },
     close: async () => {
       await pool.end();

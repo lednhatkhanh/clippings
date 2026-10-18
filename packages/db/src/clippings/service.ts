@@ -41,6 +41,15 @@ export interface ClippingsPage {
   nextCursor: string | null;
 }
 
+/** A clipping as it appears in the user's data export. */
+export type ExportedClipping = Clipping & { tags: string[] };
+
+/** Everything the user has saved, for them to keep. */
+export interface ClippingsExport {
+  exportedAt: string;
+  clippings: ExportedClipping[];
+}
+
 export interface ClippingsServiceDeps {
   pool: pg.Pool;
   jobs: JobPublisher;
@@ -244,6 +253,24 @@ export function createClippingsService({
   }
 
   /**
+   * All of the user's live clippings with their notes, newest first and unpaged, stamped with the
+   * time of the export.
+   */
+  async function exportClippings(userId: string): Promise<ClippingsExport> {
+    const exportedAt = formatIsoUtc(clock.now());
+    const rows = await db
+      .select()
+      .from(clippings)
+      .where(and(eq(clippings.userId, userId), live))
+      .orderBy(desc(clippings.createdAt), desc(clippings.id));
+    return {
+      exportedAt,
+      // Tags fill in once the tags table lands (#11).
+      clippings: rows.map((row) => ({ ...toClipping(row), tags: [] })),
+    };
+  }
+
+  /**
    * Changes what the user wrote on their clipping. Returns it as it now stands, or null when the
    * user has no such clipping.
    */
@@ -436,6 +463,7 @@ export function createClippingsService({
   return {
     saveClipping,
     listClippings,
+    exportClippings,
     updateClipping,
     getClipping,
     deleteClipping,
