@@ -1,7 +1,9 @@
+import { constructNow, isValid, parseISO, subHours } from "date-fns";
 import { and, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import type pg from "pg";
 
 import {
+  formatIsoUtc,
   MAX_NOTE_LENGTH,
   parseWebUrl,
   type Clipping,
@@ -12,7 +14,7 @@ import { createDatabase } from "../database.ts";
 import { clippings } from "../schema.ts";
 import type { Clock, JobPublisher, PageFetcher, PageSummary, Summarizer } from "./ports.ts";
 
-export const systemClock: Clock = { now: () => new Date() };
+export const systemClock: Clock = { now: () => constructNow(undefined) };
 
 export interface SaveClippingInput {
   url: string;
@@ -87,24 +89,24 @@ const toClipping = (row: ClippingRow): Clipping => ({
   status: row.status,
   source: row.source,
   clientId: row.clientId,
-  createdAt: row.createdAt.toISOString(),
+  createdAt: formatIsoUtc(row.createdAt),
 });
 
 /** How long a clipping can sit pending or failed before the sweep requests it again. */
-const STUCK_AFTER_MS = 60 * 60 * 1000;
+const STUCK_AFTER_HOURS = 1;
 const SWEEP_BATCH_SIZE = 100;
 /**
  * How long a deleted clipping is kept before the purge removes it for good: far past the Undo
  * toast's 8 seconds, so a purge never races an Undo.
  */
-const PURGE_AFTER_MS = 24 * 60 * 60 * 1000;
+const PURGE_AFTER_HOURS = 24;
 const PURGE_BATCH_SIZE = 1000;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** A page boundary: the clipping the previous page ended on. Opaque to callers. */
 const encodeCursor = (row: ClippingRow) =>
-  Buffer.from(JSON.stringify({ at: row.createdAt.toISOString(), id: row.id })).toString(
+  Buffer.from(JSON.stringify({ at: formatIsoUtc(row.createdAt), id: row.id })).toString(
     "base64url",
   );
 
@@ -114,8 +116,8 @@ function decodeCursor(cursor: string): { at: Date; id: string } {
       at?: unknown;
       id?: unknown;
     };
-    const at = new Date(String(parsed.at));
-    if (!Number.isNaN(at.getTime()) && typeof parsed.id === "string" && UUID.test(parsed.id)) {
+    const at = parseISO(String(parsed.at));
+    if (isValid(at) && typeof parsed.id === "string" && UUID.test(parsed.id)) {
       return { at, id: parsed.id };
     }
   } catch {
@@ -385,7 +387,7 @@ export function createClippingsService({
    */
   async function sweepStuck(): Promise<string[]> {
     const now = clock.now();
-    const stuckBefore = new Date(now.getTime() - STUCK_AFTER_MS);
+    const stuckBefore = subHours(now, STUCK_AFTER_HOURS);
     const stuck = db
       .select({ id: clippings.id })
       .from(clippings)
@@ -416,7 +418,7 @@ export function createClippingsService({
    * many. A batch is capped like the sweep's, so a backlog drains over several days.
    */
   async function purgeDeleted(): Promise<number> {
-    const deletedBefore = new Date(clock.now().getTime() - PURGE_AFTER_MS);
+    const deletedBefore = subHours(clock.now(), PURGE_AFTER_HOURS);
     const expired = and(isNotNull(clippings.deletedAt), lt(clippings.deletedAt, deletedBefore));
     const batch = db
       .select({ id: clippings.id })

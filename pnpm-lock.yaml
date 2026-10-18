@@ -170,6 +170,9 @@ catalogs:
     '@ast-grep/cli':
       specifier: 0.51.0
       version: 0.51.0
+    '@date-fns/utc':
+      specifier: 2.1.1
+      version: 2.1.1
     '@material/material-color-utilities':
       specifier: 0.4.0
       version: 0.4.0
@@ -200,6 +203,9 @@ catalogs:
     cn:
       specifier: 0.4.0
       version: 0.4.0
+    date-fns:
+      specifier: 4.4.0
+      version: 4.4.0
     drizzle-kit:
       specifier: 1.0.0-rc.4
       version: 1.0.0-rc.4
@@ -262,6 +268,9 @@ importers:
       '@shadcn/lint':
         specifier: 'catalog:'
         version: 0.2.1
+      date-fns:
+        specifier: 'catalog:'
+        version: 4.4.0
       node:
         specifier: runtime:24.22.0
         version: runtime:24.22.0
@@ -307,12 +316,18 @@ importers:
       '@clippings/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@date-fns/utc':
+        specifier: 'catalog:'
+        version: 2.1.1
       '@upstash/qstash':
         specifier: 'catalog:'
         version: 2.12.0
       better-auth:
         specifier: 'catalog:'
         version: 1.7.10(@opentelemetry/api@1.9.1)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(pg@8.23.1)(zod@4.6.7))(next@16.4.1(@opentelemetry/api@1.9.1)(@types/node@24.19.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(pg@8.23.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.4(@opentelemetry/api@1.9.1)(@types/node@24.19.2)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)))
+      date-fns:
+        specifier: 'catalog:'
+        version: 4.4.0
       next:
         specifier: 'catalog:'
         version: 16.4.1(@opentelemetry/api@1.9.1)(@types/node@24.19.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -361,6 +376,9 @@ importers:
       '@clippings/shared':
         specifier: workspace:*
         version: link:../shared
+      date-fns:
+        specifier: 'catalog:'
+        version: 4.4.0
       drizzle-orm:
         specifier: 'catalog:'
         version: 1.0.0-rc.4(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(pg@8.23.1)(zod@4.6.7)
@@ -391,6 +409,13 @@ importers:
         version: 5.0.4(@opentelemetry/api@1.9.1)(@types/node@24.19.2)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
 
   packages/shared:
+    dependencies:
+      '@date-fns/utc':
+        specifier: 'catalog:'
+        version: 2.1.1
+      date-fns:
+        specifier: 'catalog:'
+        version: 4.4.0
     devDependencies:
       '@clippings/config':
         specifier: workspace:*
@@ -612,6 +637,9 @@ packages:
 
   '@better-fetch/fetch@1.3.2':
     resolution: {integrity: sha512-Gs7n99b5tqUC6cQAPbV0uED3IraHB6xQbHLQ/C3l7ZFafHScOx9pQ+DYmP5blbLFShVWLqxNUlI9wi4xU/X+ow==}
+
+  '@date-fns/utc@2.1.1':
+    resolution: {integrity: sha512-SlJDfG6RPeEX8wEVv6ZB3kak4MmbtyiI2qX/5zuKdordbrhB/iaJ58GVMZgJ6P1sJaM1gMgENFYYeg1JWrCFrA==}
 
   '@drizzle-team/brocli@0.12.1':
     resolution: {integrity: sha512-yHwomvolVafvUXhy5TdiJVkuNCxXn+bKOs2aWiWEQh/5YaV97Oa/abJz3dmx7lxgIUsUlS1Jl4mEfvJPo3YsVw==}
@@ -2213,6 +2241,9 @@ packages:
   csstype@3.2.3:
     resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
 
+  date-fns@4.4.0:
+    resolution: {integrity: sha512-+1UMbeh68lH1SegH83CGWwpb6OHHbpSgr3+s5Eww5M4CAgswBpoWS0AjTOfEJ33HiYKz1hdj/KTFprzXHmq/6w==}
+
   define-lazy-prop@2.0.0:
     resolution: {integrity: sha512-Ds09qNh8yw3khSjiJjiUInaGX9xlqZDY7JVryGxdxV7NPeuqQfplOpQ66yJFZut3jLa5zOwkXw1g9EI2uKh4Og==}
     engines: {node: '>=8'}
@@ -3550,6 +3581,8 @@ snapshots:
 
   '@better-fetch/fetch@1.3.2': {}
 
+  '@date-fns/utc@2.1.1': {}
+
   '@drizzle-team/brocli@0.12.1': {}
 
   '@emnapi/runtime@1.11.3':
@@ -4504,6 +4537,8 @@ snapshots:
   cssom@0.5.0: {}
 
   csstype@3.2.3: {}
+
+  date-fns@4.4.0: {}
 
   define-lazy-prop@2.0.0: {}
 

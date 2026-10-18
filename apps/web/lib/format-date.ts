@@ -1,33 +1,31 @@
-const LOCALE = "en-US";
-const MINUTE = 60_000;
-const HOUR = 60 * MINUTE;
-const DAY = 24 * HOUR;
+import { UTCDate } from "@date-fns/utc";
+import {
+  differenceInDays,
+  differenceInHours,
+  differenceInMinutes,
+  format,
+  isSameYear,
+  parseISO,
+} from "date-fns";
 
-const relative = new Intl.RelativeTimeFormat(LOCALE, { numeric: "auto" });
-
-const dateParts = (date: Date, options: Intl.DateTimeFormatOptions) =>
-  Object.fromEntries(
-    new Intl.DateTimeFormat(LOCALE, { timeZone: "UTC", ...options })
-      .formatToParts(date)
-      .map((part) => [part.type, part.value]),
-  );
+const relative = new Intl.RelativeTimeFormat("en-US", { numeric: "auto" });
 
 /** "3 Oct", or "3 Oct 2025" when the year isn't the current one. Days are UTC days. */
 export function formatAbsoluteDate(iso: string, now: Date): string {
-  const date = new Date(iso);
-  const { day, month, year } = dateParts(date, { day: "numeric", month: "short", year: "numeric" });
-  return date.getUTCFullYear() === now.getUTCFullYear()
-    ? `${day} ${month}`
-    : `${day} ${month} ${year}`;
+  const date = new UTCDate(parseISO(iso));
+  return format(date, isSameYear(date, new UTCDate(now)) ? "d MMM" : "d MMM yyyy");
 }
 
 /** "2 days ago" for the last seven days, the absolute date after that. */
 export function formatClippingDate(iso: string, now: Date): string {
-  const elapsed = now.getTime() - new Date(iso).getTime();
+  const date = parseISO(iso);
+  const minutes = differenceInMinutes(now, date);
+  const hours = differenceInHours(now, date);
+  const days = differenceInDays(now, date, { in: (value) => new UTCDate(value) });
 
-  if (elapsed < MINUTE) return "Just now";
-  if (elapsed < HOUR) return relative.format(-Math.floor(elapsed / MINUTE), "minute");
-  if (elapsed < DAY) return relative.format(-Math.floor(elapsed / HOUR), "hour");
-  if (elapsed < 7 * DAY) return relative.format(-Math.floor(elapsed / DAY), "day");
+  if (minutes < 1) return "Just now";
+  if (hours < 1) return relative.format(-minutes, "minute");
+  if (days < 1) return relative.format(-hours, "hour");
+  if (days < 7) return relative.format(-days, "day");
   return formatAbsoluteDate(iso, now);
 }

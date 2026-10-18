@@ -1,5 +1,6 @@
 "use server";
 
+import { constructNow } from "date-fns";
 import { revalidatePath } from "next/cache";
 
 import { getSession } from "@/lib/auth/session.ts";
@@ -48,7 +49,7 @@ export async function saveClippingAction(formData: FormData): Promise<SaveOutcom
       clippingId: clipping.id,
       url: clipping.url,
       note: clipping.note,
-      savedOn: formatAbsoluteDate(clipping.createdAt, new Date()),
+      savedOn: formatAbsoluteDate(clipping.createdAt, constructNow(undefined)),
     };
   } catch (error) {
     if (error instanceof NoteTooLongError) {
@@ -104,5 +105,5 @@ export async function loadMoreClippingsAction(cursor: string): Promise<RowsPage>
 export async function retryEnrichmentAction(clippingId: string): Promise<ClippingRowData | null> {
   const clipping = await getClippings().retryEnrichment(await requireUserId(), clippingId);
   revalidatePath("/");
-  return clipping ? toRow(clipping, new Date()) : null;
+  return clipping ? toRow(clipping, constructNow(undefined)) : null;
 }

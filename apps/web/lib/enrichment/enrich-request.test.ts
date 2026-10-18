@@ -1,6 +1,7 @@
 import { createHash, createHmac } from "node:crypto";
 
 import { Receiver } from "@upstash/qstash";
+import { constructNow, getUnixTime } from "date-fns";
 import { describe, expect, it } from "vitest";
 
 import { ENRICHMENT_RETRIES, handleEnrichRequest } from "./enrich-request.ts";
@@ -14,7 +15,7 @@ const base64url = (input: Buffer | string) => Buffer.from(input).toString("base6
 
 /** What QStash attaches to a delivery: an HS256 JWT over the URL and a hash of the body. */
 function sign(body: string, key: string): string {
-  const now = Math.floor(Date.now() / 1000);
+  const now = getUnixTime(constructNow(undefined));
   const header = base64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const claims = base64url(
     JSON.stringify({
