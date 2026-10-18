@@ -9,7 +9,7 @@ import {
 } from "react-aria-components";
 import type { TextFieldProps as AriaTextFieldProps } from "react-aria-components";
 
-import { cn } from "../cn";
+import { cn } from "../cn.ts";
 
 export interface TextFieldProps extends Omit<AriaTextFieldProps, "className" | "children"> {
   label: string;

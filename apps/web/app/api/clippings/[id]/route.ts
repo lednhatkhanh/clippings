@@ -1,5 +1,5 @@
-import { getSession } from "../../../../lib/auth/session";
-import { loadRow } from "../../../../lib/clippings/rows";
+import { getSession } from "@/lib/auth/session.ts";
+import { loadRow } from "@/lib/clippings/rows.ts";
 
 /** One of the signed-in user's clippings as a list row. A pending row polls this until it is read. */
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {

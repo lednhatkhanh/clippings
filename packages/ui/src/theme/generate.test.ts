@@ -1,7 +1,7 @@
 import { Hct, argbFromHex } from "@material/material-color-utilities";
 import { describe, expect, it } from "vitest";
 
-import { generateTheme, renderThemesCss, renderTokensJson } from "./generate";
+import { generateTheme, renderThemesCss, renderTokensJson } from "./generate.ts";
 
 // The system roles Material Theme Builder exports (49), spelled out here as the
 // spec rather than read back from the generator.

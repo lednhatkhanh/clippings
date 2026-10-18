@@ -2,12 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 
+import { getSession } from "@/lib/auth/session.ts";
+import { loadRows, toRow, type ClippingRowData, type RowsPage } from "@/lib/clippings/rows.ts";
+import { getClippings } from "@/lib/clippings/service.ts";
+import { formatAbsoluteDate } from "@/lib/format-date.ts";
 import { InvalidUrlError, NoteTooLongError } from "@clippings/db";
-
-import { getSession } from "../../lib/auth/session";
-import { loadRows, toRow, type ClippingRowData, type RowsPage } from "../../lib/clippings/rows";
-import { getClippings } from "../../lib/clippings/service";
-import { formatAbsoluteDate } from "../../lib/format-date";
 
 export type SaveOutcome =
   | { status: "created"; clippingId: string }

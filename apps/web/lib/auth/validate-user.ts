@@ -1,6 +1,6 @@
 import type { BetterAuthOptions } from "better-auth";
 
-import { isAllowlisted, normalizeEmail, parseAllowlist } from "./allowlist";
+import { isAllowlisted, normalizeEmail, parseAllowlist } from "./allowlist.ts";
 
 /** Holds the email of the last rejected account for the not-allowlisted page to name. */
 export const REJECTED_EMAIL_COOKIE = "clippings-rejected-email";

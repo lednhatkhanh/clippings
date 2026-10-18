@@ -1,4 +1,4 @@
-import { migrate } from "./migrate";
+import { migrate } from "./migrate.ts";
 
 const connectionString = process.env.DATABASE_URL_DIRECT;
 if (!connectionString) {

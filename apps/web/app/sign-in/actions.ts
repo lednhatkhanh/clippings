@@ -4,7 +4,7 @@ import type { Route } from "next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { getAuth } from "../../lib/auth/auth";
+import { getAuth } from "@/lib/auth/auth.ts";
 
 /** Starts Google sign-in. Also behind "Use another account": Google shows its chooser. */
 export async function signInWithGoogle() {

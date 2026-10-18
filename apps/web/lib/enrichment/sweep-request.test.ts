@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { handleSweepRequest } from "./sweep-request";
+import { handleSweepRequest } from "./sweep-request.ts";
 
 function setup(secret: string | undefined = "cron-secret") {
   const swept = ["a", "b"];

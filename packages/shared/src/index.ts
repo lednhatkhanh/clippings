@@ -6,5 +6,5 @@ export {
   type Clipping,
   type ClippingSource,
   type ClippingStatus,
-} from "./clipping";
-export { parseWebUrl, type WebUrl } from "./url";
+} from "./clipping.ts";
+export { parseWebUrl, type WebUrl } from "./url.ts";

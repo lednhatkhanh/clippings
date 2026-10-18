@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { renderSpringsCss } from "./springs";
+import { renderSpringsCss } from "./springs.ts";
 
 // Reads `--name: linear(0, ..., 1);` and `--name-duration: 220ms;` from generated CSS.
 const readSpring = (css: string, name: string) => {

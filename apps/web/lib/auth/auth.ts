@@ -2,10 +2,10 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 
+import { getDatabase } from "@/lib/db.ts";
 import { account, session, user, verification } from "@clippings/db";
 
-import { getDatabase } from "../db";
-import { createUserValidator } from "./validate-user";
+import { createUserValidator } from "./validate-user.ts";
 
 function requireEnv(name: string): string {
   const value = process.env[name];

@@ -1,4 +1,4 @@
-import { Illustration, ink, type IllustrationProps } from "./illustration";
+import { Illustration, ink, type IllustrationProps } from "./illustration.tsx";
 
 /** An open notebook with a single paper clip: the empty clippings list. */
 export function NotebookIllustration(props: IllustrationProps) {

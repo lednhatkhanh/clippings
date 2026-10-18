@@ -4,13 +4,13 @@ import { useState } from "react";
 import { GridList, GridListItem, GridListLoadMoreItem } from "react-aria-components";
 import useSWR from "swr";
 
+import { loadMoreClippingsAction, retryEnrichmentAction } from "@/app/(app)/actions.ts";
+import type { ClippingRowData } from "@/lib/clippings/rows.ts";
 import { Button, ProgressBar } from "@clippings/ui";
 
-import { loadMoreClippingsAction, retryEnrichmentAction } from "../../app/(app)/actions";
-import type { ClippingRowData } from "../../lib/clippings/rows";
-import { useHiddenClippings } from "./deleted-clippings";
-import { Favicon } from "./favicon";
-import { fetchRow, POLL_EVERY_MS } from "./fetch-row";
+import { useHiddenClippings } from "./deleted-clippings.tsx";
+import { Favicon } from "./favicon.tsx";
+import { fetchRow, POLL_EVERY_MS } from "./fetch-row.ts";
 
 function ClippingRow({ row: initialRow }: { row: ClippingRowData }) {
   const [row, setRow] = useState(initialRow);

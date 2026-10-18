@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { DEFAULT_PALETTE, NO_FLASH_SCRIPT } from "@clippings/ui";
 import tokens from "@clippings/ui/tokens.json";
 
-import { mono, sans, serif } from "./fonts";
+import { mono, sans, serif } from "./fonts.ts";
 
 import "./globals.css";
 

@@ -1,4 +1,4 @@
-import type { ClippingRowData } from "../../lib/clippings/rows";
+import type { ClippingRowData } from "@/lib/clippings/rows.ts";
 
 /** How often a pending clipping asks whether enrichment has finished. */
 export const POLL_EVERY_MS = 2000;

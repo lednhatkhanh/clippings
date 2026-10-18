@@ -1,7 +1,7 @@
+import { formatClippingDate } from "@/lib/format-date.ts";
 import type { Clipping, ClippingStatus } from "@clippings/shared";
 
-import { formatClippingDate } from "../format-date";
-import { getClippings } from "./service";
+import { getClippings } from "./service.ts";
 
 /** What one row of the list needs, with dates already worded so rows render the same anywhere. */
 export interface ClippingRowData {

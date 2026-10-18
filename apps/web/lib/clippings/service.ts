@@ -1,9 +1,8 @@
+import { getPool } from "@/lib/db.ts";
+import { createJobPublisher } from "@/lib/enrichment/job-publisher.ts";
+import { createPageFetcher } from "@/lib/enrichment/page-fetcher.ts";
+import { createSummarizer } from "@/lib/enrichment/summarizer.ts";
 import { createClippingsService, systemClock, type ClippingsService } from "@clippings/db";
-
-import { getPool } from "../db";
-import { createJobPublisher } from "../enrichment/job-publisher";
-import { createPageFetcher } from "../enrichment/page-fetcher";
-import { createSummarizer } from "../enrichment/summarizer";
 
 let service: ClippingsService | undefined;
 

@@ -8,9 +8,9 @@ import {
   type ClippingSource,
 } from "@clippings/shared";
 
-import { createDatabase } from "../database";
-import { clippings } from "../schema";
-import type { Clock, JobPublisher, PageFetcher, PageSummary, Summarizer } from "./ports";
+import { createDatabase } from "../database.ts";
+import { clippings } from "../schema.ts";
+import type { Clock, JobPublisher, PageFetcher, PageSummary, Summarizer } from "./ports.ts";
 
 export const systemClock: Clock = { now: () => new Date() };
 

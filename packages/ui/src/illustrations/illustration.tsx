@@ -1,6 +1,6 @@
 import type { ComponentProps, ReactNode } from "react";
 
-import { cn } from "../cn";
+import { cn } from "../cn.ts";
 
 export type IllustrationProps = Omit<ComponentProps<"svg">, "children" | "viewBox">;
 

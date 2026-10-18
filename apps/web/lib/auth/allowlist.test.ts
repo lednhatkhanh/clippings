@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isAllowlisted, parseAllowlist } from "./allowlist";
+import { isAllowlisted, parseAllowlist } from "./allowlist.ts";
 
 describe("parseAllowlist", () => {
   it("splits on commas and whitespace, lowercases and trims", () => {

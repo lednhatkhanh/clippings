@@ -1,10 +1,10 @@
 import { redirect, unstable_rethrow } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
 
-import { AppShell } from "../../components/app-shell";
-import { LoadError } from "../../components/load-error";
-import { AppProviders } from "../../components/providers";
-import { getSession } from "../../lib/auth/session";
+import { AppShell } from "@/components/app-shell.tsx";
+import { LoadError } from "@/components/load-error.tsx";
+import { AppProviders } from "@/components/providers.tsx";
+import { getSession } from "@/lib/auth/session.ts";
 
 async function SessionGate({ children }: { children: ReactNode }) {
   let session: Awaited<ReturnType<typeof getSession>>;

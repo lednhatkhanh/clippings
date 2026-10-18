@@ -1,18 +1,17 @@
 import { notFound, redirect, unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 
+import { DeleteClippingButton } from "@/components/clippings/delete-clipping-button.tsx";
+import { EnrichmentStatus } from "@/components/clippings/enrichment-status.tsx";
+import { Favicon } from "@/components/clippings/favicon.tsx";
+import { NoteEditor } from "@/components/clippings/note-editor.tsx";
+import { LoadError } from "@/components/load-error.tsx";
+import { getSession } from "@/lib/auth/session.ts";
+import { domainOf } from "@/lib/clippings/rows.ts";
+import { getClippings } from "@/lib/clippings/service.ts";
+import { formatAbsoluteDate } from "@/lib/format-date.ts";
 import type { Clipping, ClippingSource, ClippingStatus } from "@clippings/shared";
 import { Disclosure, Icon, LinkButton } from "@clippings/ui";
-
-import { DeleteClippingButton } from "../../../../components/clippings/delete-clipping-button";
-import { EnrichmentStatus } from "../../../../components/clippings/enrichment-status";
-import { Favicon } from "../../../../components/clippings/favicon";
-import { NoteEditor } from "../../../../components/clippings/note-editor";
-import { LoadError } from "../../../../components/load-error";
-import { getSession } from "../../../../lib/auth/session";
-import { domainOf } from "../../../../lib/clippings/rows";
-import { getClippings } from "../../../../lib/clippings/service";
-import { formatAbsoluteDate } from "../../../../lib/format-date";
 
 const SOURCE_LABELS: Record<ClippingSource, string> = {
   web: "Web",

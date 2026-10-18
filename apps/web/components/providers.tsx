@@ -7,7 +7,7 @@ import { RouterProvider } from "react-aria-components";
 
 import { ToastRegion } from "@clippings/ui";
 
-import { DeletedClippingsProvider } from "./clippings/deleted-clippings";
+import { DeletedClippingsProvider } from "./clippings/deleted-clippings.tsx";
 
 /**
  * What every signed-in page shares: React Aria links navigate through the Next.js router, deletes

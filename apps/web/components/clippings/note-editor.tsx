@@ -2,10 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { updateClippingAction } from "@/app/(app)/actions.ts";
 import { MAX_NOTE_LENGTH } from "@clippings/shared";
 import { TextField } from "@clippings/ui";
-
-import { updateClippingAction } from "../../app/(app)/actions";
 
 /** Typing pauses this long before the note is saved; leaving the field saves at once. */
 const AUTOSAVE_AFTER_MS = 400;

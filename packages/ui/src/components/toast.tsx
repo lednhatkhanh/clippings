@@ -9,7 +9,7 @@ import {
   UNSTABLE_ToastRegion as AriaToastRegion,
 } from "react-aria-components";
 
-import { Icon } from "../icons/icon";
+import { Icon } from "../icons/icon.tsx";
 
 // React Aria's Toast is still `UNSTABLE_`: only this file touches it, so an API change lands here.
 

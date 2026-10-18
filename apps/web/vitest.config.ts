@@ -1,6 +1,8 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  // The `@/` alias from tsconfig.json.
+  resolve: { tsconfigPaths: true },
   test: {
     // Every package's Vitest shares one module cache in the root node_modules and clears it on
     // start after a lockfile change. Turbo starts them together, so one clear can hit another's

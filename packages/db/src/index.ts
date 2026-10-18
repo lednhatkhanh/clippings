@@ -1,8 +1,8 @@
 // Schema, migrations and the Clippings service live here (server-only).
 // The migration runner is not exported from here: it is a deploy-time tool (`pnpm --filter @clippings/db migrate`).
-export { createDatabase, type Database } from "./database";
-export { createPool } from "./pool";
-export { account, session, user, verification } from "./schema";
+export { createDatabase, type Database } from "./database.ts";
+export { createPool } from "./pool.ts";
+export { account, session, user, verification } from "./schema.ts";
 export type {
   Clock,
   Embedder,
@@ -11,7 +11,7 @@ export type {
   PageFetcher,
   PageSummary,
   Summarizer,
-} from "./clippings/ports";
+} from "./clippings/ports.ts";
 export {
   createClippingsService,
   InvalidCursorError,
@@ -25,4 +25,4 @@ export {
   type SaveClippingInput,
   type SaveClippingResult,
   type UpdateClippingInput,
-} from "./clippings/service";
+} from "./clippings/service.ts";

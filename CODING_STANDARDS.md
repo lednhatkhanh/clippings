@@ -7,6 +7,11 @@ type-aware) and types (`tsc`); this file holds what none of them says.
 
 - `erasableSyntaxOnly` is on: use unions and `as const` objects where you would reach for `enum`,
   `namespace` or constructor parameter properties.
+- Relative imports name the file with its `.ts` or `.tsx` extension (`allowImportingTsExtensions`);
+  `import/extensions` enforces it. Packages (`@clippings/ui`) and CSS keep their usual specifiers.
+- In `apps/web`, reach a file outside the current directory with the `@/` alias for the app root
+  (`@/lib/auth/session.ts`) instead of `../`; `import/no-relative-parent-imports` enforces it.
+  Siblings stay `./`.
 - TypeScript 7 is the native compiler, so there is no JS compiler API to import.
 - Workspace packages are consumed as source (their `exports` point at `src/`): importing one needs
   no build step, and a new export is added to that package's `src/index.ts`.

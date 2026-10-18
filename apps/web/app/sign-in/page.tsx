@@ -3,12 +3,12 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
 
+import { AuthCard } from "@/components/auth-card.tsx";
+import { getSession } from "@/lib/auth/session.ts";
+import { REJECTED_EMAIL_COOKIE, NOT_ALLOWLISTED } from "@/lib/auth/validate-user.ts";
 import { ClippingsStackIllustration, LetterboxIllustration } from "@clippings/ui";
 
-import { AuthCard } from "../../components/auth-card";
-import { getSession } from "../../lib/auth/session";
-import { REJECTED_EMAIL_COOKIE, NOT_ALLOWLISTED } from "../../lib/auth/validate-user";
-import { signInWithGoogle } from "./actions";
+import { signInWithGoogle } from "./actions.ts";
 
 export const metadata: Metadata = { title: "Sign in · Clippings" };
 

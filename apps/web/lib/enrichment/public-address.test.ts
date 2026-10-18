@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isPublicAddress } from "./public-address";
+import { isPublicAddress } from "./public-address.ts";
 
 describe("isPublicAddress", () => {
   it("accepts addresses on the public internet", () => {

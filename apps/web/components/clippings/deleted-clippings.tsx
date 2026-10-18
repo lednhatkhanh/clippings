@@ -2,9 +2,8 @@
 
 import { createContext, use, useState, type ReactNode } from "react";
 
+import { deleteClippingAction, restoreClippingAction } from "@/app/(app)/actions.ts";
 import { toasts } from "@clippings/ui";
-
-import { deleteClippingAction, restoreClippingAction } from "../../app/(app)/actions";
 
 interface DeletedClippings {
   /** Clippings deleted in this tab, hidden before the server has confirmed. */

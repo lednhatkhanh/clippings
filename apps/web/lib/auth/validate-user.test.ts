@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { REJECTED_EMAIL_COOKIE, createUserValidator } from "./validate-user";
+import { REJECTED_EMAIL_COOKIE, createUserValidator } from "./validate-user.ts";
 
 function setup(allowed: string) {
   const setCookie = vi.fn();

@@ -1,7 +1,7 @@
 import type { ComponentProps } from "react";
 
-import { cn } from "../cn";
-import type { IconName } from "./icon-names";
+import { cn } from "../cn.ts";
+import type { IconName } from "./icon-names.ts";
 
 export interface IconProps extends Omit<ComponentProps<"span">, "children"> {
   name: IconName;

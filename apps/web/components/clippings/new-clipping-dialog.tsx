@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useFormStatus } from "react-dom";
 
+import { saveClippingAction, updateClippingAction, type SaveOutcome } from "@/app/(app)/actions.ts";
 import { MAX_NOTE_LENGTH } from "@clippings/shared";
 import {
   Button,
@@ -15,12 +16,7 @@ import {
   TextField,
 } from "@clippings/ui";
 
-import {
-  saveClippingAction,
-  updateClippingAction,
-  type SaveOutcome,
-} from "../../app/(app)/actions";
-import { useShowClipping } from "./deleted-clippings";
+import { useShowClipping } from "./deleted-clippings.tsx";
 
 function SubmitButton({ children }: { children: string }) {
   const { pending } = useFormStatus();

@@ -1,4 +1,4 @@
-import { Illustration, ink, type IllustrationProps } from "./illustration";
+import { Illustration, ink, type IllustrationProps } from "./illustration.tsx";
 
 /** A small stack of pinned clippings: the sign-in page. */
 export function ClippingsStackIllustration(props: IllustrationProps) {

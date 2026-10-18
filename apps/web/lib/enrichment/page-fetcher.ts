@@ -5,8 +5,8 @@ import { isIP } from "node:net";
 
 import type { PageFetcher } from "@clippings/db";
 
-import { extractPage } from "./html-text";
-import { isPublicAddress } from "./public-address";
+import { extractPage } from "./html-text.ts";
+import { isPublicAddress } from "./public-address.ts";
 
 const MAX_BYTES = 2_000_000;
 // For the whole fetch, redirects included. With the summarizer's own limit it stays well inside

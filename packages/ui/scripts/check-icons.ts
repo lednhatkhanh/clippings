@@ -6,7 +6,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { ICON_NAMES } from "../src/icons/icon-names";
+import { ICON_NAMES } from "../src/icons/icon-names.ts";
 
 const uiRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = join(uiRoot, "..", "..");
