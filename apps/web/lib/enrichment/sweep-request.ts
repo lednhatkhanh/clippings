@@ -5,7 +5,7 @@ import type { ClippingsService } from "@clippings/db";
 export interface SweepRequestDeps {
   /** `CRON_SECRET`. Vercel sends it as a bearer token with each cron call. */
   secret: string | undefined;
-  service: Pick<ClippingsService, "sweepStuck">;
+  service: Pick<ClippingsService, "sweepStuck" | "purgeDeleted">;
 }
 
 function isAuthorized(authorization: string | null, secret: string | undefined): boolean {
@@ -15,7 +15,10 @@ function isAuthorized(authorization: string | null, secret: string | undefined):
   return given.length === expected.length && timingSafeEqual(given, expected);
 }
 
-/** The daily cron: requests enrichment again for clippings stuck in pending or failed. */
+/**
+ * The daily cron: requests enrichment again for clippings stuck in pending or failed, and removes
+ * clippings deleted more than a day ago.
+ */
 export async function handleSweepRequest(
   request: Request,
   { secret, service }: SweepRequestDeps,
@@ -24,5 +27,6 @@ export async function handleSweepRequest(
     return new Response("Unauthorized", { status: 401 });
   }
   const requested = await service.sweepStuck();
-  return Response.json({ requested: requested.length });
+  const purged = await service.purgeDeleted();
+  return Response.json({ requested: requested.length, purged });
 }

@@ -291,6 +291,55 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
     });
   });
 
+  describe("purging deleted clippings", () => {
+    const DAY = 24 * 60 * 60 * 1000;
+
+    it("removes clippings deleted more than a day ago, leaving recent deletes restorable and live ones alone", async () => {
+      const ana = await fixture.createUser("ana");
+      const save = async (name: string) =>
+        (
+          await fixture.service.saveClipping(ana, {
+            url: `https://example.com/${name}`,
+            source: "web",
+          })
+        ).clipping;
+      const live = await save("live");
+      const deletedOld = await save("deleted-old");
+      await fixture.service.deleteClipping(ana, deletedOld.id);
+      fixture.advanceClock(DAY - 1000);
+      const deletedRecent = await save("deleted-recent");
+      await fixture.service.deleteClipping(ana, deletedRecent.id);
+      fixture.advanceClock(2000);
+
+      expect(await fixture.service.purgeDeleted()).toBe(1);
+
+      expect(await fixture.service.restoreClipping(ana, deletedOld.id)).toBe(false);
+      expect(await fixture.service.restoreClipping(ana, deletedRecent.id)).toBe(true);
+      const page = await fixture.service.listClippings(ana, {});
+      expect(page.items.map((item) => item.id)).toEqual([deletedRecent.id, live.id]);
+      expect(await fixture.service.purgeDeleted()).toBe(0);
+    });
+
+    it("lets the purged clipping's URL be saved again as a new clipping", async () => {
+      const ana = await fixture.createUser("ana");
+      const { clipping } = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/essay",
+        source: "web",
+      });
+      await fixture.service.deleteClipping(ana, clipping.id);
+      fixture.advanceClock(DAY + 1);
+      await fixture.service.purgeDeleted();
+
+      const again = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/essay",
+        source: "web",
+      });
+
+      expect(again.status).toBe("created");
+      expect(again.clipping.id).not.toBe(clipping.id);
+    });
+  });
+
   it("stores a bare domain with its scheme, so the clipping links to the page", async () => {
     const ana = await fixture.createUser("ana");
 
