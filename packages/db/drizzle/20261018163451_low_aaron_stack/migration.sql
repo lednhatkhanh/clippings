@@ -1,0 +1,3 @@
+ALTER TABLE "clippings" ADD COLUMN "search_tsv" tsvector GENERATED ALWAYS AS (setweight(to_tsvector('simple', "clippings"."title"), 'A') || setweight(to_tsvector('simple', "clippings"."note"), 'B') || setweight(to_tsvector('simple', coalesce("clippings"."excerpt", '')), 'C')) STORED;--> statement-breakpoint
+CREATE INDEX "clippings_search_tsv_idx" ON "clippings" USING gin ("search_tsv");--> statement-breakpoint
+CREATE INDEX "clippings_title_trgm_idx" ON "clippings" USING gin ("title" gin_trgm_ops);

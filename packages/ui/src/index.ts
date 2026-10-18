@@ -13,6 +13,12 @@ export {
   type LinkButtonProps,
 } from "./components/button.tsx";
 export { Disclosure, type DisclosureProps } from "./components/disclosure.tsx";
+export {
+  FilterChip,
+  FilterChips,
+  type FilterChipProps,
+  type FilterChipsProps,
+} from "./components/filter-chips.tsx";
 export { Dialog, DialogTrigger, Heading, Modal } from "./components/modal.tsx";
 export { ProgressBar, type ProgressBarProps } from "./components/progress-bar.tsx";
 export {
@@ -31,6 +37,7 @@ export {
   type TabProps,
   type TabsProps,
 } from "./components/tabs.tsx";
+export { SearchField, type SearchFieldProps } from "./components/search-field.tsx";
 export { TextField, type TextFieldProps } from "./components/text-field.tsx";
 export { ToastRegion, toasts, type ToastMessage } from "./components/toast.tsx";
 export { cn } from "./cn.ts";

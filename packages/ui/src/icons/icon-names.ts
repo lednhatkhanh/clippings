@@ -15,6 +15,7 @@ export const ICON_NAMES = [
   "language",
   "logout",
   "open_in_new",
+  "search",
   "sell",
   "settings",
 ] as const;
