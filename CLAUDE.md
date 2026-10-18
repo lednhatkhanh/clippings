@@ -65,6 +65,13 @@ Secrets stay out of the repo: runtime secrets live in Vercel, deploy credentials
 - `.claude/skills/` is vendored and pinned by `skills-lock.json`: change a skill upstream, not here.
 - Personal overrides go in `.claude/settings.local.json`, which is gitignored.
 
+### Code search
+
+Find code by its structure with ast-grep (`ast-grep outline` for what a file defines,
+`ast-grep run -p` for calls, imports, JSX and definitions), and text with Grep: strings, comments,
+config and docs. `docs/agents/code-search.md` has tested commands for this repo, including
+rewrites.
+
 ### Sub-agents
 
 The main session runs on Opus 5.5 (`model` in `.claude/settings.json`) and keeps the judgement: the

@@ -11,7 +11,9 @@ You are a principal engineer reviewing a change. You read and run read-only comm
 
 ## What to check
 
-Apply every rule below to the diff, plus `CODING_STANDARDS.md`.
+Apply every rule below to the diff, plus `CODING_STANDARDS.md`. Find the callers of what the
+diff changes, and the queries it adds, with `ast-grep run -p` (`docs/agents/code-search.md`):
+a text search misses a call split across lines.
 
 - **User scoping**: every query that reads or writes user data filters by the session's user id.
   A row reachable by another user's id is a blocker.

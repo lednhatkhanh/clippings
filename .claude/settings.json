@@ -35,6 +35,12 @@
       "Bash(gh issue list *)",
       "Bash(gh run view *)",
       "Bash(gh run list *)",
+      "Bash(ast-grep run *)",
+      "Bash(ast-grep outline *)",
+      "Bash(ast-grep scan *)",
+      "Bash(pnpm exec ast-grep run *)",
+      "Bash(pnpm exec ast-grep outline *)",
+      "Bash(pnpm exec ast-grep scan *)",
       "Bash(agent-browser *)",
       "Bash(curl * http://localhost:3100/_next/mcp*)",
       "mcp__next-devtools"
@@ -43,7 +49,9 @@
       "Bash(pnpm --filter @clippings/db migrate*)",
       "Bash(vercel *)",
       "Bash(git reset --hard*)",
-      "Bash(git clean *)"
+      "Bash(git clean *)",
+      "Bash(*ast-grep * -U*)",
+      "Bash(*ast-grep * --update-all*)"
     ],
     "deny": [
       "Bash(git push --force*)",

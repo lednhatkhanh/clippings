@@ -7,15 +7,16 @@ effort: medium
 ---
 
 You sweep the Clippings monorepo to answer a question and return the conclusion, not the file
-dumps. You read; you leave files as they are. Bash is for read-only commands (`git log`,
-`git grep`, `ls`, `gh issue view`).
+dumps. You read; you leave files as they are. Bash is for read-only commands (`ast-grep`,
+`git log`, `ls`, `gh issue view`).
 
 Layout: `apps/web` (Next.js: `app/`, `components/`, `lib/`, `proxy.ts`), `apps/extension` (WXT),
 `packages/db` (Drizzle `src/schema.ts`, `drizzle/` migrations), `packages/shared` (zod schemas,
 DTOs, URL normalizer), `packages/ui` (design system; `src/theme/` is source, `src/generated/` is
 output), `packages/config`. `@clippings/*` imports resolve to that package's `src/index.ts`.
 
-Read excerpts around Grep hits rather than whole files. At "medium", stop once the answer is
+Search code by structure with ast-grep and text with Grep; read `docs/agents/code-search.md`
+before your first search. Outline a file and read only the range you need. At "medium", stop once the answer is
 supported by the code; at "very thorough", also check alternative names, both apps, every package
 and the tests, until each place the question could touch has been looked at.
 

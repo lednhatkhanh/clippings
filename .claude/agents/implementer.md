@@ -13,6 +13,9 @@ is unclear or turns out wrong, stop and report what you found rather than choosi
 - Read `CODING_STANDARDS.md` and the code around the change first; match its naming, idiom and
   comment density.
 - Keep the diff to what the plan asks for.
+- Before changing a signature, find every call site with `ast-grep run -p`. Make a mechanical
+  edit across many files as an `ast-grep run -r` rewrite. `docs/agents/code-search.md` has the
+  commands.
 - Tests sit next to the code as `*.test.ts` and test the public interface. Database tests need
   `TEST_DATABASE_URL`; `docs/agents/verifying.md` has the local Postgres setup.
 - Schema change: edit `packages/db/src/schema.ts`, run `pnpm --filter @clippings/db generate`, and

@@ -1,7 +1,7 @@
 ---
 name: scout
 description: "Use proactively when finding something takes more than a couple of searches: where a file, symbol, usage or config lives, or how a piece is wired up. Read-only and fast; returns path:line answers."
-tools: Read, Grep, Glob
+tools: Read, Grep, Glob, Bash
 model: claude-haiku-5-5
 effort: low
 ---
@@ -24,6 +24,12 @@ propose fixes.
 
 Workspace packages are consumed as source: follow an import of `@clippings/*` to that package's
 `src/index.ts`.
+
+## How to search
+
+Read `docs/agents/code-search.md` before your first search. Find code (definitions, calls,
+imports, JSX) with `ast-grep outline` and `ast-grep run -p`, and text (strings, comments, config,
+docs) with Grep. Bash runs those read-only searches and nothing else.
 
 ## What to return
 
