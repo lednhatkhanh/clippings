@@ -1,13 +1,13 @@
 import { redirect, unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 
-import { ClippingList } from "../../components/clippings/clipping-list";
-import { EmptyState } from "../../components/clippings/empty-state";
-import { ListSkeleton } from "../../components/clippings/list-skeleton";
-import { NewClippingDialog } from "../../components/clippings/new-clipping-dialog";
-import { LoadError } from "../../components/load-error";
-import { getSession } from "../../lib/auth/session";
-import { loadRows } from "../../lib/clippings/rows";
+import { ClippingList } from "@/components/clippings/clipping-list.tsx";
+import { EmptyState } from "@/components/clippings/empty-state.tsx";
+import { ListSkeleton } from "@/components/clippings/list-skeleton.tsx";
+import { NewClippingDialog } from "@/components/clippings/new-clipping-dialog.tsx";
+import { LoadError } from "@/components/load-error.tsx";
+import { getSession } from "@/lib/auth/session.ts";
+import { loadRows } from "@/lib/clippings/rows.ts";
 
 async function Clippings() {
   const session = await getSession();

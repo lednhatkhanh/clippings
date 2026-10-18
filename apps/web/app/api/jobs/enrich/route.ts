@@ -1,7 +1,7 @@
 import { Receiver } from "@upstash/qstash";
 
-import { getClippings } from "../../../../lib/clippings/service";
-import { handleEnrichRequest } from "../../../../lib/enrichment/enrich-request";
+import { getClippings } from "@/lib/clippings/service.ts";
+import { handleEnrichRequest } from "@/lib/enrichment/enrich-request.ts";
 
 // Reading a page and asking Haiku about it can take a while.
 export const maxDuration = 60;

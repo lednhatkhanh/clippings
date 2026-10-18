@@ -8,9 +8,9 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { generateTheme, renderThemesCss, renderTokensJson } from "../src/theme/generate";
-import { renderSpringsCss } from "../src/theme/springs";
-import { renderTypescaleCss } from "../src/tokens/typescale-css";
+import { generateTheme, renderThemesCss, renderTokensJson } from "../src/theme/generate.ts";
+import { renderSpringsCss } from "../src/theme/springs.ts";
+import { renderTypescaleCss } from "../src/tokens/typescale-css.ts";
 
 const outDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "generated");
 const theme = generateTheme();

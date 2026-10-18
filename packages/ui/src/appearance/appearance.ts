@@ -1,4 +1,4 @@
-import { DEFAULT_PALETTE, PALETTE_NAMES } from "../theme/palettes";
+import { DEFAULT_PALETTE, PALETTE_NAMES } from "../theme/palettes.ts";
 
 /**
  * Appearance settings that live on `<html>` as data attributes. `system` means "no attribute":

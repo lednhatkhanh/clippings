@@ -8,8 +8,8 @@ import {
   Heading,
 } from "react-aria-components";
 
-import { cn } from "../cn";
-import { Icon } from "../icons/icon";
+import { cn } from "../cn.ts";
+import { Icon } from "../icons/icon.tsx";
 
 export interface DisclosureProps {
   /** The trigger's text. */

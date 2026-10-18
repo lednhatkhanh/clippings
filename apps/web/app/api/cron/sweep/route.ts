@@ -1,7 +1,7 @@
 import { connection } from "next/server";
 
-import { getClippings } from "../../../../lib/clippings/service";
-import { handleSweepRequest } from "../../../../lib/enrichment/sweep-request";
+import { getClippings } from "@/lib/clippings/service.ts";
+import { handleSweepRequest } from "@/lib/enrichment/sweep-request.ts";
 
 export const maxDuration = 60;
 

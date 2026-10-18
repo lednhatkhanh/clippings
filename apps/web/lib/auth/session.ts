@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { cache } from "react";
 
-import { getAuth } from "./auth";
+import { getAuth } from "./auth.ts";
 
 /**
  * The signed-in session, or null. Reads request headers, so call it inside a Suspense boundary.

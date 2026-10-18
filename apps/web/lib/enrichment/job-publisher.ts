@@ -2,7 +2,7 @@ import { Client } from "@upstash/qstash";
 
 import type { JobPublisher } from "@clippings/db";
 
-import { ENRICHMENT_RETRIES } from "./enrich-request";
+import { ENRICHMENT_RETRIES } from "./enrich-request.ts";
 
 export const ENRICH_PATH = "/api/jobs/enrich";
 

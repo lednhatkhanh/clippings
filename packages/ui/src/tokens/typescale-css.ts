@@ -1,4 +1,4 @@
-import { TYPESCALE_NAMES, TYPESCALE_ROLES, type TypescaleName } from "./typescale";
+import { TYPESCALE_NAMES, TYPESCALE_ROLES, type TypescaleName } from "./typescale.ts";
 
 const rem = (px: number) => `${px / 16}rem`;
 const prop = (name: TypescaleName, part: string) => `--md-sys-typescale-${name}-${part}`;

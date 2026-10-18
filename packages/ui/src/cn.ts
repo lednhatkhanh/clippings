@@ -1,6 +1,6 @@
 import { createCn } from "cn/config";
 
-import { TYPESCALE_NAMES } from "./tokens/typescale";
+import { TYPESCALE_NAMES } from "./tokens/typescale.ts";
 
 const RADIUS_STEPS = ["lg-increased", "xl-increased", "xxl"];
 const ELEVATIONS = ["0", "1", "2", "3", "4", "5", "card"];

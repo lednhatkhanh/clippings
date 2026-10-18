@@ -6,8 +6,8 @@ import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { migrate } from "./migrate";
-import { TEST_DATABASE_URL, createTempDatabase, type TempDatabase } from "./test/temp-database";
+import { migrate } from "./migrate.ts";
+import { TEST_DATABASE_URL, createTempDatabase, type TempDatabase } from "./test/temp-database.ts";
 
 const SHIPPED = fileURLToPath(new URL("../drizzle", import.meta.url));
 const LEGACY = fileURLToPath(new URL("./test/legacy-migrations", import.meta.url));

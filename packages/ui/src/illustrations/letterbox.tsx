@@ -1,4 +1,4 @@
-import { Illustration, ink, type IllustrationProps } from "./illustration";
+import { Illustration, ink, type IllustrationProps } from "./illustration.tsx";
 
 /** A letterbox with a "members" card: the not-allowlisted page. */
 export function LetterboxIllustration(props: IllustrationProps) {

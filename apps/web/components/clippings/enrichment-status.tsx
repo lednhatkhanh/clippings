@@ -4,11 +4,11 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import useSWR from "swr";
 
+import { retryEnrichmentAction } from "@/app/(app)/actions.ts";
 import type { ClippingStatus } from "@clippings/shared";
 import { Button, ProgressBar } from "@clippings/ui";
 
-import { retryEnrichmentAction } from "../../app/(app)/actions";
-import { fetchRow, POLL_EVERY_MS } from "./fetch-row";
+import { fetchRow, POLL_EVERY_MS } from "./fetch-row.ts";
 
 /**
  * Stands in for the summary until the page has been read. A pending clipping polls, and the page

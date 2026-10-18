@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { MAX_NOTE_LENGTH } from "@clippings/shared";
 
-import { createServiceFixture, type ServiceFixture } from "../test/service-fixture";
-import { TEST_DATABASE_URL } from "../test/temp-database";
-import { InvalidUrlError, NoteTooLongError } from "./service";
+import { createServiceFixture, type ServiceFixture } from "../test/service-fixture.ts";
+import { TEST_DATABASE_URL } from "../test/temp-database.ts";
+import { InvalidUrlError, NoteTooLongError } from "./service.ts";
 
 describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
   let fixture: ServiceFixture;

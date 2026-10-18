@@ -9,7 +9,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { ICON_NAMES } from "../src/icons/icon-names";
+import { ICON_NAMES } from "../src/icons/icon-names.ts";
 
 const AXES = "opsz,wght,FILL,GRAD@20..24,300..500,0..1,-25..0";
 // Google serves woff2 only to modern user agents.

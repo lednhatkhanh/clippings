@@ -3,7 +3,7 @@ import { createHash, createHmac } from "node:crypto";
 import { Receiver } from "@upstash/qstash";
 import { describe, expect, it } from "vitest";
 
-import { ENRICHMENT_RETRIES, handleEnrichRequest } from "./enrich-request";
+import { ENRICHMENT_RETRIES, handleEnrichRequest } from "./enrich-request.ts";
 
 const CURRENT_KEY = "current-signing-key";
 const NEXT_KEY = "next-signing-key";

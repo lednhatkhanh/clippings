@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 // prerendered or dynamic is a build property, checked in the build output.
 vi.mock("next/server", () => ({ connection: () => Promise.resolve() }));
 
-const { GET } = await import("./route");
+const { GET } = await import("./route.ts");
 
 describe("GET /api/health", () => {
   it("responds 200 with an ok status", async () => {

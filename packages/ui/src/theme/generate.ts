@@ -27,7 +27,7 @@ import {
   type Mode,
   type PaletteName,
   type TagName,
-} from "./palettes";
+} from "./palettes.ts";
 
 const WHITE = 0xffffffff;
 

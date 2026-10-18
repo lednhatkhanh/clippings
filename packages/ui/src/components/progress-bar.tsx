@@ -2,7 +2,7 @@
 
 import { ProgressBar as AriaProgressBar } from "react-aria-components";
 
-import { cn } from "../cn";
+import { cn } from "../cn.ts";
 
 export interface ProgressBarProps {
   /** What is in progress, for screen readers. */

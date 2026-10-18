@@ -1,10 +1,16 @@
 import pg from "pg";
 
-import type { Clock, JobPublisher, PageFetcher, PageSummary, Summarizer } from "../clippings/ports";
-import { createClippingsService } from "../clippings/service";
-import { migrate } from "../migrate";
-import { createPool } from "../pool";
-import { createTempDatabase, type TempDatabase } from "./temp-database";
+import type {
+  Clock,
+  JobPublisher,
+  PageFetcher,
+  PageSummary,
+  Summarizer,
+} from "../clippings/ports.ts";
+import { createClippingsService } from "../clippings/service.ts";
+import { migrate } from "../migrate.ts";
+import { createPool } from "../pool.ts";
+import { createTempDatabase, type TempDatabase } from "./temp-database.ts";
 
 /**
  * A migrated, throwaway database with the Clippings service on top and in-memory ports: a clock

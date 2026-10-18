@@ -9,7 +9,7 @@ import {
 } from "react-aria-components";
 import type { DialogProps as AriaDialogProps, ModalOverlayProps } from "react-aria-components";
 
-import { cn } from "../cn";
+import { cn } from "../cn.ts";
 
 export { DialogTrigger };
 
