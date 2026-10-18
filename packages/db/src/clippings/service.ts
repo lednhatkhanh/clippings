@@ -93,6 +93,12 @@ const toClipping = (row: ClippingRow): Clipping => ({
 /** How long a clipping can sit pending or failed before the sweep requests it again. */
 const STUCK_AFTER_MS = 60 * 60 * 1000;
 const SWEEP_BATCH_SIZE = 100;
+/**
+ * How long a deleted clipping is kept before the purge removes it for good: far past the Undo
+ * toast's 8 seconds, so a purge never races an Undo.
+ */
+const PURGE_AFTER_MS = 24 * 60 * 60 * 1000;
+const PURGE_BATCH_SIZE = 1000;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -141,9 +147,9 @@ export class InvalidUrlError extends Error {
 
 /**
  * The rules about clippings. Every operation a user triggers takes the acting user and scopes its
- * queries by them, so no caller can reach another user's rows. `enrichClipping` and `sweepStuck`
- * are the exceptions: they are system jobs, reached only through the signed QStash handler and the
- * cron secret, and they act on a clipping by id.
+ * queries by them, so no caller can reach another user's rows. `enrichClipping`, `sweepStuck` and
+ * `purgeDeleted` are the exceptions: they are system jobs, reached only through the signed QStash
+ * handler and the cron secret, and they act across users.
  */
 export function createClippingsService({
   pool,
@@ -405,6 +411,26 @@ export function createClippingsService({
     return ids;
   }
 
+  /**
+   * For the daily cron: removes for good the clippings deleted more than a day ago, and returns how
+   * many. A batch is capped like the sweep's, so a backlog drains over several days.
+   */
+  async function purgeDeleted(): Promise<number> {
+    const deletedBefore = new Date(clock.now().getTime() - PURGE_AFTER_MS);
+    const expired = and(isNotNull(clippings.deletedAt), lt(clippings.deletedAt, deletedBefore));
+    const batch = db
+      .select({ id: clippings.id })
+      .from(clippings)
+      .where(expired)
+      .limit(PURGE_BATCH_SIZE);
+    // `expired` again on the delete itself: a save of the same URL may revive a row in between.
+    const purged = await db
+      .delete(clippings)
+      .where(and(inArray(clippings.id, batch), expired))
+      .returning({ id: clippings.id });
+    return purged.length;
+  }
+
   return {
     saveClipping,
     listClippings,
@@ -415,6 +441,7 @@ export function createClippingsService({
     enrichClipping,
     retryEnrichment,
     sweepStuck,
+    purgeDeleted,
   };
 }
 
