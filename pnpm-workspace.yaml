@@ -6,6 +6,7 @@ catalogMode: strict
 
 catalog:
   "@anthropic-ai/sdk": 0.135.0
+  "@ast-grep/cli": 0.51.0
   "@material/material-color-utilities": 0.4.0
   "@shadcn/lint": 0.2.1
   "@tailwindcss/postcss": 4.3.3
@@ -63,3 +64,6 @@ minimumReleaseAgeExclude:
 # platform binary, which resolves from optional dependencies without it.
 allowBuilds:
   esbuild: false
+  # Its postinstall only links the platform binary over the JS shim, so each
+  # ast-grep run skips a Node startup.
+  "@ast-grep/cli": true

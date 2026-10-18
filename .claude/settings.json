@@ -1,5 +1,9 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "model": "claude-opus-5-5",
+  "env": {
+    "CLAUDE_CODE_SUBAGENT_MODEL": "claude-sonnet-5-5"
+  },
   "permissions": {
     "allow": [
       "Bash(pnpm install)",
@@ -31,6 +35,12 @@
       "Bash(gh issue list *)",
       "Bash(gh run view *)",
       "Bash(gh run list *)",
+      "Bash(ast-grep run *)",
+      "Bash(ast-grep outline *)",
+      "Bash(ast-grep scan *)",
+      "Bash(pnpm exec ast-grep run *)",
+      "Bash(pnpm exec ast-grep outline *)",
+      "Bash(pnpm exec ast-grep scan *)",
       "Bash(agent-browser *)",
       "Bash(curl * http://localhost:3100/_next/mcp*)",
       "mcp__next-devtools"
@@ -39,7 +49,9 @@
       "Bash(pnpm --filter @clippings/db migrate*)",
       "Bash(vercel *)",
       "Bash(git reset --hard*)",
-      "Bash(git clean *)"
+      "Bash(git clean *)",
+      "Bash(*ast-grep * -U*)",
+      "Bash(*ast-grep * --update-all*)"
     ],
     "deny": [
       "Bash(git push --force*)",
@@ -61,6 +73,11 @@
             "type": "command",
             "command": "jq -r '.tool_response.filePath // .tool_input.file_path' | { read -r f; case \"$f\" in \"$CLAUDE_PROJECT_DIR\"/*.ts|\"$CLAUDE_PROJECT_DIR\"/*.tsx|\"$CLAUDE_PROJECT_DIR\"/*.js|\"$CLAUDE_PROJECT_DIR\"/*.mjs|\"$CLAUDE_PROJECT_DIR\"/*.json|\"$CLAUDE_PROJECT_DIR\"/*.css|\"$CLAUDE_PROJECT_DIR\"/*.yml) \"$CLAUDE_PROJECT_DIR/node_modules/.bin/oxfmt\" --write -c \"$CLAUDE_PROJECT_DIR/.oxfmtrc.json\" \"$f\";; esac; } >/dev/null 2>&1 || true",
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/remind-verifier.mjs\"",
+            "timeout": 10
           }
         ]
       }

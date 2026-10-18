@@ -55,13 +55,44 @@ Secrets stay out of the repo: runtime secrets live in Vercel, deploy credentials
 - `.claude/settings.json` allows the repo's check and read-only git/gh commands and the dev loop
   (`agent-browser`, `curl` to `/_next/mcp`, the `next-devtools` MCP server), asks before
   migrations and `vercel`, and denies force-push, pushes to `production`, reading `.env*` files and
-  editing `packages/ui/src/generated/`. A hook formats each file you edit with oxfmt.
-- `/check` runs the three check commands above and fixes what fails.
+  editing `packages/ui/src/generated/`. A hook formats each file you edit with oxfmt, and
+  `.claude/hooks/remind-verifier.mjs` reminds you once per session to launch `verifier` after an
+  edit in `apps/web` or `packages/db`.
+- `/check` hands the three check commands above to the `checker` agent and fixes what fails.
 - `.claude/launch.json` defines the `web` dev server on port 3100; start it with `preview_start`.
 - `.mcp.json` adds `next-devtools` (the dev server's `/_next/mcp` as MCP tools). It runs through
   `pnpm dlx`, pinned: `npx` fails here on the root `devEngines` check.
 - `.claude/skills/` is vendored and pinned by `skills-lock.json`: change a skill upstream, not here.
 - Personal overrides go in `.claude/settings.local.json`, which is gitignored.
+
+### Code search
+
+Find code by its structure with ast-grep (`ast-grep outline` for what a file defines,
+`ast-grep run -p` for calls, imports, JSX and definitions), and text with Grep: strings, comments,
+config and docs. `docs/agents/code-search.md` has tested commands for this repo, including
+rewrites.
+
+### Sub-agents
+
+The main session runs on Opus 5.5 (`model` in `.claude/settings.json`) and keeps the judgement: the
+design, the plan, reading results, talking to the user. It hands legwork to the agents in
+`.claude/agents/`, which override the user-level ones of the same name:
+
+| Agent         | Model         | Hand it                                                        |
+| ------------- | ------------- | -------------------------------------------------------------- |
+| `scout`       | Haiku 5.5     | one lookup: where is X, who calls Y                            |
+| `Explore`     | Sonnet 5.5    | a broad sweep across packages                                  |
+| `checker`     | Haiku 5.5     | the CI checks, returning only failures                         |
+| `implementer` | Sonnet 5.5    | a planned change, with tests; several run in parallel          |
+| `verifier`    | Sonnet 5.5    | runtime checks after an `apps/web` or `packages/db` change     |
+| `reviewer`    | Opus 5.5      | auth, schema, migrations, per-user access, shared interfaces   |
+| `Plan`        | Opus (main)   | a plan for a change across several packages                    |
+
+Any other agent (`general-purpose`, `claude`) defaults to Sonnet 5.5 via `CLAUDE_CODE_SUBAGENT_MODEL`.
+Do a task yourself when it is a few tool calls; a sub-agent pays off when its output would flood
+your context or when independent pieces can run at once. Brief each one with the plan and file
+pointers, since it starts without this conversation. `verifier` checks headless with
+`agent-browser`; showing the user UI in the Browser pane (`preview_start`) stays with you.
 
 ## Agent skills
 
