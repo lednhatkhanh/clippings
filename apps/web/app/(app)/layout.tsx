@@ -3,6 +3,7 @@ import { Suspense, type ReactNode } from "react";
 
 import { AppShell } from "../../components/app-shell";
 import { LoadError } from "../../components/load-error";
+import { AppProviders } from "../../components/providers";
 import { getSession } from "../../lib/auth/session";
 
 async function SessionGate({ children }: { children: ReactNode }) {
@@ -25,11 +26,13 @@ async function SessionGate({ children }: { children: ReactNode }) {
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
-    <AppShell>
-      {/* The shell prerenders; only the session check waits for the request. */}
-      <Suspense fallback={null}>
-        <SessionGate>{children}</SessionGate>
-      </Suspense>
-    </AppShell>
+    <AppProviders>
+      <AppShell>
+        {/* The shell prerenders; only the session check waits for the request. */}
+        <Suspense fallback={null}>
+          <SessionGate>{children}</SessionGate>
+        </Suspense>
+      </AppShell>
+    </AppProviders>
   );
 }

@@ -13,6 +13,8 @@ export const MAX_NOTE_LENGTH = 10_000;
 export interface Clipping {
   id: string;
   url: string;
+  /** What duplicate detection compares: `url` without tracking parameters, fragment and the like. */
+  urlNormalized: string;
   /** The URL until enrichment reads the page. */
   title: string;
   note: string;

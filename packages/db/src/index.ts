@@ -24,4 +24,5 @@ export {
   type ListClippingsInput,
   type SaveClippingInput,
   type SaveClippingResult,
+  type UpdateClippingInput,
 } from "./clippings/service";

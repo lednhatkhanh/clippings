@@ -8,15 +8,9 @@ import { Button, ProgressBar } from "@clippings/ui";
 
 import { loadMoreClippingsAction, retryEnrichmentAction } from "../../app/(app)/actions";
 import type { ClippingRowData } from "../../lib/clippings/rows";
+import { useHiddenClippings } from "./deleted-clippings";
 import { Favicon } from "./favicon";
-
-const POLL_EVERY_MS = 2000;
-
-async function fetchRow(url: string): Promise<ClippingRowData> {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Couldn't load the clipping (${response.status})`);
-  return response.json();
-}
+import { fetchRow, POLL_EVERY_MS } from "./fetch-row";
 
 function ClippingRow({ row: initialRow }: { row: ClippingRowData }) {
   const [row, setRow] = useState(initialRow);
@@ -42,10 +36,7 @@ function ClippingRow({ row: initialRow }: { row: ClippingRowData }) {
     <GridListItem
       id={row.id}
       textValue={row.title}
-      // The detail page arrives with its own slice; until then a row opens the original page.
-      href={row.url}
-      target="_blank"
-      rel="noopener noreferrer"
+      href={`/c/${row.id}`}
       className="@container state-layer block rounded-sm border-b border-outline-variant px-2 data-focus-visible:outline-solid"
     >
       <div className="flex items-start gap-3 py-3 @lg:items-center">
@@ -93,6 +84,7 @@ export function ClippingList({
   const [cursor, setCursor] = useState(initialCursor);
   const [isLoading, setIsLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  const hidden = useHiddenClippings();
 
   async function loadMore() {
     if (!cursor || isLoading) return;
@@ -112,9 +104,11 @@ export function ClippingList({
   return (
     <>
       <GridList aria-label="Your clippings" className="flex flex-col">
-        {rows.map((row) => (
-          <ClippingRow key={row.id} row={row} />
-        ))}
+        {rows
+          .filter((row) => !hidden.has(row.id))
+          .map((row) => (
+            <ClippingRow key={row.id} row={row} />
+          ))}
         {cursor && !failed ? (
           <GridListLoadMoreItem onLoadMore={loadMore} isLoading={isLoading} />
         ) : null}

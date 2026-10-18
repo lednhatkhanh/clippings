@@ -21,7 +21,8 @@ export interface RowsPage {
   nextCursor: string | null;
 }
 
-function domainOf(url: string): string {
+/** The host a reader recognizes: "example.com" for "https://www.example.com/a". */
+export function domainOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, "");
   } catch {

@@ -134,6 +134,9 @@
   --ease-spring-effects: var(--md-sys-motion-spring-default-effects);
   --ease-spring-expressive: var(--md-sys-motion-spring-expressive-spatial);
 
+  /* The reading measure: never wider, so lines stay easy to follow (WCAG 1.4.8). */
+  --container-reading: 66ch;
+
   /* M3 window size classes: medium 600, expanded 840, large 1200, extra-large 1600 */
   --breakpoint-*: initial;
   --breakpoint-medium: 37.5rem;

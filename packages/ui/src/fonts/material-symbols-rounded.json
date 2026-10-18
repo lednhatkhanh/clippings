@@ -1,4 +1,15 @@
 {
   "axes": "opsz,wght,FILL,GRAD@20..24,300..500,0..1,-25..0",
-  "icons": ["add", "bookmarks", "language", "sell", "settings"]
+  "icons": [
+    "add",
+    "arrow_back",
+    "bookmarks",
+    "chevron_right",
+    "close",
+    "delete",
+    "language",
+    "open_in_new",
+    "sell",
+    "settings"
+  ]
 }

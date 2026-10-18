@@ -24,8 +24,9 @@ async function Clippings() {
   const { rows, nextCursor } = page;
 
   if (rows.length === 0) return <EmptyState />;
-  // Keyed by the newest clipping, so a fresh save remounts the list with the new first page.
-  return <ClippingList key={rows[0]?.id} initialRows={rows} initialCursor={nextCursor} />;
+  // Keyed by the first page, so a save, delete or Undo remounts the list with the server's rows.
+  const firstPage = rows.map((row) => row.id).join();
+  return <ClippingList key={firstPage} initialRows={rows} initialCursor={nextCursor} />;
 }
 
 export default function HomePage() {

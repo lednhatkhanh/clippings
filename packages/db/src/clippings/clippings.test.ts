@@ -176,22 +176,119 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
     expect(seen.indexOf(later!)).toBeLessThan(seen.indexOf(earlier!));
   });
 
-  it("updates the note of one's own clipping, and not anyone else's", async () => {
+  it("updates the note of one's own clipping, and a later read returns it", async () => {
     const ana = await fixture.createUser("ana");
-    const ben = await fixture.createUser("ben");
     const { clipping } = await fixture.service.saveClipping(ana, {
       url: "https://example.com/a",
       note: "before",
       source: "web",
     });
 
-    const foreign = await fixture.service.updateNote(ben, clipping.id, "hijacked");
-    const own = await fixture.service.updateNote(ana, clipping.id, "after");
+    const updated = await fixture.service.updateClipping(ana, clipping.id, { note: "after" });
 
-    expect(foreign).toBeNull();
-    expect(own?.note).toBe("after");
+    expect(updated?.note).toBe("after");
+    expect((await fixture.service.getClipping(ana, clipping.id))?.note).toBe("after");
     const page = await fixture.service.listClippings(ana, {});
     expect(page.items[0]?.note).toBe("after");
+  });
+
+  it("keeps users apart: B can't read, update, delete or restore A's clipping", async () => {
+    const ana = await fixture.createUser("ana");
+    const ben = await fixture.createUser("ben");
+    const { clipping } = await fixture.service.saveClipping(ana, {
+      url: "https://example.com/a",
+      note: "ana's note",
+      source: "web",
+    });
+
+    expect(await fixture.service.getClipping(ben, clipping.id)).toBeNull();
+    expect(await fixture.service.updateClipping(ben, clipping.id, { note: "hijacked" })).toBeNull();
+    expect(await fixture.service.deleteClipping(ben, clipping.id)).toBe(false);
+    expect(await fixture.service.getClipping(ana, clipping.id)).toEqual(clipping);
+
+    await fixture.service.deleteClipping(ana, clipping.id);
+    expect(await fixture.service.restoreClipping(ben, clipping.id)).toBe(false);
+    expect(await fixture.service.getClipping(ana, clipping.id)).toBeNull();
+  });
+
+  describe("deleting and restoring", () => {
+    it("hides a deleted clipping from list and get, and restore brings it back as it was", async () => {
+      const ana = await fixture.createUser("ana");
+      const { clipping: kept } = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/kept",
+        source: "web",
+      });
+      fixture.advanceClock(1000);
+      const { clipping } = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/gone",
+        note: "remember this",
+        source: "web",
+      });
+
+      expect(await fixture.service.deleteClipping(ana, clipping.id)).toBe(true);
+
+      expect(await fixture.service.getClipping(ana, clipping.id)).toBeNull();
+      const afterDelete = await fixture.service.listClippings(ana, {});
+      expect(afterDelete.items.map((item) => item.id)).toEqual([kept.id]);
+
+      expect(await fixture.service.restoreClipping(ana, clipping.id)).toBe(true);
+
+      expect(await fixture.service.getClipping(ana, clipping.id)).toEqual(clipping);
+      const afterRestore = await fixture.service.listClippings(ana, {});
+      expect(afterRestore.items.map((item) => item.id)).toEqual([clipping.id, kept.id]);
+    });
+
+    it("saving a deleted clipping's URL again starts the clipping over", async () => {
+      const ana = await fixture.createUser("ana");
+      fixture.web.set("https://example.com/essay", essay);
+      const { clipping: old } = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/essay",
+        note: "old note",
+        source: "web",
+      });
+      await fixture.service.enrichClipping(old.id);
+      await fixture.service.deleteClipping(ana, old.id);
+      fixture.advanceClock(60_000);
+      fixture.enrichmentRequests.length = 0;
+
+      const again = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/essay/",
+        note: "new note",
+        source: "extension",
+      });
+
+      expect(again.status).toBe("created");
+      expect(again.clipping).toMatchObject({
+        title: "https://example.com/essay/",
+        note: "new note",
+        summary: null,
+        status: "pending",
+        source: "extension",
+        createdAt: "2026-10-01T09:01:00.000Z",
+      });
+      expect(fixture.enrichmentRequests).toEqual([again.clipping.id]);
+      const page = await fixture.service.listClippings(ana, {});
+      expect(page.items.map((item) => item.note)).toEqual(["new note"]);
+    });
+
+    it("a deleted clipping can't be edited or retried, and isn't swept", async () => {
+      const ana = await fixture.createUser("ana");
+      fixture.web.set("https://example.com/down", { error: new Error("503") });
+      const { clipping } = await fixture.service.saveClipping(ana, {
+        url: "https://example.com/down",
+        source: "web",
+      });
+      await fixture.service.enrichClipping(clipping.id, { lastAttempt: true });
+      await fixture.service.deleteClipping(ana, clipping.id);
+      fixture.advanceClock(2 * 60 * 60 * 1000);
+      fixture.enrichmentRequests.length = 0;
+
+      expect(await fixture.service.updateClipping(ana, clipping.id, { note: "x" })).toBeNull();
+      expect(await fixture.service.retryEnrichment(ana, clipping.id)).toBeNull();
+      expect(await fixture.service.deleteClipping(ana, clipping.id)).toBe(false);
+      expect(await fixture.service.sweepStuck()).toEqual([]);
+      expect(fixture.enrichmentRequests).toEqual([]);
+    });
   });
 
   it("stores a bare domain with its scheme, so the clipping links to the page", async () => {
@@ -204,6 +301,20 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
 
     expect(clipping.url).toBe("https://example.com/essay");
     expect(clipping.title).toBe("https://example.com/essay");
+  });
+
+  it("returns the normalized URL alongside the one the user gave", async () => {
+    const ana = await fixture.createUser("ana");
+
+    const { clipping } = await fixture.service.saveClipping(ana, {
+      url: "https://EXAMPLE.com/essay/?utm_source=newsletter&id=7#part-2",
+      source: "web",
+    });
+
+    expect(await fixture.service.getClipping(ana, clipping.id)).toMatchObject({
+      url: "https://example.com/essay/?utm_source=newsletter&id=7#part-2",
+      urlNormalized: "https://example.com/essay?id=7",
+    });
   });
 
   it("rejects addresses that only look like web addresses", async () => {
@@ -238,9 +349,9 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
       note: "x".repeat(MAX_NOTE_LENGTH),
       source: "web",
     });
-    await expect(fixture.service.updateNote(ana, clipping.id, tooLong)).rejects.toThrow(
-      NoteTooLongError,
-    );
+    await expect(
+      fixture.service.updateClipping(ana, clipping.id, { note: tooLong }),
+    ).rejects.toThrow(NoteTooLongError);
   });
 
   describe("enrichment", () => {
@@ -299,7 +410,9 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
         note: "for the weekend",
         source: "web",
       });
-      await fixture.service.updateNote(ana, clipping.id, "for the weekend, then share with Ben");
+      await fixture.service.updateClipping(ana, clipping.id, {
+        note: "for the weekend, then share with Ben",
+      });
 
       await fixture.service.enrichClipping(clipping.id);
 

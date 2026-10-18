@@ -103,6 +103,8 @@ export const clippings = pgTable(
     // cursor round-trips exactly.
     createdAt: timestamptz("created_at").notNull(),
     updatedAt: timestamptz("updated_at").notNull(),
+    // Set when the user deletes the clipping, cleared by Undo. Every read skips deleted rows.
+    deletedAt: timestamptz("deleted_at"),
   },
   (table) => [
     unique("clippings_user_id_url_normalized_key").on(table.userId, table.urlNormalized),
