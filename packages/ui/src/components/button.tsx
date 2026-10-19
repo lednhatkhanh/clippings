@@ -16,7 +16,7 @@ const VARIANTS = {
 } as const;
 
 const BASE =
-  "state-layer inline-flex min-h-12 items-center justify-center gap-2 rounded-full px-6 typescale-label-lg disabled:opacity-38 data-pending:opacity-38";
+  "state-layer inline-flex min-h-12 items-center justify-center gap-2 rounded-full px-6 typescale-label-lg transition ease-effects duration-effects disabled:opacity-38 data-pending:opacity-38";
 
 type Variant = keyof typeof VARIANTS;
 
