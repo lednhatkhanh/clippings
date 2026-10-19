@@ -1,6 +1,8 @@
 import { constructNow, isValid, parseISO, subHours } from "date-fns";
 import {
   and,
+  asc,
+  cosineDistance,
   desc,
   eq,
   getColumns,
@@ -29,8 +31,16 @@ import {
 } from "@clippings/shared";
 
 import { createDatabase } from "../database.ts";
-import { clippings } from "../schema.ts";
-import type { Clock, JobPublisher, PageFetcher, PageSummary, Summarizer } from "./ports.ts";
+import { clippings, EMBEDDING_DIMENSIONS } from "../schema.ts";
+import type {
+  Clock,
+  Embedder,
+  EmbeddingPurpose,
+  JobPublisher,
+  PageFetcher,
+  PageSummary,
+  Summarizer,
+} from "./ports.ts";
 
 export const systemClock: Clock = { now: () => constructNow(undefined) };
 
@@ -89,6 +99,7 @@ export interface ClippingsServiceDeps {
   clock: Clock;
   fetcher: PageFetcher;
   summarizer: Summarizer;
+  embedder: Embedder;
 }
 
 export interface EnrichClippingOptions {
@@ -108,10 +119,10 @@ export type EnrichmentOutcome =
   /** Reading failed on the last attempt, so the clipping is now failed. */
   | "failed";
 
-// Every column but `search_tsv`, which only search reads.
-const { searchTsv, ...clippingColumns } = getColumns(clippings);
+// Every column but `search_tsv` and `embedding`, which only search reads.
+const { searchTsv, embedding, ...clippingColumns } = getColumns(clippings);
 
-type ClippingRow = Omit<typeof clippings.$inferSelect, "searchTsv">;
+type ClippingRow = Omit<typeof clippings.$inferSelect, "searchTsv" | "embedding">;
 
 /** Not deleted: every read and edit the user makes sees only these. */
 const live = isNull(clippings.deletedAt);
@@ -194,6 +205,37 @@ function toSegments(headline: string): TextSegment[] {
   return segments;
 }
 
+/**
+ * Reciprocal rank fusion's k: a result's score is the sum of 1 / (k + its rank) over the
+ * rankings it appears in. 60 is the value from the original paper, and it keeps one ranking's top
+ * result from drowning out a result that both rankings place well.
+ */
+const RRF_K = 60;
+/** Most clippings the meaning half of search contributes, nearest first. */
+const SEMANTIC_CANDIDATES = 50;
+/**
+ * Farthest cosine distance (1 − similarity) at which a clipping still counts as close in meaning:
+ * past it, the nearest neighbours of a query are only the least unrelated. A first guess for
+ * voyage-4 (ADR 0001), to tune against real searches.
+ */
+const MAX_SEMANTIC_DISTANCE = 0.6;
+/** Most related clippings the detail page shows. */
+const RELATED_LIMIT = 5;
+// One call each, in turn: 50 fit the sweep route's 60 s with room to spare.
+const EMBED_BATCH_SIZE = 50;
+
+/** Has an embedding within `MAX_SEMANTIC_DISTANCE` of the vector `distance` measures from. */
+const closeInMeaning = (distance: SQL) =>
+  and(isNotNull(embedding), sql`${distance} < ${MAX_SEMANTIC_DISTANCE}`);
+
+/** What enrichment embeds: what the page is, not the user's note, which they can edit at will. */
+const documentText = ({
+  title,
+  summary,
+  excerpt,
+}: Pick<ClippingRow, "title" | "summary" | "excerpt">) =>
+  [title, summary, excerpt].filter(Boolean).join("\n\n");
+
 /** How long a clipping can sit pending or failed before the sweep requests it again. */
 const STUCK_AFTER_HOURS = 1;
 const SWEEP_BATCH_SIZE = 100;
@@ -251,8 +293,8 @@ export class InvalidUrlError extends Error {
 
 /**
  * The rules about clippings. Every operation a user triggers takes the acting user and scopes its
- * queries by them, so no caller can reach another user's rows. `enrichClipping`, `sweepStuck` and
- * `purgeDeleted` are the exceptions: they are system jobs, reached only through the signed QStash
+ * queries by them, so no caller can reach another user's rows. `enrichClipping`, `sweepStuck`,
+ * `embedMissing` and `purgeDeleted` are the exceptions: they are system jobs, reached only through the signed QStash
  * handler and the cron secret, and they act across users.
  */
 export function createClippingsService({
@@ -261,8 +303,18 @@ export function createClippingsService({
   clock,
   fetcher,
   summarizer,
+  embedder,
 }: ClippingsServiceDeps) {
   const db = createDatabase(pool);
+
+  /** The embedder's vector, checked to fit the column, so a wrong model fails here and not in SQL. */
+  async function embed(text: string, purpose: EmbeddingPurpose): Promise<number[]> {
+    const vector = await embedder.embed(text, purpose);
+    if (vector.length !== EMBEDDING_DIMENSIONS || !vector.every(Number.isFinite)) {
+      throw new Error(`Expected ${EMBEDDING_DIMENSIONS} numbers, got ${vector.length}`);
+    }
+    return vector;
+  }
 
   async function saveClipping(
     userId: string,
@@ -347,9 +399,12 @@ export function createClippingsService({
   }
 
   /**
-   * The user's clippings that match `q` in their title, note or excerpt, best match first (title
-   * over note over excerpt) or newest first. A title one typo away from the query matches too,
-   * after every exact match. Words match as written, in any language: nothing is stemmed.
+   * The user's clippings that match `q` by its words or by its meaning, best match first or newest
+   * first. Words rank title over note over excerpt, and a title one typo away from the query
+   * matches too, after every exact match. Words match as written, in any language: nothing is
+   * stemmed. Meaning ranks by how close the clipping's embedding is to the query's. The two
+   * rankings are merged by reciprocal rank fusion, so a clipping that matches both comes first.
+   * When the query can't be embedded, search falls back to words alone.
    */
   async function searchClippings(
     userId: string,
@@ -358,10 +413,48 @@ export function createClippingsService({
     const text = q.trim().slice(0, MAX_QUERY_LENGTH).trim();
     if (!text) return { items: [] };
 
+    const queryVector = await embed(text, "query").catch((error: unknown) => {
+      console.error("Couldn't embed the search query; searching by words alone", error);
+      return null;
+    });
+
     const query = keywordQuery(text);
+    const scope = and(eq(clippings.userId, userId), live, fromSources(sources));
+
+    // Every clipping that matches the words, ranked.
+    const byWords = db.$with("by_words").as(
+      db
+        .select({
+          id: clippings.id,
+          rank: sql<number>`row_number() over (order by ts_rank_cd(${searchTsv}, ${query}) desc, word_similarity(${text}, ${clippings.title}) desc, ${clippings.createdAt} desc, ${clippings.id} desc)`.as(
+            "words_rank",
+          ),
+        })
+        .from(clippings)
+        .where(and(scope, or(sql`${searchTsv} @@ ${query}`, typoInTitle(text)))),
+    );
+
+    // The clippings nearest the query in meaning, close enough to count, ranked.
+    const distance = queryVector ? cosineDistance(embedding, queryVector) : sql`null::float8`;
+    const byMeaning = db.$with("by_meaning").as(
+      db
+        .select({
+          id: clippings.id,
+          rank: sql<number>`row_number() over (order by ${distance}, ${clippings.createdAt} desc, ${clippings.id} desc)`.as(
+            "meaning_rank",
+          ),
+        })
+        .from(clippings)
+        .where(queryVector ? and(scope, closeInMeaning(distance)) : sql`false`)
+        .orderBy(distance, desc(clippings.createdAt), desc(clippings.id))
+        .limit(SEMANTIC_CANDIDATES),
+    );
+
+    const fused = sql<number>`coalesce(1.0 / (${RRF_K} + ${byWords.rank}), 0) + coalesce(1.0 / (${RRF_K} + ${byMeaning.rank}), 0)`;
     const matches = (column: SQLWrapper) => sql`to_tsvector('simple', ${column}) @@ ${query}`;
     const excerpt = sql`coalesce(${clippings.excerpt}, '')`;
     const rows = await db
+      .with(byWords, byMeaning)
       .select({
         ...clippingColumns,
         titleHeadline: sql<string>`ts_headline('simple', ${unmarked(clippings.title)}, ${query}, ${TITLE_HEADLINE})`,
@@ -373,21 +466,12 @@ export function createClippingsService({
         end`,
       })
       .from(clippings)
-      .where(
-        and(
-          eq(clippings.userId, userId),
-          live,
-          fromSources(sources),
-          or(sql`${searchTsv} @@ ${query}`, typoInTitle(text)),
-        ),
-      )
+      .leftJoin(byWords, eq(byWords.id, clippings.id))
+      .leftJoin(byMeaning, eq(byMeaning.id, clippings.id))
+      .where(and(eq(clippings.userId, userId), or(isNotNull(byWords.id), isNotNull(byMeaning.id))))
       .orderBy(
-        ...(sort === "relevance"
-          ? [
-              desc(sql`ts_rank_cd(${searchTsv}, ${query})`),
-              desc(sql`word_similarity(${text}, ${clippings.title})`),
-            ]
-          : []),
+        // On a tie, a match on the words wins: it is the one the user can see.
+        ...(sort === "relevance" ? [desc(fused), sql`${byWords.rank} asc nulls last`] : []),
         desc(clippings.createdAt),
         desc(clippings.id),
       )
@@ -402,6 +486,34 @@ export function createClippingsService({
         },
       })),
     };
+  }
+
+  /**
+   * The user's other clippings nearest in meaning to this one, nearest first, by exact cosine
+   * distance (no ANN index, ADR 0001). Empty when the user has no such clipping or it has no
+   * embedding yet.
+   */
+  async function relatedClippings(userId: string, clippingId: string): Promise<Clipping[]> {
+    if (!UUID.test(clippingId)) return [];
+    const target = db
+      .select({ embedding })
+      .from(clippings)
+      .where(and(eq(clippings.id, clippingId), eq(clippings.userId, userId), live));
+    const distance = cosineDistance(embedding, target);
+    const rows = await db
+      .select(clippingColumns)
+      .from(clippings)
+      .where(
+        and(
+          eq(clippings.userId, userId),
+          live,
+          sql`${clippings.id} <> ${clippingId}`,
+          closeInMeaning(distance),
+        ),
+      )
+      .orderBy(asc(distance), desc(clippings.createdAt), desc(clippings.id))
+      .limit(RELATED_LIMIT);
+    return rows.map(toClipping);
   }
 
   /**
@@ -500,9 +612,16 @@ export function createClippingsService({
     if (!row || row.status !== "pending") return "skipped";
 
     let read: PageSummary;
+    let meaning: number[] | null = null;
     try {
       const page = await fetcher.fetchPage(row.url);
       read = await summarizer.summarize({ url: row.url, ...page });
+      // The reading stands without an embedding: search finds the clipping by its words, and the
+      // daily sweep embeds it later. A retry would only read the page and call Haiku again.
+      meaning = await embed(documentText(read), "document").catch((error: unknown) => {
+        console.error(`Couldn't embed clipping ${clippingId}; saving it without`, error);
+        return null;
+      });
     } catch (error) {
       if (!lastAttempt) throw error;
       const now = clock.now();
@@ -519,6 +638,7 @@ export function createClippingsService({
         title: read.title,
         summary: read.summary,
         excerpt: read.excerpt,
+        embedding: meaning,
         ...statusChange("ready", now),
       })
       .where(and(eq(clippings.id, clippingId), eq(clippings.status, "pending")))
@@ -596,6 +716,38 @@ export function createClippingsService({
   }
 
   /**
+   * For the daily cron: embeds ready clippings that have no embedding (saved before search by
+   * meaning, or when the embedder was down), and returns how many. A batch is capped like the
+   * sweep's, and stops at the first failure, which is most likely the provider being down.
+   */
+  async function embedMissing(): Promise<number> {
+    const missing = await db
+      .select(clippingColumns)
+      .from(clippings)
+      .where(and(eq(clippings.status, "ready"), isNull(embedding), live))
+      .orderBy(desc(clippings.createdAt))
+      .limit(EMBED_BATCH_SIZE);
+    let count = 0;
+    for (const row of missing) {
+      let vector: number[];
+      try {
+        vector = await embed(documentText(row), "document");
+      } catch (error) {
+        console.error(`Couldn't embed clipping ${row.id}; stopping for today`, error);
+        break;
+      }
+      // Only while still missing: enrichment may have written one in the meantime.
+      const [updated] = await db
+        .update(clippings)
+        .set({ embedding: vector })
+        .where(and(eq(clippings.id, row.id), isNull(embedding)))
+        .returning({ id: clippings.id });
+      if (updated) count += 1;
+    }
+    return count;
+  }
+
+  /**
    * For the daily cron: removes for good the clippings deleted more than a day ago, and returns how
    * many. A batch is capped like the sweep's, so a backlog drains over several days.
    */
@@ -619,6 +771,7 @@ export function createClippingsService({
     saveClipping,
     listClippings,
     searchClippings,
+    relatedClippings,
     exportClippings,
     updateClipping,
     getClipping,
@@ -627,6 +780,7 @@ export function createClippingsService({
     enrichClipping,
     retryEnrichment,
     sweepStuck,
+    embedMissing,
     purgeDeleted,
   };
 }

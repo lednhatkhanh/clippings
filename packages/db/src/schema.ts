@@ -9,6 +9,7 @@ import {
   timestamp,
   unique,
   uuid,
+  vector,
 } from "drizzle-orm/pg-core";
 
 import {
@@ -93,6 +94,9 @@ export const verification = pgTable(
   (table) => [index("verification_identifier_idx").on(table.identifier)],
 );
 
+/** Length of every embedding: the stored column's dimension (ADR 0001). */
+export const EMBEDDING_DIMENSIONS = 1024;
+
 const inList = (values: readonly string[]) =>
   sql.raw(values.map((value) => `'${value}'`).join(", "));
 
@@ -121,6 +125,10 @@ export const clippings = pgTable(
     // cursor round-trips exactly.
     createdAt: timestamptz("created_at").notNull(),
     updatedAt: timestamptz("updated_at").notNull(),
+    // What the page means, for search by meaning and related clippings. Written by enrichment from
+    // the title, summary and excerpt; null until then, or when embedding failed. No ANN index:
+    // an exact scan of one user's rows is fast enough (ADR 0001).
+    embedding: vector("embedding", { dimensions: EMBEDDING_DIMENSIONS }),
     // Set when the user deletes the clipping, cleared by Undo. Every read skips deleted rows.
     deletedAt: timestamptz("deleted_at"),
     // What keyword search matches, kept up to date by Postgres. `simple` doesn't stem, so words

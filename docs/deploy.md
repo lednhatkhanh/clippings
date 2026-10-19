@@ -99,6 +99,7 @@ be pulled into a build, which is fine: the web app reads them only at runtime.
 | `QSTASH_NEXT_SIGNING_KEY`    | QStash next signing key       | same                                    |
 | `QSTASH_URL`           | only if the QStash console shows one (a regional endpoint); not a secret | same |
 | `ANTHROPIC_API_KEY`    | an Anthropic key (Haiku)            | same                                    |
+| `VOYAGE_API_KEY`       | a Voyage AI key (embeddings, ADR 0001); without it search matches words only | same |
 | `CRON_SECRET`          | `openssl rand -base64 32`           | a different value                       |
 | `VERCEL_AUTOMATION_BYPASS_SECRET` | none: production isn't protected | the project's "Protection Bypass for Automation" secret |
 
@@ -108,8 +109,12 @@ the environment's public origin. The development alias is behind Vercel Authenti
 block QStash; the bypass secret lets it through. `QSTASH_URL` is where the app publishes to: the SDK
 defaults to `https://qstash.upstash.io`, so an account in another region must set the endpoint its
 console lists, or the token is rejected. A daily Vercel Cron (`vercel.json`, 04:00 UTC) calls
-`/api/cron/sweep` with `CRON_SECRET` as a bearer token and re-publishes clippings stuck in pending or
-failed for more than an hour. Vercel only runs crons on the production deployment.
+`/api/cron/sweep` with `CRON_SECRET` as a bearer token, re-publishes clippings stuck in pending or
+failed for more than an hour, and embeds up to 50 ready clippings that have no embedding (saved
+before search by meaning, or while Voyage AI was down). Vercel only runs crons on the production
+deployment. Add a payment method to the Voyage AI account even though usage stays inside the free
+tokens: its documented limits (2,000 requests a minute for `voyage-4`) start at Tier 1, which needs
+one ([rate limits](https://docs.voyageai.com/docs/rate-limits)), and every search makes a request.
 
 ### 4. Google OAuth client
 
