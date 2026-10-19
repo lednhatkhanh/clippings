@@ -16,10 +16,12 @@ export type {
 export {
   createClippingsService,
   InvalidCursorError,
+  InvalidTagColorError,
   InvalidTagsError,
   InvalidUrlError,
   NoteTooLongError,
   systemClock,
+  TagNameTakenError,
   type ClippingsExport,
   type ClippingsPage,
   type ClippingsService,

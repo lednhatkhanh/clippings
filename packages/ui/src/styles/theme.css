@@ -317,6 +317,25 @@
 }
 
 /*
+ * A menu grows from where it meets its trigger (React Aria's `--trigger-anchor-point`): scale
+ * 0.8 → 1 on the fast spatial spring and opacity on fast effects, as Compose's dropdown menu does,
+ * and leaves the same way. Reduced motion zeroes the spatial duration, so it only fades.
+ */
+@utility menu-pop {
+  transform-origin: var(--trigger-anchor-point);
+  transition:
+    scale var(--md-sys-motion-spring-fast-spatial-duration) var(--md-sys-motion-spring-fast-spatial),
+    opacity var(--md-sys-motion-spring-fast-effects-duration)
+      var(--md-sys-motion-spring-fast-effects);
+
+  &[data-entering],
+  &[data-exiting] {
+    scale: 0.8;
+    opacity: 0;
+  }
+}
+
+/*
  * Skeletons appear only if loading takes longer than 150 ms, so fast loads show nothing. The
  * delay survives `prefers-reduced-motion`, which stops only spatial motion.
  */

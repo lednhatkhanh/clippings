@@ -34,9 +34,11 @@ export {
   MAX_TAGS_PER_CLIPPING,
   normalizeTagName,
   normalizeTagNames,
+  isTagColor,
   TAG_COLORS,
   tagNameKey,
   type Tag,
   type TagColor,
+  type TagSummary,
 } from "./tag.ts";
 export { parseWebUrl, type WebUrl } from "./url.ts";
