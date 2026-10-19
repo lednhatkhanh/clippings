@@ -1,5 +1,5 @@
 /*
- * Document-level rules: color scheme, focus, reduced motion and paper grain. Import after
+ * Document-level rules: color scheme, focus, reduced motion, paper grain and print. Import after
  * `@import "tailwindcss"` so it layers with Tailwind's base styles.
  */
 
@@ -88,6 +88,21 @@ body::before {
 }
 
 /*
+ * Print: light colors whatever the theme (every color role is a `light-dark()` pair, so the
+ * scheme alone flips them) and no grain. Navigation hides itself with `print:hidden`.
+ */
+@media print {
+  :root,
+  :root[data-theme] {
+    color-scheme: light;
+  }
+
+  body::before {
+    display: none;
+  }
+}
+
+/*
  * Reduced motion: the spatial factor (tokens.css) stops spatial springs and keeps fades. Smooth
  * scrolling travels too, so it goes.
  */
@@ -102,8 +117,9 @@ body::before {
 /*
  * Appearance changes (see `transitionAppearance`) run in a view transition. The attribute is set
  * only while one runs, so page transitions added elsewhere keep the browser's defaults.
- * "reveal": the script clips the new view into a growing circle over the old one, so both
- * snapshots just sit still and opaque. "fade": reduced motion gets a short crossfade.
+ * `appearanceTransitionFor` picks which change gets which. "reveal": the script clips the new view
+ * into a growing circle over the old one, so both snapshots just sit still and opaque. "fade": a
+ * crossfade on the default effects spring.
  */
 :root[data-appearance-transition="reveal"]::view-transition-old(root),
 :root[data-appearance-transition="reveal"]::view-transition-new(root) {

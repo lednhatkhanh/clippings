@@ -1,16 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { createContext, use, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 
 import { saveClippingAction, updateClippingAction, type SaveOutcome } from "@/app/(app)/actions.ts";
+import { useOnline } from "@/components/online-status.tsx";
 import { useLaunchParam } from "@/components/use-launch-param.ts";
 import { hrefWithTag, loadBrowseParams } from "@/lib/clippings/browse-params.ts";
 import { MAX_NOTE_LENGTH, MAX_TAG_LENGTH } from "@clippings/shared";
 import {
   Button,
   Dialog,
-  DialogTrigger,
   Heading,
   Icon,
   LinkButton,
@@ -25,8 +25,9 @@ import { useTags } from "./use-tags.ts";
 
 function SubmitButton({ children }: { children: string }) {
   const { pending } = useFormStatus();
+  const online = useOnline();
   return (
-    <Button type="submit" isPending={pending}>
+    <Button type="submit" isPending={pending} isDisabled={!online}>
       {children}
     </Button>
   );
@@ -94,7 +95,7 @@ function AlreadySaved({ existing, onDone }: { existing: Existing; onDone: () => 
   );
 }
 
-function SaveForm({ onSaved }: { onSaved: () => void }) {
+function SaveForm({ initialUrl, onSaved }: { initialUrl: string; onSaved: () => void }) {
   const [outcome, setOutcome] = useState<SaveOutcome | null>(null);
   const [tagNames, setTagNames] = useState<string[]>([]);
   const { tags, refresh } = useTags();
@@ -123,6 +124,9 @@ function SaveForm({ onSaved }: { onSaved: () => void }) {
       <TextField
         name="url"
         label="Address"
+        defaultValue={initialUrl}
+        // oxlint-disable-next-line jsx-a11y/no-autofocus -- ready to paste, or to check a dropped link
+        autoFocus
         placeholder="https://"
         inputMode="url"
         autoComplete="off"
@@ -156,24 +160,57 @@ function SaveForm({ onSaved }: { onSaved: () => void }) {
   );
 }
 
-/** The "New clipping" button and the dialog it opens, also opened by `/?new` (an app shortcut). */
-export function NewClippingDialog() {
+/** Opens "New clipping", with the address filled in when there is one, such as a dropped link. */
+type OpenNewClipping = (url?: string) => void;
+
+const NewClippingContext = createContext<OpenNewClipping | null>(null);
+
+export function useOpenNewClipping(): OpenNewClipping {
+  const open = use(NewClippingContext);
+  if (!open) throw new Error("NewClippingProvider is missing");
+  return open;
+}
+
+/**
+ * The "New clipping" dialog, one for the whole app, so the button, the command palette and a
+ * dropped link all open the same one. `/?new` (an app shortcut) opens it too.
+ */
+export function NewClippingProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
-  useLaunchParam("new", () => setIsOpen(true));
+  const [initialUrl, setInitialUrl] = useState("");
+
+  const open: OpenNewClipping = (url = "") => {
+    // Already open: keep what has been typed rather than start over.
+    if (isOpen) return;
+    setInitialUrl(url);
+    setIsOpen(true);
+  };
+  // `/?new`, the New clipping app shortcut.
+  useLaunchParam("new", () => open());
 
   return (
-    <DialogTrigger isOpen={isOpen} onOpenChange={setIsOpen}>
-      <Button variant="filled">
-        <Icon name="add" />
-        New clipping
-      </Button>
-      <Modal isDismissable>
+    <NewClippingContext value={open}>
+      {children}
+      <Modal isDismissable isOpen={isOpen} onOpenChange={setIsOpen}>
         <Dialog>
           <Heading>New clipping</Heading>
           {/* The modal unmounts its children once it has closed, so every open starts a fresh form. */}
-          <SaveForm onSaved={() => setIsOpen(false)} />
+          <SaveForm initialUrl={initialUrl} onSaved={() => setIsOpen(false)} />
         </Dialog>
       </Modal>
-    </DialogTrigger>
+    </NewClippingContext>
+  );
+}
+
+/** The "New clipping" button. */
+export function NewClippingDialog() {
+  const open = useOpenNewClipping();
+  const online = useOnline();
+
+  return (
+    <Button variant="filled" isDisabled={!online} onPress={() => open()}>
+      <Icon name="add" />
+      New clipping
+    </Button>
   );
 }

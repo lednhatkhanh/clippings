@@ -29,9 +29,12 @@ const queue = new ToastQueue<ToastMessage>({ maxVisibleToasts: 3 });
 
 /** The app's one toast queue. `ToastRegion` shows what is shown here. */
 export const toasts = {
-  /** Shows a toast and returns its key, for `close`. */
-  show(toast: ToastMessage): string {
-    return queue.add(toast, { timeout: TIMEOUT_MS });
+  /**
+   * Shows a toast and returns its key, for `close`. A `persistent` toast stays until it is acted
+   * on or dismissed, for a message that matters until then.
+   */
+  show(toast: ToastMessage, { persistent = false }: { persistent?: boolean } = {}): string {
+    return queue.add(toast, persistent ? {} : { timeout: TIMEOUT_MS });
   },
   close(key: string): void {
     queue.close(key);
@@ -51,7 +54,7 @@ export function ToastRegion() {
       {({ toast }) => (
         <AriaToast
           toast={toast}
-          className="flex min-h-12 w-full items-center gap-1 rounded-xs bg-inverse-surface ps-4 pe-1 text-inverse-on-surface shadow-3 medium:w-auto medium:max-w-140 medium:min-w-86"
+          className="flex min-h-12 w-full toast-enter items-center gap-1 rounded-xs bg-inverse-surface ps-4 pe-1 text-inverse-on-surface shadow-3 medium:w-auto medium:max-w-140 medium:min-w-86"
         >
           <AriaToastContent className="min-w-0 flex-1 py-3">
             <Text slot="title" className="typescale-body-md">

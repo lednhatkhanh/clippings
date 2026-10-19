@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 
 import { updateClippingTagsAction } from "@/app/(app)/actions.ts";
+import { useOnline } from "@/components/online-status.tsx";
 import { hrefWithTag, loadBrowseParams } from "@/lib/clippings/browse-params.ts";
 import { MAX_TAG_LENGTH, type Tag } from "@clippings/shared";
 import { TagPicker } from "@clippings/ui";
@@ -29,6 +30,7 @@ export function TagEditor({ clippingId, tags: initialTags }: { clippingId: strin
   const [value, setValue] = useState(() => initialTags.map((tag) => tag.name));
   const [state, setState] = useState<SaveState>("idle");
   const { tags, refresh } = useTags();
+  const online = useOnline();
   // The clipping's own tags come with the page, so their colors show before the rest load.
   const offered = [...tags, ...initialTags.filter((tag) => !tags.some(({ id }) => id === tag.id))];
   // Saves go out one at a time, so an older one never lands after a newer one.
@@ -56,6 +58,7 @@ export function TagEditor({ clippingId, tags: initialTags }: { clippingId: strin
         onChange={change}
         tagHref={tagListHref}
         maxLength={MAX_TAG_LENGTH}
+        isDisabled={!online}
       />
       {/* An <output> is a polite live region, so the status is announced without moving focus. */}
       <output aria-live="polite" className="min-h-4 typescale-label-sm text-on-surface-variant">

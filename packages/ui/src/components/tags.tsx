@@ -94,6 +94,8 @@ export interface TagPickerProps {
   maxLength?: number;
   /** Shown under the field and marks it invalid. */
   errorMessage?: string;
+  /** Shows the chosen tags but takes no changes: no typing, no removing. */
+  isDisabled?: boolean;
   /** Layout only: placement in the parent, not appearance. */
   className?: string;
 }
@@ -112,6 +114,7 @@ export function TagPicker({
   name,
   maxLength,
   errorMessage,
+  isDisabled = false,
   className,
 }: TagPickerProps) {
   const [inputValue, setInputValue] = useState("");
@@ -166,6 +169,7 @@ export function TagPicker({
         allowsEmptyCollection
         menuTrigger="focus"
         isInvalid={errorMessage ? true : undefined}
+        isDisabled={isDisabled}
         className="flex flex-col gap-1"
       >
         <Label className="typescale-label-md text-on-surface-variant">{label}</Label>
@@ -183,7 +187,7 @@ export function TagPicker({
               create(typed);
             }
           }}
-          className="min-h-14 rounded-xs border border-outline bg-surface-container-high px-4 py-3 typescale-body-lg text-on-surface placeholder:text-on-surface-variant data-focused:border-primary data-invalid:border-error"
+          className="min-h-14 rounded-xs border border-outline bg-surface-container-high px-4 py-3 typescale-body-lg text-on-surface placeholder:text-on-surface-variant data-disabled:opacity-38 data-focused:border-primary data-invalid:border-error"
         />
         {errorMessage ? (
           <Text slot="errorMessage" className="typescale-body-sm text-error">
@@ -233,7 +237,11 @@ export function TagPicker({
       {value.length > 0 ? (
         <TagGroup
           aria-label={`${label}: chosen`}
-          onRemove={(keys) => onChange(value.filter((tagName) => !keys.has(keyOf(tagName))))}
+          onRemove={
+            isDisabled
+              ? undefined
+              : (keys) => onChange(value.filter((tagName) => !keys.has(keyOf(tagName))))
+          }
         >
           <TagList className="flex flex-wrap gap-1">
             {value.map((tagName) => (
@@ -244,19 +252,22 @@ export function TagPicker({
                 href={tagHref?.(tagName)}
                 className={cn(
                   CHIP,
-                  "cursor-default pe-0",
+                  "cursor-default",
+                  isDisabled ? null : "pe-0",
                   initial.has(keyOf(tagName)) ? null : "tag-pop",
                 )}
               >
                 <TagDot color={colorOf(tagName)} />
                 <span className="truncate">{tagName}</span>
-                <Button
-                  slot="remove"
-                  aria-label={`Remove ${tagName}`}
-                  className="state-layer flex size-6 shrink-0 items-center justify-center rounded-full"
-                >
-                  <Icon name="close" className="text-base" />
-                </Button>
+                {isDisabled ? null : (
+                  <Button
+                    slot="remove"
+                    aria-label={`Remove ${tagName}`}
+                    className="state-layer flex size-6 shrink-0 items-center justify-center rounded-full"
+                  >
+                    <Icon name="close" className="text-base" />
+                  </Button>
+                )}
               </AriaTag>
             ))}
           </TagList>

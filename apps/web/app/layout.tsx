@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 
+import { ServiceWorker } from "@/components/service-worker.tsx";
 import { APP_DESCRIPTION, APP_NAME } from "@/lib/pwa/app-identity.ts";
 import { DEFAULT_PALETTE } from "@clippings/shared";
 import { NO_FLASH_SCRIPT } from "@clippings/ui";
@@ -39,7 +40,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH_SCRIPT }} />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <ServiceWorker />
+      </body>
     </html>
   );
 }
