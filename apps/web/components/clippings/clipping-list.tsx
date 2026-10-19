@@ -6,15 +6,23 @@ import useSWR from "swr";
 
 import { loadMoreClippingsAction, retryEnrichmentAction } from "@/app/(app)/actions.ts";
 import { SheetTransition } from "@/components/page-transition.tsx";
+import { hrefWithTag, loadBrowseParams } from "@/lib/clippings/browse-params.ts";
 import type { ClippingRowData } from "@/lib/clippings/rows.ts";
-import { Button, ProgressBar } from "@clippings/ui";
+import { Button, ProgressBar, TagChips } from "@clippings/ui";
 
 import { useHiddenClippings } from "./deleted-clippings.tsx";
 import { Favicon } from "./favicon.tsx";
 import { fetchRow, POLL_EVERY_MS } from "./fetch-row.ts";
 import { HighlightedText } from "./highlighted-text.tsx";
 
-function ClippingRow({ row: initialRow }: { row: ClippingRowData }) {
+function ClippingRow({
+  row: initialRow,
+  tagHref,
+}: {
+  row: ClippingRowData;
+  /** Where a tag chip leads: this list, narrowed to the tag. */
+  tagHref: (tag: string) => string;
+}) {
   const [row, setRow] = useState(initialRow);
   const [retrying, setRetrying] = useState(false);
 
@@ -53,6 +61,7 @@ function ClippingRow({ row: initialRow }: { row: ClippingRowData }) {
               <span>{row.domain}</span>
               <time dateTime={row.dateTime}>{row.dateLabel}</time>
             </span>
+            <TagChips aria-label="Tags" tags={row.tags} href={tagHref} className="mt-1" />
             {row.highlights?.snippet ? (
               <span className="line-clamp-2 typescale-body-md text-on-surface-variant">
                 <HighlightedText segments={row.highlights.snippet} />
@@ -100,6 +109,8 @@ export function ClippingList({
   const [isLoading, setIsLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   const hidden = useHiddenClippings();
+  const params = loadBrowseParams(query);
+  const tagHref = (tag: string) => hrefWithTag(params, tag);
 
   async function loadMore() {
     if (!cursor || isLoading) return;
@@ -122,7 +133,7 @@ export function ClippingList({
         {rows
           .filter((row) => !hidden.has(row.id))
           .map((row) => (
-            <ClippingRow key={row.id} row={row} />
+            <ClippingRow key={row.id} row={row} tagHref={tagHref} />
           ))}
         {cursor && !failed ? (
           <GridListLoadMoreItem onLoadMore={loadMore} isLoading={isLoading} />

@@ -1,3 +1,5 @@
+import type { Tag } from "./tag.ts";
+
 /** Where a clipping was saved from. */
 export const CLIPPING_SOURCES = ["web", "extension", "mcp", "digest"] as const;
 export type ClippingSource = (typeof CLIPPING_SOURCES)[number];
@@ -26,6 +28,8 @@ export interface Clipping {
   source: ClippingSource;
   /** The OAuth client that saved it, when one did. */
   clientId: string | null;
+  /** The user's tags on it, by name. Only the user sets them; enrichment never does. */
+  tags: Tag[];
   /** ISO 8601. */
   createdAt: string;
 }

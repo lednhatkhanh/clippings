@@ -1,7 +1,7 @@
 import { constructNow } from "date-fns";
 
 import { formatClippingDate } from "@/lib/format-date.ts";
-import type { Clipping, ClippingStatus, SearchHighlights } from "@clippings/shared";
+import type { Clipping, ClippingStatus, SearchHighlights, Tag } from "@clippings/shared";
 
 import type { BrowseParams } from "./browse-params.ts";
 import { getClippings } from "./service.ts";
@@ -17,6 +17,7 @@ export interface ClippingRowData {
   /** ISO 8601, for the `<time>` element. */
   dateTime: string;
   status: ClippingStatus;
+  tags: Tag[];
   /** Where it matched, when the row is a search result. */
   highlights?: SearchHighlights;
 }
@@ -49,6 +50,7 @@ export function toRow(
     dateLabel: formatClippingDate(clipping.createdAt, now),
     dateTime: clipping.createdAt,
     status: clipping.status,
+    tags: clipping.tags,
   };
 }
 
@@ -58,18 +60,18 @@ export function toRow(
  */
 export async function loadRows(
   userId: string,
-  { q, sources, sort }: BrowseParams,
+  { q, tags, sources, sort }: BrowseParams,
   cursor?: string,
 ): Promise<RowsPage> {
   const now = constructNow(undefined);
   if (q.trim()) {
-    const { items } = await getClippings().searchClippings(userId, { q, sources, sort });
+    const { items } = await getClippings().searchClippings(userId, { q, tags, sources, sort });
     return {
       rows: items.map((hit) => toRow(hit.clipping, now, hit.highlights)),
       nextCursor: null,
     };
   }
-  const page = await getClippings().listClippings(userId, { cursor, sources });
+  const page = await getClippings().listClippings(userId, { cursor, tags, sources });
   return { rows: page.items.map((clipping) => toRow(clipping, now)), nextCursor: page.nextCursor };
 }
 

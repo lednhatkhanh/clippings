@@ -16,6 +16,7 @@ export type {
 export {
   createClippingsService,
   InvalidCursorError,
+  InvalidTagsError,
   InvalidUrlError,
   NoteTooLongError,
   systemClock,

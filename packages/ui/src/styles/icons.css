@@ -44,8 +44,8 @@
     "wght" 400,
     "GRAD" var(--icon-grade),
     "opsz" 24;
-  transition: font-variation-settings var(--md-sys-motion-duration-short3)
-    var(--md-sys-motion-easing-standard);
+  transition: font-variation-settings var(--md-sys-motion-spring-default-effects-duration)
+    var(--md-sys-motion-spring-default-effects);
 
   &[data-filled] {
     font-variation-settings:

@@ -26,6 +26,36 @@
   :where([data-focus-visible]) {
     outline: var(--md-sys-state-focus-indicator-thickness) solid var(--md-sys-color-secondary);
     outline-offset: var(--md-sys-state-focus-indicator-outer-offset);
+    animation: focus-ring var(--md-sys-motion-duration-long4) var(--md-sys-motion-easing-emphasized);
+
+    @media (prefers-reduced-motion: reduce) {
+      animation: none;
+    }
+  }
+
+  /*
+   * Text inputs match `:focus-visible` on a click too. The ring stays, but only keyboard focus
+   * (React Aria's `data-focus-visible`) plays the grow, so clicking into a field stays calm.
+   */
+  :where(input, textarea):focus-visible:not([data-focus-visible]) {
+    animation: none;
+  }
+}
+
+/*
+ * Material Web's focus ring: it grows to 8 px over the first quarter, then settles at 3 px.
+ * `animation-timing-function` applies per segment, so both halves are emphasized. Outline width
+ * doesn't affect layout.
+ */
+@keyframes focus-ring {
+  0% {
+    outline-width: 0;
+  }
+  25% {
+    outline-width: var(--md-sys-state-focus-indicator-active-thickness);
+  }
+  100% {
+    outline-width: var(--md-sys-state-focus-indicator-thickness);
   }
 }
 

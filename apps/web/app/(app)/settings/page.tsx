@@ -9,7 +9,7 @@ import { AppearanceSettings } from "@/components/settings/appearance-settings.ts
 import { getSession } from "@/lib/auth/session.ts";
 import { getAppearance } from "@/lib/settings/service.ts";
 import type { Appearance } from "@clippings/shared";
-import { Tab, TabList, TabPanel, Tabs } from "@clippings/ui";
+import { Tab, TabList, TabPanel, TabPanels, Tabs } from "@clippings/ui";
 
 export const metadata: Metadata = { title: "Settings · Clippings" };
 
@@ -31,12 +31,14 @@ async function SettingsTabs() {
         <Tab id="appearance">Appearance</Tab>
         <Tab id="account">Account</Tab>
       </TabList>
-      <TabPanel id="appearance">
-        <AppearanceSettings initial={appearance} />
-      </TabPanel>
-      <TabPanel id="account">
-        <AccountSettings email={session.user.email} />
-      </TabPanel>
+      <TabPanels>
+        <TabPanel id="appearance">
+          <AppearanceSettings initial={appearance} />
+        </TabPanel>
+        <TabPanel id="account">
+          <AccountSettings email={session.user.email} />
+        </TabPanel>
+      </TabPanels>
     </Tabs>
   );
 }

@@ -41,14 +41,14 @@ function NoResults({
   return (
     <section className="flex flex-col items-center gap-3 py-12 text-center">
       <h2 className="typescale-title-lg">
-        {q ? <>No clippings match &ldquo;{q}&rdquo;</> : "No clippings from these sources"}
+        {q ? <>No clippings match &ldquo;{q}&rdquo;</> : "No clippings match these filters"}
       </h2>
       <p className="max-w-100 typescale-body-md text-on-surface-variant">
         {q && hasFilters
-          ? "Try fewer words, or search every source."
+          ? "Try fewer words, or clear the filters."
           : q
             ? "Try fewer or different words."
-            : "Choose other sources, or show them all."}
+            : "Choose other filters, or clear them."}
       </p>
       {hasFilters ? (
         <Button variant="text" onPress={onClearFilters}>
@@ -60,7 +60,7 @@ function NoResults({
 }
 
 /**
- * The search field, source filters and the list they describe. The server renders the first
+ * The search field, tag and source filters and the list they describe. The server renders the first
  * result for the URL's params; after that, typing searches through SWR, debounced, with the
  * previous results kept, dimmed, until the new ones arrive. The field and filters live in the URL
  * (nuqs, shallow): it follows along without a server request, so a reload shows the same results,
@@ -74,7 +74,7 @@ export function ClippingsBrowser({
   initialParams: BrowseParams;
   initialPage: RowsPage;
 }) {
-  const [{ q: query, sources, sort }, setParams] = useQueryStates(browseParsers, {
+  const [{ q: query, tags, sources, sort }, setParams] = useQueryStates(browseParsers, {
     urlKeys: browseUrlKeys,
   });
   const [searchedQuery, setSearchedQuery] = useState(query);
@@ -95,7 +95,7 @@ export function ClippingsBrowser({
     return () => clearTimeout(timer);
   }, [query, searchedQuery]);
 
-  const params: BrowseParams = { q: searchedQuery, sources, sort };
+  const params: BrowseParams = { q: searchedQuery, tags, sources, sort };
   const key = toQueryString(params);
   // What the server rendered: it renders again, with fresh rows, after a save or delete.
   const isServerPage = key === toQueryString(initialParams);
@@ -113,7 +113,7 @@ export function ClippingsBrowser({
   const isStale = !current || query.trim() !== searchedQuery.trim();
   const shownParams = new URLSearchParams(shown.key);
   const shownQuery = shownParams.get("q") ?? "";
-  const hasFilters = sources.length > 0;
+  const hasFilters = tags.length > 0 || sources.length > 0;
   const rows = shown.page.rows;
 
   return (
@@ -124,6 +124,22 @@ export function ClippingsBrowser({
         value={query}
         onChange={changeQuery}
       />
+      {tags.length > 0 ? (
+        // The tags filtered by, from a chip: deselecting one widens the list again.
+        <FilterChips
+          aria-label="Tags filtered by"
+          selectedKeys={tags}
+          onSelectionChange={(keys) =>
+            void setParams({ tags: tags.filter((tag) => keys.includes(tag)) })
+          }
+        >
+          {tags.map((tag) => (
+            <FilterChip key={tag} id={tag}>
+              {tag}
+            </FilterChip>
+          ))}
+        </FilterChips>
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <FilterChips
           aria-label="Sources"
@@ -171,7 +187,7 @@ export function ClippingsBrowser({
           <NoResults
             q={shownQuery}
             hasFilters={hasFilters}
-            onClearFilters={() => void setParams({ sources: null })}
+            onClearFilters={() => void setParams({ tags: null, sources: null })}
           />
         ) : (
           <ClippingList

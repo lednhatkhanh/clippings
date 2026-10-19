@@ -198,14 +198,19 @@
 }
 
 /*
- * One `::before` overlay per interactive surface, driven by React Aria's `data-*` state
- * attributes so touch and keyboard behave like hover. Apply with `state-layer`.
+ * State layers for interactive surfaces, driven by React Aria's `data-*` state attributes so
+ * touch and keyboard behave like hover. Apply with `state-layer`. Material Web's timing: hover
+ * and focus sit on `::before` and change almost at once (15 ms); press sits on `::after`, fading
+ * in over 105 ms and out over 375 ms so even a quick tap shows. The plain `:hover` fallback (for
+ * non-RAC elements such as `next/link`) applies only where the pointer can hover, because touch
+ * browsers keep `:hover` after a tap. Opacity only, so reduced motion keeps it.
  */
 @utility state-layer {
   position: relative;
   isolation: isolate;
 
-  &::before {
+  &::before,
+  &::after {
     content: "";
     position: absolute;
     inset: 0;
@@ -214,12 +219,24 @@
     background: currentColor;
     opacity: 0;
     pointer-events: none;
-    transition: opacity var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-standard);
   }
 
-  &[data-hovered]::before,
-  &:hover::before {
+  &::before {
+    transition: opacity var(--md-sys-state-layer-hover-duration) linear;
+  }
+
+  &::after {
+    transition: opacity var(--md-sys-state-layer-press-out-duration) linear;
+  }
+
+  &[data-hovered]::before {
     opacity: var(--md-sys-state-hover-state-layer-opacity);
+  }
+
+  @media (hover: hover) {
+    &:hover::before {
+      opacity: var(--md-sys-state-hover-state-layer-opacity);
+    }
   }
 
   &[data-focus-visible]::before,
@@ -227,19 +244,76 @@
     opacity: var(--md-sys-state-focus-state-layer-opacity);
   }
 
-  &[data-pressed]::before,
-  &:active::before {
+  &[data-pressed]::after,
+  &:active::after {
     opacity: var(--md-sys-state-pressed-state-layer-opacity);
+    transition-duration: var(--md-sys-state-layer-press-in-duration);
   }
 
   &[data-dragging]::before {
     opacity: var(--md-sys-state-dragged-state-layer-opacity);
+  }
+
+  @media (forced-colors: active) {
+    &::before,
+    &::after {
+      display: none;
+    }
+  }
+}
+
+/*
+ * A text field's indicator: 1 px of border at rest, thickened to 2 px on focus by an inset ring,
+ * so the layout never shifts. Colors and the ring move on the fast effects spring.
+ */
+@utility field-indicator {
+  border: 1px solid var(--md-sys-color-outline);
+  transition-property: border-color, box-shadow;
+  transition-duration: var(--md-sys-motion-spring-fast-effects-duration);
+  transition-timing-function: var(--md-sys-motion-spring-fast-effects);
+
+  &[data-focused] {
+    border-color: var(--md-sys-color-primary);
+    box-shadow: inset 0 0 0 1px var(--md-sys-color-primary);
+  }
+
+  &[data-invalid] {
+    border-color: var(--md-sys-color-error);
+  }
+
+  &[data-invalid][data-focused] {
+    box-shadow: inset 0 0 0 1px var(--md-sys-color-error);
   }
 }
 
 /* Bottom padding that clears the home indicator on notched phones (viewport-fit=cover). */
 @utility pb-safe {
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+/*
+ * A newly added tag chip pops in: scale on the expressive fast spatial spring, one of the two
+ * places the expressive scheme is used, and opacity on fast effects. Reduced motion zeroes the
+ * spatial duration, so it only fades.
+ */
+@keyframes tag-pop-scale {
+  from {
+    scale: 0.6;
+  }
+}
+
+@keyframes tag-pop-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@utility tag-pop {
+  animation:
+    tag-pop-scale var(--md-sys-motion-expressive-spring-fast-spatial-duration)
+      var(--md-sys-motion-expressive-spring-fast-spatial),
+    tag-pop-fade var(--md-sys-motion-spring-fast-effects-duration)
+      var(--md-sys-motion-spring-fast-effects);
 }
 
 /*
