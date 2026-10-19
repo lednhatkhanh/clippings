@@ -71,13 +71,32 @@
   --md-sys-motion-duration-extra-long3: 900ms;
   --md-sys-motion-duration-extra-long4: 1000ms;
 
-  /* Motion: easings (the real emphasized curve is a path CSS can't express, so it aliases standard) */
+  /* Motion: easings. The emphasized path is generated as `linear()` in springs.css. */
   --md-sys-motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
   --md-sys-motion-easing-standard-decelerate: cubic-bezier(0, 0, 0, 1);
   --md-sys-motion-easing-standard-accelerate: cubic-bezier(0.3, 0, 1, 1);
-  --md-sys-motion-easing-emphasized: cubic-bezier(0.2, 0, 0, 1);
   --md-sys-motion-easing-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
   --md-sys-motion-easing-emphasized-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
+
+  /*
+   * Motion: springs. The product's scheme is standard; this one set of aliases picks it, so the
+   * expressive scheme means pointing them at `--md-sys-motion-expressive-spring-*` instead. Hero moments (the "saved" check, the new-tag-chip
+   * pop) use `--md-sys-motion-expressive-spring-*` directly. Effects springs are shared by both
+   * schemes. Every spatial duration is multiplied by the spatial factor, 0 under reduced motion.
+   */
+  --md-sys-motion-spatial-factor: 1;
+  --md-sys-motion-spring-fast-spatial: var(--md-sys-motion-standard-spring-fast-spatial);
+  --md-sys-motion-spring-fast-spatial-duration: var(
+    --md-sys-motion-standard-spring-fast-spatial-duration
+  );
+  --md-sys-motion-spring-default-spatial: var(--md-sys-motion-standard-spring-default-spatial);
+  --md-sys-motion-spring-default-spatial-duration: var(
+    --md-sys-motion-standard-spring-default-spatial-duration
+  );
+  --md-sys-motion-spring-slow-spatial: var(--md-sys-motion-standard-spring-slow-spatial);
+  --md-sys-motion-spring-slow-spatial-duration: var(
+    --md-sys-motion-standard-spring-slow-spatial-duration
+  );
 
   /* Density: list-row padding and gap, comfortable by default, tightened by `data-density` */
   --md-sys-density-row-block: 0.75rem;
@@ -85,6 +104,13 @@
 
   /* Top app bar height: the shell's `h-16`, and the scroll padding that keeps focus clear of it */
   --top-bar-height: 4rem;
+}
+
+/* What travels stops; what fades still fades (WCAG 2.3.3 excludes color and opacity changes). */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --md-sys-motion-spatial-factor: 0;
+  }
 }
 
 :root[data-density="compact"] {
