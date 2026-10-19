@@ -19,7 +19,10 @@ export interface DisclosureProps {
   className?: string;
 }
 
-/** A section that opens from a heading-level trigger, closed to begin with. */
+/**
+ * A section that opens from a heading-level trigger, closed to begin with. The panel grows to its
+ * content and the chevron turns; find-in-page still opens it while closed.
+ */
 export function Disclosure({ title, children, className }: DisclosureProps) {
   return (
     <AriaDisclosure className={cn("group flex flex-col", className)}>
@@ -28,11 +31,15 @@ export function Disclosure({ title, children, className }: DisclosureProps) {
           slot="trigger"
           className="state-layer flex min-h-12 w-full items-center gap-2 rounded-full ps-2 pe-4 text-start text-on-surface"
         >
-          <Icon name="chevron_right" className="group-data-expanded:rotate-90" />
+          <span className="flex transition-transform duration-spatial-fast ease-spatial-fast group-data-expanded:rotate-90">
+            <Icon name="chevron_right" />
+          </span>
           {title}
         </AriaButton>
       </Heading>
-      <DisclosurePanel className="px-2 pb-2">{children}</DisclosurePanel>
+      <DisclosurePanel className="disclosure-panel">
+        <div className="px-2 pb-2">{children}</div>
+      </DisclosurePanel>
     </AriaDisclosure>
   );
 }

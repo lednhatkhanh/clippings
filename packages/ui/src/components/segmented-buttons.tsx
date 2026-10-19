@@ -54,11 +54,15 @@ export function Segment({ children, ...props }: SegmentProps) {
   return (
     <ToggleButton
       {...props}
-      className="state-layer flex h-10 min-w-0 flex-1 items-center justify-center gap-2 border border-outline px-3 typescale-label-lg text-on-surface not-first:-ms-px first:rounded-s-full last:rounded-e-full data-disabled:opacity-38 data-focus-visible:z-10 data-selected:bg-secondary-container data-selected:text-on-secondary-container"
+      className="state-layer flex h-10 min-w-0 flex-1 items-center justify-center gap-2 border border-outline px-3 typescale-label-lg text-on-surface transition-colors not-first:-ms-px first:rounded-s-full last:rounded-e-full data-disabled:opacity-38 data-focus-visible:z-10 data-selected:bg-secondary-container data-selected:text-on-secondary-container"
     >
       {({ isSelected }) => (
         <>
-          {isSelected && <Icon name="check" className="text-lg" />}
+          {isSelected && (
+            <span className="flex check-pop">
+              <Icon name="check" className="text-lg" />
+            </span>
+          )}
           <span className="truncate">{children}</span>
         </>
       )}

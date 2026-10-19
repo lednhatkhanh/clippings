@@ -1,14 +1,17 @@
 "use client";
 
 import {
+  SelectionIndicator,
   Tab as AriaTab,
   TabList as AriaTabList,
   TabPanel as AriaTabPanel,
+  TabPanels as AriaTabPanels,
   Tabs as AriaTabs,
 } from "react-aria-components";
 import type {
   TabListProps as AriaTabListProps,
   TabPanelProps as AriaTabPanelProps,
+  TabPanelsProps as AriaTabPanelsProps,
   TabProps as AriaTabProps,
   TabsProps as AriaTabsProps,
 } from "react-aria-components";
@@ -20,7 +23,10 @@ export interface TabsProps extends Omit<AriaTabsProps, "className"> {
   className?: string;
 }
 
-/** M3 primary tabs: `Tabs` holds a `TabList` of `Tab`s and one `TabPanel` per tab `id`. */
+/**
+ * M3 primary tabs: `Tabs` holds a `TabList` of `Tab`s and a `TabPanels` with one `TabPanel` per
+ * tab `id`.
+ */
 export function Tabs({ className, ...props }: TabsProps) {
   return <AriaTabs {...props} className={cn("flex flex-col", className)} />;
 }
@@ -35,18 +41,29 @@ export interface TabProps extends Omit<AriaTabProps, "className" | "children"> {
   children: React.ReactNode;
 }
 
+/** The underline slides to the selected tab; the label color fades in, and out faster. */
 export function Tab({ children, ...props }: TabProps) {
   return (
     <AriaTab
       {...props}
-      className="group state-layer flex min-h-12 flex-1 cursor-default items-stretch justify-center px-4 typescale-title-sm text-on-surface-variant data-disabled:opacity-38 data-selected:text-primary"
+      className="state-layer flex min-h-12 flex-1 cursor-default items-stretch justify-center px-4 typescale-title-sm text-on-surface-variant transition-colors duration-effects-fast ease-effects-fast data-disabled:opacity-38 data-selected:text-primary data-selected:duration-effects data-selected:ease-effects"
     >
-      <span className="relative flex items-center">
+      <div className="relative flex items-center">
         {children}
-        <span className="absolute inset-x-0 bottom-0 hidden rounded-t-full border-t-3 border-primary group-data-selected:block" />
-      </span>
+        <SelectionIndicator className="absolute start-0 bottom-0 w-full tab-indicator rounded-t-full border-t-3 border-primary" />
+      </div>
     </AriaTab>
   );
+}
+
+export interface TabPanelsProps<T extends object> extends Omit<
+  AriaTabPanelsProps<T>,
+  "className"
+> {}
+
+/** Holds the `TabPanel`s and animates its height to each newly selected one. */
+export function TabPanels<T extends object>(props: TabPanelsProps<T>) {
+  return <AriaTabPanels {...props} className="tab-panels" />;
 }
 
 export interface TabPanelProps extends Omit<AriaTabPanelProps, "className"> {
@@ -55,5 +72,5 @@ export interface TabPanelProps extends Omit<AriaTabPanelProps, "className"> {
 }
 
 export function TabPanel({ className, ...props }: TabPanelProps) {
-  return <AriaTabPanel {...props} className={cn("pt-4", className)} />;
+  return <AriaTabPanel {...props} className={cn("tab-panel pt-4", className)} />;
 }
