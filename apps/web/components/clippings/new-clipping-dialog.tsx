@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useFormStatus } from "react-dom";
 
 import { saveClippingAction, updateClippingAction, type SaveOutcome } from "@/app/(app)/actions.ts";
+import { useOnline } from "@/components/online-status.tsx";
 import { hrefWithTag, loadBrowseParams } from "@/lib/clippings/browse-params.ts";
 import { MAX_NOTE_LENGTH, MAX_TAG_LENGTH } from "@clippings/shared";
 import {
@@ -24,8 +25,9 @@ import { useTags } from "./use-tags.ts";
 
 function SubmitButton({ children }: { children: string }) {
   const { pending } = useFormStatus();
+  const online = useOnline();
   return (
-    <Button type="submit" isPending={pending}>
+    <Button type="submit" isPending={pending} isDisabled={!online}>
       {children}
     </Button>
   );
@@ -158,10 +160,11 @@ function SaveForm({ onSaved }: { onSaved: () => void }) {
 /** The "New clipping" button and the dialog it opens. */
 export function NewClippingDialog() {
   const [isOpen, setIsOpen] = useState(false);
+  const online = useOnline();
 
   return (
     <DialogTrigger isOpen={isOpen} onOpenChange={setIsOpen}>
-      <Button variant="filled">
+      <Button variant="filled" isDisabled={!online}>
         <Icon name="add" />
         New clipping
       </Button>

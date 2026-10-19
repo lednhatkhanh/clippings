@@ -83,6 +83,10 @@ async function ClippingDetail({ params }: Pick<PageProps<"/c/[id]">, "params">) 
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-3">
         <h1 className="typescale-headline-sm text-balance wrap-anywhere">{clipping.title}</h1>
+        {/* On paper there is no link to follow, so the address itself goes under the title. */}
+        <p className="hidden typescale-body-md font-mono wrap-anywhere print:block">
+          {clipping.url}
+        </p>
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 typescale-label-md text-on-surface-variant">
           <Favicon url={clipping.url} />
           <span className="font-mono">{domainOf(clipping.url)}</span>
@@ -95,7 +99,7 @@ async function ClippingDetail({ params }: Pick<PageProps<"/c/[id]">, "params">) 
         </p>
       </header>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 print:hidden">
         <LinkButton variant="filled" href={clipping.url} target="_blank" rel="noopener noreferrer">
           <Icon name="open_in_new" />
           Open original
@@ -147,7 +151,7 @@ export default function ClippingPage({ params }: PageProps<"/c/[id]">) {
         <LinkButton
           href="/"
           routerOptions={{ transitionTypes: ["nav-back"] }}
-          className="self-start"
+          className="self-start print:hidden"
         >
           <Icon name="arrow_back" />
           Clippings

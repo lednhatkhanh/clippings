@@ -8,7 +8,7 @@ import { SheetTransition } from "@/components/page-transition.tsx";
 /** The paper sheet a clipping is read on. */
 export function Sheet({ children }: { children: ReactNode }) {
   return (
-    <article className="mx-auto w-fit max-w-full rounded-lg border border-outline-variant bg-surface-container-lowest p-6 medium:p-12">
+    <article className="mx-auto w-fit max-w-full rounded-lg border border-outline-variant bg-surface-container-lowest p-6 medium:p-12 print:border-0 print:p-0">
       {/* The reading measure is set in the reading type, so 66ch means 66 of its characters. */}
       <div className="w-reading max-w-full typescale-reading">{children}</div>
     </article>

@@ -25,7 +25,7 @@ export interface TextFieldProps extends Omit<AriaTextFieldProps, "className" | "
 }
 
 const CONTROL =
-  "field-indicator rounded-xs bg-surface-container-high px-4 py-3 typescale-body-lg text-on-surface placeholder:text-on-surface-variant";
+  "field-indicator rounded-xs bg-surface-container-high px-4 py-3 typescale-body-lg text-on-surface placeholder:text-on-surface-variant data-disabled:opacity-38";
 
 export function TextField({
   label,
