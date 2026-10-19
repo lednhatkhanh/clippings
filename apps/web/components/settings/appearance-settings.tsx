@@ -6,11 +6,13 @@ import { flushSync } from "react-dom";
 import { saveAppearanceAction } from "@/app/(app)/settings/actions.ts";
 import type { Appearance, AppearanceKey } from "@clippings/shared";
 import {
+  appearanceTransitionFor,
   applyAppearance,
   Segment,
   SegmentedButtons,
   toasts,
   transitionAppearance,
+  type AppearanceTransition,
 } from "@clippings/ui";
 
 import { PalettePicker } from "./palette-picker.tsx";
@@ -30,31 +32,33 @@ function revealOrigin() {
  */
 export function AppearanceSettings({ initial }: { initial: Appearance }) {
   const [appearance, setAppearance] = useState(initial);
-  // What the page shows right now, for a failed save that has to be taken back later.
+  // What the page shows, or is about to once a view transition runs its update, for a failed
+  // save that has to be taken back later.
   const shown = useRef(initial);
 
-  function show(next: Appearance, animate: boolean) {
+  function show(next: Appearance, kind: AppearanceTransition) {
+    // Set now: the view transition runs `update` a frame later, and a save can fail before that.
+    shown.current = next;
     const update = () => {
-      shown.current = next;
+      // The latest choice, so a transition that started before a revert doesn't undo it.
+      const latest = shown.current;
       // Synchronous, so the view transition's new snapshot already shows the new selection.
-      flushSync(() => setAppearance(next));
-      applyAppearance(next);
+      flushSync(() => setAppearance(latest));
+      applyAppearance(latest);
     };
-    if (animate) transitionAppearance(update, { origin: revealOrigin() });
-    else update();
+    transitionAppearance(update, { kind, origin: revealOrigin() });
   }
 
   function change<K extends AppearanceKey>(key: K, value: Appearance[K]) {
     const previous = shown.current[key];
     if (previous === value) return;
-    // Colors animate; density just reflows.
-    const animate = key !== "density";
-    show({ ...shown.current, [key]: value }, animate);
+    show({ ...shown.current, [key]: value }, appearanceTransitionFor(key));
 
     saveAppearanceAction({ [key]: value }).catch(() => {
       // Unsaved, the next page load would put the server's value back anyway: do it now, unless
       // the user has picked something else since.
-      if (shown.current[key] === value) show({ ...shown.current, [key]: previous }, animate);
+      if (shown.current[key] === value)
+        show({ ...shown.current, [key]: previous }, appearanceTransitionFor(key, { revert: true }));
       toasts.show({ message: "Couldn't save that setting. Try again." });
     });
   }

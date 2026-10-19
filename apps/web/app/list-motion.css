@@ -1,0 +1,108 @@
+/*
+ * List motion (research §3.3, §4.4; audit A24, A25). React's `<ViewTransition>` can't drive these:
+ * React Aria renders a `GridList`'s rows from its collection store, whose updates commit outside
+ * the Transition, so state drives CSS instead. Effects springs fade, the default spatial spring
+ * moves; reduced motion zeroes the spatial factor (tokens.css), so rows then only fade.
+ */
+
+@keyframes row-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes row-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes row-collapse {
+  from {
+    grid-template-rows: 1fr;
+  }
+  to {
+    grid-template-rows: 0fr;
+  }
+}
+
+@keyframes row-expand {
+  from {
+    grid-template-rows: 0fr;
+  }
+  to {
+    grid-template-rows: 1fr;
+  }
+}
+
+/*
+ * A row that is deleted fades out, then collapses so its neighbours close the gap; one that comes
+ * back (Undo) opens its gap first, then fades in. `components/clippings/clipping-list.tsx` sets
+ * `data-presence` and drops the row when `row-collapse` ends. The row is a one-track grid, so the
+ * track's `fr` animates its height without measuring it.
+ */
+@utility row-presence {
+  grid-template-rows: 1fr;
+
+  & > * {
+    min-height: 0;
+  }
+
+  &[data-presence] > * {
+    overflow: clip;
+  }
+
+  &[data-presence="leaving"] {
+    animation:
+      row-fade-out var(--md-sys-motion-spring-fast-effects-duration)
+        var(--md-sys-motion-spring-fast-effects) both,
+      row-collapse var(--md-sys-motion-spring-default-spatial-duration)
+        var(--md-sys-motion-spring-default-spatial)
+        var(--md-sys-motion-spring-fast-effects-duration) both;
+  }
+
+  &[data-presence="returning"] {
+    animation:
+      row-expand var(--md-sys-motion-spring-default-spatial-duration)
+        var(--md-sys-motion-spring-default-spatial) both,
+      row-fade-in var(--md-sys-motion-spring-fast-effects-duration)
+        var(--md-sys-motion-spring-fast-effects)
+        var(--md-sys-motion-spring-default-spatial-duration) both;
+  }
+
+  /*
+   * Deleting from the detail page goes back to the list, where the sheet morphs into this row:
+   * the row holds still until that view transition ends, then leaves.
+   */
+  @supports selector(:active-view-transition) {
+    :root:active-view-transition &[data-presence] {
+      animation-play-state: paused;
+    }
+  }
+}
+
+@keyframes status-resize {
+  from {
+    height: var(--status-from-height);
+  }
+  to {
+    height: var(--status-to-height);
+  }
+}
+
+/*
+ * A row whose status changed (`components/clippings/status-motion.tsx`): the sheet glides from its
+ * old height to its new one while the new text fades in.
+ */
+[data-status-changed] {
+  overflow: clip;
+  animation: status-resize var(--md-sys-motion-spring-default-spatial-duration)
+    var(--md-sys-motion-spring-default-spatial);
+}
+
+@utility status-content {
+  [data-status-changed] > & {
+    animation: row-fade-in var(--md-sys-motion-spring-default-effects-duration)
+      var(--md-sys-motion-spring-default-effects) both;
+  }
+}
