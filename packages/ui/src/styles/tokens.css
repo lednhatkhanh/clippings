@@ -52,6 +52,13 @@
   /* Focus indicator */
   --md-sys-state-focus-indicator-thickness: 3px;
   --md-sys-state-focus-indicator-outer-offset: 2px;
+  /* Material Web's focus ring grows to this before settling at the thickness */
+  --md-sys-state-focus-indicator-active-thickness: 8px;
+
+  /* State-layer timing (Material Web): hover and focus near-instant, press quick in, slow out */
+  --md-sys-state-layer-hover-duration: 15ms;
+  --md-sys-state-layer-press-in-duration: 105ms;
+  --md-sys-state-layer-press-out-duration: 375ms;
 
   /* Motion: durations */
   --md-sys-motion-duration-short1: 50ms;
