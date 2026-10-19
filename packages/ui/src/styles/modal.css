@@ -1,0 +1,150 @@
+/*
+ * Modal motion, driven by React Aria's `data-entering` / `data-exiting` states. RAC keeps both the
+ * overlay and the modal mounted until their own animations finish, and the dialog moves focus in
+ * only once the modal has entered. `modal-scrim` goes on `ModalOverlay`, `modal-panel` on `Modal`.
+ *
+ * Compact is a bottom sheet: it slides up and down and never fades; only the scrim does. From the
+ * medium size class up it is Material Web's dialog: it drops 50px and grows from 35% of its height
+ * (a `clip-path` stands in for MW's `::before` height animation), its content fades in after the
+ * container, and it leaves the same way, faster. No scale. Reduced motion makes both a short fade.
+ * The spatial factor (tokens.css) can't reach into keyframes, so the reduced-motion blocks here
+ * swap the travel for a fade themselves, and shorten the scrim to match.
+ *
+ * Exits name only their end state, so they start from wherever the element is. An Escape mid-enter
+ * pins the pose it reached (`Modal` writes it inline), and the exit leaves from there.
+ */
+@keyframes modal-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes modal-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes modal-sheet-in {
+  from {
+    translate: 0 100%;
+  }
+}
+
+@keyframes modal-sheet-out {
+  to {
+    translate: 0 100%;
+  }
+}
+
+/* The container fades in over its first 50ms and out over its last 50ms, as in MW. */
+@keyframes modal-dialog-in {
+  from {
+    translate: 0 -50px;
+    clip-path: inset(0 0 65% 0 round var(--radius-xl));
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  to {
+    clip-path: inset(0 round var(--radius-xl));
+  }
+}
+
+@keyframes modal-dialog-out {
+  66% {
+    opacity: 1;
+  }
+  to {
+    translate: 0 -50px;
+    clip-path: inset(0 0 65% 0 round var(--radius-xl));
+    opacity: 0;
+  }
+}
+
+/* Headline and content hold at 0 for the first fifth, then fade in once the container has grown. */
+@keyframes modal-content-in {
+  from,
+  20% {
+    opacity: 0;
+  }
+}
+
+@utility modal-scrim {
+  &[data-entering] {
+    animation: modal-fade-in var(--md-sys-motion-duration-medium4) linear both;
+  }
+
+  &[data-exiting] {
+    animation: modal-fade-out var(--md-sys-motion-duration-short4) linear both;
+  }
+
+  @variant medium {
+    &[data-entering] {
+      animation-duration: var(--md-sys-motion-duration-long2);
+    }
+
+    &[data-exiting] {
+      animation-duration: var(--md-sys-motion-duration-short3);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &[data-entering],
+    &[data-exiting] {
+      animation-duration: var(--md-sys-motion-duration-short3);
+    }
+  }
+}
+
+@utility modal-panel {
+  &[data-entering] {
+    animation: modal-sheet-in var(--md-sys-motion-duration-medium4)
+      var(--md-sys-motion-easing-emphasized-decelerate) both;
+  }
+
+  &[data-exiting] {
+    animation: modal-sheet-out var(--md-sys-motion-duration-short4)
+      var(--md-sys-motion-easing-emphasized-accelerate) both;
+  }
+
+  @variant medium {
+    /* At rest too, so the exit's clip has a shape to grow from. */
+    clip-path: inset(0 round var(--radius-xl));
+
+    &[data-entering] {
+      animation: modal-dialog-in var(--md-sys-motion-duration-long2)
+        var(--md-sys-motion-easing-emphasized) both;
+    }
+
+    &[data-exiting] {
+      animation: modal-dialog-out var(--md-sys-motion-duration-short3)
+        var(--md-sys-motion-easing-emphasized-accelerate) both;
+    }
+
+    &[data-entering] > * {
+      animation: modal-content-in var(--md-sys-motion-duration-medium1) linear both;
+    }
+
+    &[data-exiting] > * {
+      animation: modal-fade-out var(--md-sys-motion-duration-short2) linear both;
+    }
+  }
+
+  /* Last, so it wins at every size: no travel, no clip, just a short fade. */
+  @media (prefers-reduced-motion: reduce) {
+    &[data-entering] {
+      animation: modal-fade-in var(--md-sys-motion-duration-short3) linear both;
+    }
+
+    &[data-exiting] {
+      animation: modal-fade-out var(--md-sys-motion-duration-short3) linear both;
+    }
+
+    &[data-entering] > *,
+    &[data-exiting] > * {
+      animation: none;
+    }
+  }
+}
