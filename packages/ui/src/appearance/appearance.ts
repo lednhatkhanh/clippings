@@ -69,50 +69,102 @@ export function applyAppearance(appearance: Appearance, target?: ApplyTarget): v
   }
 }
 
-const REVEAL_MS = 400;
+/**
+ * How an appearance change animates. "reveal": the new look grows as a circle from the control.
+ * "fade": a crossfade. "none": it applies at once.
+ */
+export type AppearanceTransition = "reveal" | "fade" | "none";
+
+/**
+ * The transition a change to `key` gets: light and dark keep the circular reveal, palette and
+ * contrast crossfade, density just reflows. Taking back a change after a failed save applies at
+ * once, so it doesn't look like a second user action.
+ */
+export function appearanceTransitionFor(
+  key: AppearanceKey,
+  options?: { revert?: boolean },
+): AppearanceTransition {
+  if (options?.revert) return "none";
+  if (key === "theme") return "reveal";
+  if (key === "density") return "none";
+  return "fade";
+}
+
+/** Used when the token can't be read; matches `--md-sys-motion-duration-medium4`. */
+const REVEAL_FALLBACK_MS = 400;
 const REVEAL_EASING = "cubic-bezier(0.05, 0.7, 0.1, 1)";
 const TRANSITION_ATTRIBUTE = "data-appearance-transition";
 
+/** The appearance view transition still running, if any. */
+let running: ViewTransition | undefined;
+
+/** A CSS `<time>` (`400ms`, `0.4s`) in milliseconds, or `undefined` when it isn't one. */
+function parseCssTime(value: string): number | undefined {
+  const match = /^(-?[\d.]+)(ms|s)$/.exec(value.trim());
+  if (!match) return undefined;
+  const amount = Number.parseFloat(match[1]!);
+  if (Number.isNaN(amount)) return undefined;
+  return match[2] === "s" ? amount * 1000 : amount;
+}
+
 /**
  * Runs `update` inside a view transition, so the page changes from the old look to the new one
- * instead of jumping. Without reduced motion the new look is revealed as a circle growing from
- * `origin` (default: the viewport center); with it, a short crossfade. Without
- * `document.startViewTransition`, `update` just runs.
+ * instead of jumping. `kind` (default "reveal") picks the animation, see `appearanceTransitionFor`:
+ * "reveal" grows the new look as a circle from `origin` (default: the viewport center) over
+ * `--md-sys-motion-duration-medium4`, "fade" crossfades on the default effects spring, and "none"
+ * just runs `update`, skipping the rest of any appearance transition still running. Under reduced
+ * motion every animated change is the crossfade. Without `document.startViewTransition`, `update`
+ * just runs.
  *
  * The browser snapshots the new state right after `update` returns, so React state set in it must
  * be committed synchronously: wrap the setter in `flushSync`.
  */
 export function transitionAppearance(
   update: () => void,
-  options?: { origin?: { x: number; y: number } },
+  options?: { kind?: AppearanceTransition; origin?: { x: number; y: number } },
 ): void {
+  const kind = options?.kind ?? "reveal";
   if (typeof document === "undefined" || typeof document.startViewTransition !== "function") {
+    update();
+    return;
+  }
+  if (kind === "none") {
+    // An animation still running would play on after a change that should apply at once.
+    running?.skipTransition();
     update();
     return;
   }
 
   const root = document.documentElement;
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  root.setAttribute(TRANSITION_ATTRIBUTE, reduced ? "fade" : "reveal");
+  const reveal = kind === "reveal" && !reduced;
+  root.setAttribute(TRANSITION_ATTRIBUTE, reveal ? "reveal" : "fade");
 
   const transition = document.startViewTransition(update);
-  const clear = () => root.removeAttribute(TRANSITION_ATTRIBUTE);
+  running = transition;
+  // A newer transition skips this one; its attribute stays until it finishes itself.
+  const clear = () => {
+    if (running !== transition) return;
+    running = undefined;
+    root.removeAttribute(TRANSITION_ATTRIBUTE);
+  };
   transition.finished.then(clear, clear);
-  if (reduced) return;
+  if (!reveal) return;
 
   const x = options?.origin?.x ?? innerWidth / 2;
   const y = options?.origin?.y ?? innerHeight / 2;
   const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+  const style = getComputedStyle(root);
+  const duration =
+    parseCssTime(style.getPropertyValue("--md-sys-motion-duration-medium4")) ?? REVEAL_FALLBACK_MS;
   const easing =
-    getComputedStyle(root)
-      .getPropertyValue("--md-sys-motion-easing-emphasized-decelerate")
-      .trim() || REVEAL_EASING;
+    style.getPropertyValue("--md-sys-motion-easing-emphasized-decelerate").trim() || REVEAL_EASING;
 
   transition.ready.then(
     () => {
       root.animate(
         { clipPath: [`circle(0 at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
-        { duration: REVEAL_MS, easing, pseudoElement: "::view-transition-new(root)" },
+        { duration, easing, pseudoElement: "::view-transition-new(root)" },
       );
     },
     () => {

@@ -2,9 +2,11 @@ export {
   APPEARANCE_COOKIE,
   APPEARANCE_STORAGE_KEYS,
   NO_FLASH_SCRIPT,
+  appearanceTransitionFor,
   applyAppearance,
   encodeAppearanceCookie,
   transitionAppearance,
+  type AppearanceTransition,
 } from "./appearance/appearance.ts";
 export {
   Button,
