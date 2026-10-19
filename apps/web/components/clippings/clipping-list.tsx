@@ -5,6 +5,7 @@ import { GridList, GridListItem, GridListLoadMoreItem } from "react-aria-compone
 import useSWR from "swr";
 
 import { loadMoreClippingsAction, retryEnrichmentAction } from "@/app/(app)/actions.ts";
+import { useOnline } from "@/components/online-status.tsx";
 import { SheetTransition } from "@/components/page-transition.tsx";
 import { hrefWithTag, loadBrowseParams } from "@/lib/clippings/browse-params.ts";
 import type { ClippingRowData } from "@/lib/clippings/rows.ts";
@@ -35,6 +36,7 @@ function ClippingRow({
 }) {
   const [row, setRow] = useState(initialRow);
   const [retrying, setRetrying] = useState(false);
+  const online = useOnline();
 
   // A pending row asks for itself until enrichment has finished, then shows the result in place.
   useSWR(row.status === "pending" ? `/api/clippings/${row.id}` : null, fetchRow, {
@@ -99,7 +101,7 @@ function ClippingRow({
             {row.status === "failed" ? (
               <div className="flex flex-wrap items-center gap-x-3 typescale-body-sm text-on-surface-variant">
                 <span>Couldn&apos;t read this page. Your link and note are saved.</span>
-                <Button variant="text" onPress={retry} isPending={retrying}>
+                <Button variant="text" onPress={retry} isPending={retrying} isDisabled={!online}>
                   Retry
                 </Button>
               </div>

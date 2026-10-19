@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { updateClippingAction } from "@/app/(app)/actions.ts";
+import { useOnline } from "@/components/online-status.tsx";
 import { MAX_NOTE_LENGTH } from "@clippings/shared";
 import { TextField } from "@clippings/ui";
 
@@ -21,6 +22,7 @@ const STATUS_TEXT: Record<SaveState, string> = {
 /**
  * The clipping's note, edited in place. It saves itself a moment after typing stops and when
  * the field loses focus; Esc puts back the last saved text. The status is a polite live region.
+ * Offline, the field is disabled; an edit whose save failed is sent again once the network is back.
  */
 export function NoteEditor({ clippingId, note }: { clippingId: string; note: string }) {
   const [value, setValue] = useState(note);
@@ -31,6 +33,7 @@ export function NoteEditor({ clippingId, note }: { clippingId: string; note: str
   // Saves go out one at a time, so an older one never lands after a newer one.
   const queue = useRef<Promise<void>>(Promise.resolve());
   const latest = useRef(note);
+  const online = useOnline();
 
   function cancelPending() {
     if (timer.current) clearTimeout(timer.current);
@@ -67,6 +70,13 @@ export function NoteEditor({ clippingId, note }: { clippingId: string; note: str
     if (state === "failed") setState("idle");
   }
 
+  useEffect(() => {
+    const resume = () => save(latest.current);
+    window.addEventListener("online", resume);
+    return () => window.removeEventListener("online", resume);
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- save reads refs; the id stays per page
+  }, []);
+
   // Leaving the page mid-pause still saves the last edit.
   useEffect(
     () => () => {
@@ -85,6 +95,7 @@ export function NoteEditor({ clippingId, note }: { clippingId: string; note: str
         rows={4}
         maxLength={MAX_NOTE_LENGTH}
         value={value}
+        isDisabled={!online}
         onChange={change}
         onBlur={() => save(latest.current)}
         onKeyDown={(event) => {

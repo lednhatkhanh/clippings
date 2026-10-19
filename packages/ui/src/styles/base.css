@@ -1,5 +1,5 @@
 /*
- * Document-level rules: color scheme, focus, reduced motion and paper grain. Import after
+ * Document-level rules: color scheme, focus, reduced motion, paper grain and print. Import after
  * `@import "tailwindcss"` so it layers with Tailwind's base styles.
  */
 
@@ -82,6 +82,21 @@ body::before {
 }
 
 @media (prefers-reduced-transparency: reduce), (forced-colors: active) {
+  body::before {
+    display: none;
+  }
+}
+
+/*
+ * Print: light colors whatever the theme (every color role is a `light-dark()` pair, so the
+ * scheme alone flips them) and no grain. Navigation hides itself with `print:hidden`.
+ */
+@media print {
+  :root,
+  :root[data-theme] {
+    color-scheme: light;
+  }
+
   body::before {
     display: none;
   }
