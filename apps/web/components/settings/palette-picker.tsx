@@ -37,7 +37,7 @@ export function PalettePicker({
           <Radio
             key={palette}
             value={palette}
-            className="state-layer flex cursor-default items-center gap-3 rounded-md border border-outline-variant p-3 data-selected:border-primary data-selected:bg-secondary-container data-selected:text-on-secondary-container"
+            className="state-layer flex cursor-default items-center gap-3 rounded-md border border-outline-variant p-3 transition-colors data-selected:border-primary data-selected:bg-secondary-container data-selected:text-on-secondary-container"
           >
             {({ isSelected }) => (
               <>
@@ -51,7 +51,11 @@ export function PalettePicker({
                   <span className={cn("size-4 rounded-full", PALETTES[palette].dot)} />
                 </span>
                 <span className="flex-1 typescale-label-lg">{PALETTES[palette].label}</span>
-                {isSelected ? <Icon name="check" /> : null}
+                {isSelected ? (
+                  <span className="flex check-pop">
+                    <Icon name="check" />
+                  </span>
+                ) : null}
               </>
             )}
           </Radio>
