@@ -10,18 +10,28 @@ import { hrefWithTag, loadBrowseParams } from "@/lib/clippings/browse-params.ts"
 import type { ClippingRowData } from "@/lib/clippings/rows.ts";
 import { Button, ProgressBar, TagChips } from "@clippings/ui";
 
-import { useHiddenClippings } from "./deleted-clippings.tsx";
+import { useRowPresence, type RowPresence } from "./deleted-clippings.tsx";
 import { Favicon } from "./favicon.tsx";
 import { fetchRow, POLL_EVERY_MS } from "./fetch-row.ts";
 import { HighlightedText } from "./highlighted-text.tsx";
+import { StatusMotion } from "./status-motion.tsx";
+
+/** The last animation of a row's leaving and returning motion (`app/list-motion.css`). */
+const ROW_SETTLED_BY = new Set(["row-collapse", "row-fade-in"]);
 
 function ClippingRow({
   row: initialRow,
   tagHref,
+  presence,
+  onSettle,
 }: {
   row: ClippingRowData;
   /** Where a tag chip leads: this list, narrowed to the tag. */
   tagHref: (tag: string) => string;
+  /** Set while a deleted row leaves or an undone one returns. */
+  presence: Exclude<RowPresence, "gone"> | undefined;
+  /** Its leaving or returning motion has finished. */
+  onSettle: () => void;
 }) {
   const [row, setRow] = useState(initialRow);
   const [retrying, setRetrying] = useState(false);
@@ -47,13 +57,24 @@ function ClippingRow({
       id={row.id}
       textValue={row.title}
       href={`/c/${row.id}`}
-      className="@container state-layer block rounded-sm border-b border-outline-variant px-2 data-focus-visible:outline-solid"
+      className="@container state-layer grid row-presence rounded-sm border-b border-outline-variant px-2 data-focus-visible:outline-solid"
+      // CSS animates a deleted or undone row (`app/list-motion.css` says why not a view
+      // transition), and the list drops the row once its last animation ends.
+      data-presence={presence}
+      onAnimationEnd={(event) => {
+        if (event.target === event.currentTarget && ROW_SETTLED_BY.has(event.animationName)) {
+          onSettle();
+        }
+      }}
     >
       {/* The row's sheet morphs into the detail page's, and back. */}
       <SheetTransition clippingId={row.id} direction="back">
-        <div className="flex items-start gap-3 py-row-block @lg:items-center">
+        <StatusMotion
+          status={row.status}
+          className="flex items-start gap-3 py-row-block @lg:items-center"
+        >
           <Favicon url={row.url} />
-          <div className="flex min-w-0 flex-1 flex-col gap-row-gap">
+          <div className="flex min-w-0 flex-1 status-content flex-col gap-row-gap">
             <span className="truncate typescale-clipping-title">
               {row.highlights ? <HighlightedText segments={row.highlights.title} /> : row.title}
             </span>
@@ -84,7 +105,7 @@ function ClippingRow({
               </div>
             ) : null}
           </div>
-        </div>
+        </StatusMotion>
       </SheetTransition>
     </GridListItem>
   );
@@ -108,7 +129,7 @@ export function ClippingList({
   const [cursor, setCursor] = useState(initialCursor);
   const [isLoading, setIsLoading] = useState(false);
   const [failed, setFailed] = useState(false);
-  const hidden = useHiddenClippings();
+  const { presence, settle } = useRowPresence();
   const params = loadBrowseParams(query);
   const tagHref = (tag: string) => hrefWithTag(params, tag);
 
@@ -131,10 +152,19 @@ export function ClippingList({
     <>
       <GridList aria-label="Your clippings" className="flex flex-col">
         {rows
-          .filter((row) => !hidden.has(row.id))
-          .map((row) => (
-            <ClippingRow key={row.id} row={row} tagHref={tagHref} />
-          ))}
+          .filter((row) => presence.get(row.id) !== "gone")
+          .map((row) => {
+            const rowPresence = presence.get(row.id);
+            return (
+              <ClippingRow
+                key={row.id}
+                row={row}
+                tagHref={tagHref}
+                presence={rowPresence === "gone" ? undefined : rowPresence}
+                onSettle={() => settle(row.id)}
+              />
+            );
+          })}
         {cursor && !failed ? (
           <GridListLoadMoreItem onLoadMore={loadMore} isLoading={isLoading} />
         ) : null}
