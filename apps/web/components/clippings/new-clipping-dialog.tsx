@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useFormStatus } from "react-dom";
 
 import { saveClippingAction, updateClippingAction, type SaveOutcome } from "@/app/(app)/actions.ts";
+import { useLaunchParam } from "@/components/use-launch-param.ts";
 import { hrefWithTag, loadBrowseParams } from "@/lib/clippings/browse-params.ts";
 import { MAX_NOTE_LENGTH, MAX_TAG_LENGTH } from "@clippings/shared";
 import {
@@ -155,9 +156,10 @@ function SaveForm({ onSaved }: { onSaved: () => void }) {
   );
 }
 
-/** The "New clipping" button and the dialog it opens. */
+/** The "New clipping" button and the dialog it opens, also opened by `/?new` (an app shortcut). */
 export function NewClippingDialog() {
   const [isOpen, setIsOpen] = useState(false);
+  useLaunchParam("new", () => setIsOpen(true));
 
   return (
     <DialogTrigger isOpen={isOpen} onOpenChange={setIsOpen}>
