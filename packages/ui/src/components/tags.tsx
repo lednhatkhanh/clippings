@@ -33,9 +33,32 @@ const DOTS: Record<Exclude<TagColor, "none">, string> = {
   pink: "bg-tag-pink-dot",
 };
 
-/** The 8px color dot. Decoration only: the name always says which tag it is. */
-function TagDot({ color }: { color: TagColor }) {
-  if (color === "none") return null;
+/** Each tag color as a person reads it, for a color picker. */
+export const TAG_COLOR_LABELS: Record<TagColor, string> = {
+  none: "No color",
+  red: "Red",
+  orange: "Orange",
+  amber: "Amber",
+  green: "Green",
+  teal: "Teal",
+  blue: "Blue",
+  violet: "Violet",
+  pink: "Pink",
+};
+
+/**
+ * The 8px color dot. Decoration only: the name always says which tag it is. `none` draws nothing,
+ * unless `showNone` asks for its empty ring, as a list of tags or colors does.
+ */
+export function TagDot({ color, showNone = false }: { color: TagColor; showNone?: boolean }) {
+  if (color === "none") {
+    return showNone ? (
+      <span
+        aria-hidden="true"
+        className="size-2 shrink-0 rounded-full border border-outline-variant bg-surface-container-low"
+      />
+    ) : null;
+  }
   return <span aria-hidden="true" className={cn("size-2 shrink-0 rounded-full", DOTS[color])} />;
 }
 

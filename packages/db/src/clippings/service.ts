@@ -23,6 +23,7 @@ import {
   MAX_QUERY_LENGTH,
   MAX_TAG_LENGTH,
   MAX_TAGS_PER_CLIPPING,
+  isTagColor,
   normalizeTagNames,
   parseWebUrl,
   SEARCH_RESULT_LIMIT,
@@ -31,6 +32,7 @@ import {
   type SearchHit,
   type SearchSort,
   type Tag,
+  type TagSummary,
   type TextSegment,
 } from "@clippings/shared";
 
@@ -166,6 +168,9 @@ const fromSources = (sources: readonly ClippingSource[] = []) =>
 
 /** What `db.transaction` hands its callback. */
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+/** A tag as the DTO has it. */
+const tagColumns = { id: tags.id, name: tags.name, color: tags.color };
 
 /** A tag name as uniqueness sees it, in SQL: `lower()`, as the unique index has it. */
 const tagKey = (name: SQLWrapper) => sql`lower(${name})`;
@@ -348,6 +353,27 @@ function checkedTagNames(names: readonly string[]): string[] {
   return kept;
 }
 
+export class InvalidTagColorError extends Error {
+  constructor(color: string) {
+    super(`Not a tag color: ${color}`);
+    this.name = "InvalidTagColorError";
+  }
+}
+
+export class TagNameTakenError extends Error {
+  constructor(name: string) {
+    super(`You already have a tag named ${name}`);
+    this.name = "TagNameTakenError";
+  }
+}
+
+/** Postgres refused a row that breaks a unique index: drizzle wraps its error as the cause. */
+function isUniqueViolation(error: unknown): boolean {
+  const code = (value: unknown) =>
+    typeof value === "object" && value !== null && "code" in value ? value.code : undefined;
+  return code(error) === "23505" || (error instanceof Error && code(error.cause) === "23505");
+}
+
 export class InvalidUrlError extends Error {
   constructor(url: string) {
     super(`Not a web address: ${url}`);
@@ -464,10 +490,112 @@ export function createClippingsService({
   /** The user's tags, by name. */
   async function listTags(userId: string): Promise<Tag[]> {
     return db
-      .select({ id: tags.id, name: tags.name, color: tags.color })
+      .select(tagColumns)
       .from(tags)
       .where(eq(tags.userId, userId))
       .orderBy(tagKey(tags.name), tags.name);
+  }
+
+  /** The user's tags, by name, each with how many of their clippings carry it. */
+  async function listTagSummaries(userId: string): Promise<TagSummary[]> {
+    return db
+      .select({
+        ...tagColumns,
+        clippingCount: sql<number>`count(${clippings.id})::int`,
+      })
+      .from(tags)
+      .leftJoin(clippingTags, eq(clippingTags.tagId, tags.id))
+      .leftJoin(clippings, and(eq(clippings.id, clippingTags.clippingId), live))
+      .where(eq(tags.userId, userId))
+      .groupBy(tags.id)
+      .orderBy(tagKey(tags.name), tags.name);
+  }
+
+  /**
+   * Gives the tag a new name on every clipping that carries it. Returns the tag as it now
+   * stands, or null when the user has no such tag. Throws when the name is empty or too long, or
+   * another of the user's tags has it, ignoring case.
+   */
+  async function renameTag(userId: string, tagId: string, name: string): Promise<Tag | null> {
+    const [newName] = checkedTagNames([name]);
+    if (!newName) throw new InvalidTagsError("A tag needs a name");
+    if (!UUID.test(tagId)) return null;
+    try {
+      const [renamed] = await db
+        .update(tags)
+        .set({ name: newName })
+        .where(and(eq(tags.id, tagId), eq(tags.userId, userId)))
+        .returning(tagColumns);
+      return renamed ?? null;
+    } catch (error) {
+      if (isUniqueViolation(error)) throw new TagNameTakenError(newName);
+      throw error;
+    }
+  }
+
+  /**
+   * Moves every clipping tagged `sourceId` to `targetId`, then removes the source tag. A clipping
+   * that already has both keeps one link to the target. Returns false, changing nothing, unless
+   * both are the user's tags and they differ. A save that tags a clipping with the source while
+   * the merge runs waits for it, then fails once the source is gone.
+   */
+  async function mergeTag(userId: string, sourceId: string, targetId: string): Promise<boolean> {
+    if (!UUID.test(sourceId) || !UUID.test(targetId) || sourceId === targetId) return false;
+    return db.transaction(async (tx) => {
+      const found = await tx
+        .select({ id: tags.id })
+        .from(tags)
+        .where(and(eq(tags.userId, userId), inArray(tags.id, [sourceId, targetId])))
+        // Locked, so a rename or delete of either waits until the merge is done. In id order, so
+        // two merges of the same pair in opposite directions can't deadlock.
+        .orderBy(tags.id)
+        .for("update");
+      if (found.length !== 2) return false;
+      await tx
+        .insert(clippingTags)
+        .select(
+          tx
+            .select({
+              clippingId: clippingTags.clippingId,
+              tagId: sql`${targetId}::uuid`.as("tag_id"),
+              userId: clippingTags.userId,
+            })
+            .from(clippingTags)
+            .where(and(eq(clippingTags.tagId, sourceId), eq(clippingTags.userId, userId))),
+        )
+        .onConflictDoNothing();
+      // The source's links go with it: `clipping_tags` cascades on the tag.
+      await tx.delete(tags).where(and(eq(tags.id, sourceId), eq(tags.userId, userId)));
+      return true;
+    });
+  }
+
+  /**
+   * Removes the tag from every clipping and from the user's tags; the clippings stay. Returns
+   * false when the user has no such tag.
+   */
+  async function deleteTag(userId: string, tagId: string): Promise<boolean> {
+    if (!UUID.test(tagId)) return false;
+    const deleted = await db
+      .delete(tags)
+      .where(and(eq(tags.id, tagId), eq(tags.userId, userId)))
+      .returning({ id: tags.id });
+    return deleted.length > 0;
+  }
+
+  /**
+   * Gives the tag one of `TAG_COLORS`, by name. Returns the tag as it now stands, or null when
+   * the user has no such tag. Throws on a name that isn't a tag color.
+   */
+  async function setTagColor(userId: string, tagId: string, color: string): Promise<Tag | null> {
+    if (!isTagColor(color)) throw new InvalidTagColorError(color);
+    if (!UUID.test(tagId)) return null;
+    const [updated] = await db
+      .update(tags)
+      .set({ color })
+      .where(and(eq(tags.id, tagId), eq(tags.userId, userId)))
+      .returning(tagColumns);
+    return updated ?? null;
   }
 
   async function saveClipping(
@@ -954,6 +1082,11 @@ export function createClippingsService({
   return {
     saveClipping,
     listTags,
+    listTagSummaries,
+    renameTag,
+    mergeTag,
+    deleteTag,
+    setTagColor,
     listClippings,
     searchClippings,
     relatedClippings,

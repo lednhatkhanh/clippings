@@ -13,3 +13,10 @@ export const getSession = cache(async () => {
   const requestHeaders = await headers();
   return getAuth().api.getSession({ headers: requestHeaders });
 });
+
+/** The signed-in user's id, for server actions; throws when there is no session. */
+export async function requireUserId(): Promise<string> {
+  const session = await getSession();
+  if (!session) throw new Error("Not signed in");
+  return session.user.id;
+}

@@ -15,6 +15,10 @@ export const TAG_COLORS = [
 ] as const;
 export type TagColor = (typeof TAG_COLORS)[number];
 
+/** Whether a name, such as one a client sent, is one of `TAG_COLORS`. */
+export const isTagColor = (color: string): color is TagColor =>
+  (TAG_COLORS as readonly string[]).includes(color);
+
 /** Longest tag name, in characters. */
 export const MAX_TAG_LENGTH = 50;
 
@@ -26,6 +30,11 @@ export interface Tag {
   id: string;
   name: string;
   color: TagColor;
+}
+
+/** A tag as the Tags page lists it: with how many of the user's clippings carry it. */
+export interface TagSummary extends Tag {
+  clippingCount: number;
 }
 
 /** A tag name as uniqueness sees it: "Work" and "work" are the same tag. */

@@ -3,7 +3,7 @@
 import { constructNow } from "date-fns";
 import { revalidatePath } from "next/cache";
 
-import { getSession } from "@/lib/auth/session.ts";
+import { requireUserId } from "@/lib/auth/session.ts";
 import { loadBrowseParams } from "@/lib/clippings/browse-params.ts";
 import { loadRows, toRow, type ClippingRowData, type RowsPage } from "@/lib/clippings/rows.ts";
 import { getClippings } from "@/lib/clippings/service.ts";
@@ -22,12 +22,6 @@ export type SaveOutcome =
       savedOn: string;
     }
   | { status: "invalid"; field: "url" | "note" | "tags"; message: string };
-
-async function requireUserId(): Promise<string> {
-  const session = await getSession();
-  if (!session) throw new Error("Not signed in");
-  return session.user.id;
-}
 
 const readString = (formData: FormData, name: string) => {
   const value = formData.get(name);

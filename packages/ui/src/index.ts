@@ -30,6 +30,15 @@ export {
   type FilterChipsProps,
 } from "./components/filter-chips.tsx";
 export { Dialog, DialogTrigger, Heading, Modal } from "./components/modal.tsx";
+export {
+  Menu,
+  MenuItem,
+  MenuSeparator,
+  MenuTrigger,
+  SubmenuTrigger,
+  type MenuItemProps,
+  type MenuProps,
+} from "./components/menu.tsx";
 export { ProgressBar, type ProgressBarProps } from "./components/progress-bar.tsx";
 export {
   Segment,
@@ -51,7 +60,9 @@ export {
 } from "./components/tabs.tsx";
 export { SearchField, type SearchFieldProps } from "./components/search-field.tsx";
 export {
+  TAG_COLOR_LABELS,
   TagChips,
+  TagDot,
   TagPicker,
   type TagChipsProps,
   type TagPickerProps,
