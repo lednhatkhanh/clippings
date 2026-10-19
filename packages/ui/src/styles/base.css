@@ -32,6 +32,14 @@
       animation: none;
     }
   }
+
+  /*
+   * Text inputs match `:focus-visible` on a click too. The ring stays, but only keyboard focus
+   * (React Aria's `data-focus-visible`) plays the grow, so clicking into a field stays calm.
+   */
+  :where(input, textarea):focus-visible:not([data-focus-visible]) {
+    animation: none;
+  }
 }
 
 /*
@@ -44,7 +52,7 @@
     outline-width: 0;
   }
   25% {
-    outline-width: 8px;
+    outline-width: var(--md-sys-state-focus-indicator-active-thickness);
   }
   100% {
     outline-width: var(--md-sys-state-focus-indicator-thickness);

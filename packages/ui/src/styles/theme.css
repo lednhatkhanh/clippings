@@ -222,11 +222,11 @@
   }
 
   &::before {
-    transition: opacity 15ms linear;
+    transition: opacity var(--md-sys-state-layer-hover-duration) linear;
   }
 
   &::after {
-    transition: opacity 375ms linear;
+    transition: opacity var(--md-sys-state-layer-press-out-duration) linear;
   }
 
   &[data-hovered]::before {
@@ -247,7 +247,7 @@
   &[data-pressed]::after,
   &:active::after {
     opacity: var(--md-sys-state-pressed-state-layer-opacity);
-    transition-duration: 105ms;
+    transition-duration: var(--md-sys-state-layer-press-in-duration);
   }
 
   &[data-dragging]::before {
@@ -264,11 +264,11 @@
 
 /*
  * A text field's indicator: 1 px of border at rest, thickened to 2 px on focus by an inset ring,
- * so the layout never shifts. Colours and the ring move on the fast effects spring.
+ * so the layout never shifts. Colors and the ring move on the fast effects spring.
  */
 @utility field-indicator {
   border: 1px solid var(--md-sys-color-outline);
-  transition-property: border-color, box-shadow, background-color, color;
+  transition-property: border-color, box-shadow;
   transition-duration: var(--md-sys-motion-spring-fast-effects-duration);
   transition-timing-function: var(--md-sys-motion-spring-fast-effects);
 
