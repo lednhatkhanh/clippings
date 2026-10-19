@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- The Clippings mark: a paper clip bent into a "C" (docs/research/2026-10-15-design.md §10.3).
+       Colors are olive secondary-container and on-secondary-container from tokens.json. -->
+  <style>
+    .tile { fill: #e8e4bf; }
+    .clip { stroke: #49482c; }
+    @media (prefers-color-scheme: dark) {
+      .tile { fill: #49482c; }
+      .clip { stroke: #e8e4bf; }
+    }
+  </style>
+  <rect class="tile" width="64" height="64" rx="16" />
+  <path
+    class="clip"
+    d="M46 18H27A14 14 0 0 0 27 46H43A8 8 0 0 0 43 30H30A4 4 0 0 0 30 38H40"
+    fill="none"
+    stroke-width="4.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>
