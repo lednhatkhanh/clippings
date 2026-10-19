@@ -51,7 +51,7 @@ export function ToastRegion() {
       {({ toast }) => (
         <AriaToast
           toast={toast}
-          className="flex min-h-12 w-full items-center gap-1 rounded-xs bg-inverse-surface ps-4 pe-1 text-inverse-on-surface shadow-3 medium:w-auto medium:max-w-140 medium:min-w-86"
+          className="flex min-h-12 w-full toast-enter items-center gap-1 rounded-xs bg-inverse-surface ps-4 pe-1 text-inverse-on-surface shadow-3 medium:w-auto medium:max-w-140 medium:min-w-86"
         >
           <AriaToastContent className="min-w-0 flex-1 py-3">
             <Text slot="title" className="typescale-body-md">
