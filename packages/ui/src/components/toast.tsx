@@ -29,9 +29,12 @@ const queue = new ToastQueue<ToastMessage>({ maxVisibleToasts: 3 });
 
 /** The app's one toast queue. `ToastRegion` shows what is shown here. */
 export const toasts = {
-  /** Shows a toast and returns its key, for `close`. */
-  show(toast: ToastMessage): string {
-    return queue.add(toast, { timeout: TIMEOUT_MS });
+  /**
+   * Shows a toast and returns its key, for `close`. A `persistent` toast stays until it is acted
+   * on or dismissed, for a message that matters until then.
+   */
+  show(toast: ToastMessage, { persistent = false }: { persistent?: boolean } = {}): string {
+    return queue.add(toast, persistent ? {} : { timeout: TIMEOUT_MS });
   },
   close(key: string): void {
     queue.close(key);
