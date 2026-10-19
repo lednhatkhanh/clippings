@@ -34,9 +34,9 @@ export function OfflineBanner() {
   return (
     <output className="sticky top-16 z-20 block print:hidden">
       {online ? null : (
-        <p className="bg-inverse-surface px-4 py-3 typescale-body-md text-inverse-on-surface medium:px-6 large:px-8">
+        <span className="block bg-inverse-surface px-4 py-3 typescale-body-md text-inverse-on-surface medium:px-6 large:px-8">
           You&apos;re offline. Changes are paused.
-        </p>
+        </span>
       )}
     </output>
   );

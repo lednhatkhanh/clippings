@@ -7,6 +7,7 @@ import { Button } from "@clippings/ui";
 export default function AppError({ retry }: { retry: () => void }) {
   return (
     <StatusPage
+      isAlert
       title="Something went wrong."
       actions={
         <Button variant="filled" onPress={retry}>

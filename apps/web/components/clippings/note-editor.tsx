@@ -22,7 +22,7 @@ const STATUS_TEXT: Record<SaveState, string> = {
 /**
  * The clipping's note, edited in place. It saves itself a moment after typing stops and when
  * the field loses focus; Esc puts back the last saved text. The status is a polite live region.
- * Offline, the field is disabled and an edit not yet saved waits until the network is back.
+ * Offline, the field is disabled; an edit whose save failed is sent again once the network is back.
  */
 export function NoteEditor({ clippingId, note }: { clippingId: string; note: string }) {
   const [value, setValue] = useState(note);
@@ -43,8 +43,6 @@ export function NoteEditor({ clippingId, note }: { clippingId: string; note: str
   function save(text: string) {
     cancelPending();
     if (text === requested.current) return;
-    // Changes are paused offline; coming back online saves the latest text.
-    if (!navigator.onLine) return;
     const previous = requested.current;
     requested.current = text;
     setState("saving");
@@ -76,7 +74,7 @@ export function NoteEditor({ clippingId, note }: { clippingId: string; note: str
     const resume = () => save(latest.current);
     window.addEventListener("online", resume);
     return () => window.removeEventListener("online", resume);
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- save reads only refs
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- save reads refs; the id stays per page
   }, []);
 
   // Leaving the page mid-pause still saves the last edit.

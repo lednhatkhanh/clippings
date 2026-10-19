@@ -8,6 +8,7 @@ export default function RootError({ retry }: { retry: () => void }) {
   return (
     <main className="min-h-dvh bg-surface px-4 text-on-surface">
       <StatusPage
+        isAlert
         title="Something went wrong."
         actions={
           <>

@@ -9,14 +9,20 @@ export function StatusPage({
   title,
   children,
   actions,
+  isAlert = false,
 }: {
   illustration?: ReactNode;
   title: string;
   children: ReactNode;
   actions: ReactNode;
+  /** Announces the page as it appears, for a failure that replaced what the user expected. */
+  isAlert?: boolean;
 }) {
   return (
-    <section className="mx-auto flex max-w-120 flex-col items-center gap-4 py-16 text-center">
+    <section
+      role={isAlert ? "alert" : undefined}
+      className="mx-auto flex max-w-120 flex-col items-center gap-4 py-16 text-center"
+    >
       {illustration}
       <h1 className="typescale-headline-sm text-balance">{title}</h1>
       <p className="typescale-body-lg text-pretty text-on-surface-variant">{children}</p>
