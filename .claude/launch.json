@@ -21,6 +21,15 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["scripts/local/fakes.mjs"],
       "port": 8080
+    },
+    {
+      "name": "web-local-start",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "set -a; . scripts/local/local.env; set +a; export BETTER_AUTH_URL=http://localhost:3200; exec pnpm --filter @clippings/web start --port 3200"
+      ],
+      "port": 3200
     }
   ]
 }

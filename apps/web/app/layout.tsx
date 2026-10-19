@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 
+import { ServiceWorker } from "@/components/service-worker.tsx";
+import { APP_DESCRIPTION, APP_NAME } from "@/lib/pwa/app-identity.ts";
 import { DEFAULT_PALETTE } from "@clippings/shared";
 import { NO_FLASH_SCRIPT } from "@clippings/ui";
 import tokens from "@clippings/ui/tokens.json";
@@ -10,8 +12,9 @@ import { mono, sans, serif } from "./fonts.ts";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Clippings",
-  description: "Save pages, add notes, find them again.",
+  title: APP_NAME,
+  description: APP_DESCRIPTION,
+  appleWebApp: { capable: true, title: APP_NAME, statusBarStyle: "default" },
 };
 
 const paper = tokens.palettes[DEFAULT_PALETTE].schemes.standard;
@@ -37,7 +40,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH_SCRIPT }} />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <ServiceWorker />
+      </body>
     </html>
   );
 }

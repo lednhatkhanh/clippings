@@ -1,5 +1,5 @@
 /*
- * Document-level rules: color scheme, focus, reduced motion and paper grain. Import after
+ * Document-level rules: color scheme, focus, reduced motion, paper grain and print. Import after
  * `@import "tailwindcss"` so it layers with Tailwind's base styles.
  */
 
@@ -26,6 +26,36 @@
   :where([data-focus-visible]) {
     outline: var(--md-sys-state-focus-indicator-thickness) solid var(--md-sys-color-secondary);
     outline-offset: var(--md-sys-state-focus-indicator-outer-offset);
+    animation: focus-ring var(--md-sys-motion-duration-long4) var(--md-sys-motion-easing-emphasized);
+
+    @media (prefers-reduced-motion: reduce) {
+      animation: none;
+    }
+  }
+
+  /*
+   * Text inputs match `:focus-visible` on a click too. The ring stays, but only keyboard focus
+   * (React Aria's `data-focus-visible`) plays the grow, so clicking into a field stays calm.
+   */
+  :where(input, textarea):focus-visible:not([data-focus-visible]) {
+    animation: none;
+  }
+}
+
+/*
+ * Material Web's focus ring: it grows to 8 px over the first quarter, then settles at 3 px.
+ * `animation-timing-function` applies per segment, so both halves are emphasized. Outline width
+ * doesn't affect layout.
+ */
+@keyframes focus-ring {
+  0% {
+    outline-width: 0;
+  }
+  25% {
+    outline-width: var(--md-sys-state-focus-indicator-active-thickness);
+  }
+  100% {
+    outline-width: var(--md-sys-state-focus-indicator-thickness);
   }
 }
 
@@ -57,13 +87,29 @@ body::before {
   }
 }
 
-/* Reduced motion keeps opacity fades and removes everything that travels. */
+/*
+ * Print: light colors whatever the theme (every color role is a `light-dark()` pair, so the
+ * scheme alone flips them) and no grain. Navigation hides itself with `print:hidden`.
+ */
+@media print {
+  :root,
+  :root[data-theme] {
+    color-scheme: light;
+  }
+
+  body::before {
+    display: none;
+  }
+}
+
+/*
+ * Reduced motion: the spatial factor (tokens.css) stops spatial springs and keeps fades. Smooth
+ * scrolling travels too, so it goes.
+ */
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,
   ::after {
-    animation-duration: 1ms !important;
-    transition-duration: 1ms !important;
     scroll-behavior: auto !important;
   }
 }
@@ -71,8 +117,9 @@ body::before {
 /*
  * Appearance changes (see `transitionAppearance`) run in a view transition. The attribute is set
  * only while one runs, so page transitions added elsewhere keep the browser's defaults.
- * "reveal": the script clips the new view into a growing circle over the old one, so both
- * snapshots just sit still and opaque. "fade": reduced motion gets a short crossfade.
+ * `appearanceTransitionFor` picks which change gets which. "reveal": the script clips the new view
+ * into a growing circle over the old one, so both snapshots just sit still and opaque. "fade": a
+ * crossfade on the default effects spring.
  */
 :root[data-appearance-transition="reveal"]::view-transition-old(root),
 :root[data-appearance-transition="reveal"]::view-transition-new(root) {
@@ -81,5 +128,6 @@ body::before {
 }
 
 :root[data-appearance-transition="fade"]::view-transition-group(root) {
-  animation-duration: var(--md-sys-motion-duration-short3);
+  animation-duration: var(--md-sys-motion-spring-default-effects-duration);
+  animation-timing-function: var(--md-sys-motion-spring-default-effects);
 }

@@ -1,0 +1,109 @@
+/*
+ * Selection and expand motion: what is selected moves into place, what expands grows. Spatial
+ * springs carry position, size and clip; effects springs carry color and opacity. Under reduced
+ * motion the spatial factor (tokens.css) zeroes every spatial duration, so indicators jump, pills
+ * and checks fade in without growing, and heights change at once.
+ */
+
+@keyframes selection-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes selection-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/*
+ * The tab underline, on RAC's `SelectionIndicator`: RAC moves one indicator from the old tab to
+ * the new one by transitioning the listed properties. Reduced motion fades the jumped indicator in.
+ */
+@utility tab-indicator {
+  transition-property: translate, width;
+  transition-duration: var(--md-sys-motion-spring-default-spatial-duration);
+  transition-timing-function: var(--md-sys-motion-spring-default-spatial);
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: selection-fade-in var(--md-sys-motion-spring-default-effects-duration)
+      var(--md-sys-motion-spring-default-effects);
+  }
+}
+
+/*
+ * RAC's `TabPanels`: grows or shrinks to the new panel. Only the block axis clips, so focus rings
+ * at the sides still show.
+ */
+@utility tab-panels {
+  position: relative;
+  height: var(--tab-panel-height);
+  overflow-y: clip;
+  transition: height var(--md-sys-motion-spring-default-spatial-duration)
+    var(--md-sys-motion-spring-default-spatial);
+}
+
+/* A `TabPanel` inside `tab-panels`: crossfades, with the old panel lifted out of the flow. */
+@utility tab-panel {
+  &[data-entering] {
+    animation: selection-fade-in var(--md-sys-motion-spring-default-effects-duration)
+      var(--md-sys-motion-spring-default-effects);
+  }
+
+  &[data-exiting] {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline: 0;
+    animation: selection-fade-out var(--md-sys-motion-spring-default-effects-duration)
+      var(--md-sys-motion-spring-default-effects) forwards;
+  }
+}
+
+/* The navigation pill: grows from its centre when its link (`data-active`) becomes current. */
+@utility nav-indicator {
+  clip-path: inset(0 50% round var(--radius-full));
+  opacity: 0;
+  transition:
+    clip-path var(--md-sys-motion-spring-default-spatial-duration)
+      var(--md-sys-motion-spring-default-spatial),
+    opacity var(--md-sys-motion-spring-default-effects-duration)
+      var(--md-sys-motion-spring-default-effects);
+
+  [data-active] & {
+    clip-path: inset(0 round var(--radius-full));
+    opacity: 1;
+  }
+}
+
+/*
+ * A check icon that pops in when it mounts: fade on default effects, scale from 0 on fast spatial,
+ * from the corner where its text starts. No exit.
+ */
+@utility check-pop {
+  transform-origin: left bottom;
+  transition:
+    opacity var(--md-sys-motion-spring-default-effects-duration)
+      var(--md-sys-motion-spring-default-effects),
+    scale var(--md-sys-motion-spring-fast-spatial-duration) var(--md-sys-motion-spring-fast-spatial);
+
+  &:dir(rtl) {
+    transform-origin: right bottom;
+  }
+
+  @starting-style {
+    opacity: 0;
+    scale: 0;
+  }
+}
+
+/*
+ * RAC's `DisclosurePanel`: RAC sets the height in px while it opens or closes and applies
+ * `hidden="until-found"` once the transition ends, so find-in-page still opens a closed panel.
+ */
+@utility disclosure-panel {
+  height: var(--disclosure-panel-height);
+  overflow-y: clip;
+  transition: height var(--md-sys-motion-spring-default-spatial-duration)
+    var(--md-sys-motion-spring-default-spatial);
+}

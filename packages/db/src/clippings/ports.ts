@@ -34,9 +34,12 @@ export interface Summarizer {
 }
 
 /**
- * Turns text into a vector for semantic search. Enrichment doesn't call it yet: embeddings are
- * written once search lands.
+ * What a text is embedded for. Retrieval models embed a short query and the document it should
+ * find differently, so each side says which it is.
  */
+export type EmbeddingPurpose = "document" | "query";
+
+/** Turns text into a vector of `EMBEDDING_DIMENSIONS` (schema.ts) numbers, close for texts close in meaning. */
 export interface Embedder {
-  embed: (text: string) => Promise<number[]>;
+  embed: (text: string, purpose: EmbeddingPurpose) => Promise<number[]>;
 }

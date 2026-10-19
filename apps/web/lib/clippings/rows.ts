@@ -1,8 +1,9 @@
 import { constructNow } from "date-fns";
 
 import { formatClippingDate } from "@/lib/format-date.ts";
-import type { Clipping, ClippingStatus } from "@clippings/shared";
+import type { Clipping, ClippingStatus, SearchHighlights, Tag } from "@clippings/shared";
 
+import type { BrowseParams } from "./browse-params.ts";
 import { getClippings } from "./service.ts";
 
 /** What one row of the list needs, with dates already worded so rows render the same anywhere. */
@@ -16,6 +17,9 @@ export interface ClippingRowData {
   /** ISO 8601, for the `<time>` element. */
   dateTime: string;
   status: ClippingStatus;
+  tags: Tag[];
+  /** Where it matched, when the row is a search result. */
+  highlights?: SearchHighlights;
 }
 
 export interface RowsPage {
@@ -32,8 +36,13 @@ export function domainOf(url: string): string {
   }
 }
 
-export function toRow(clipping: Clipping, now: Date): ClippingRowData {
+export function toRow(
+  clipping: Clipping,
+  now: Date,
+  highlights?: SearchHighlights,
+): ClippingRowData {
   return {
+    ...(highlights ? { highlights } : {}),
     id: clipping.id,
     url: clipping.url,
     title: clipping.title,
@@ -41,13 +50,28 @@ export function toRow(clipping: Clipping, now: Date): ClippingRowData {
     dateLabel: formatClippingDate(clipping.createdAt, now),
     dateTime: clipping.createdAt,
     status: clipping.status,
+    tags: clipping.tags,
   };
 }
 
-/** One page of a user's clippings as list rows, worded as of now. */
-export async function loadRows(userId: string, cursor?: string): Promise<RowsPage> {
-  const page = await getClippings().listClippings(userId, { cursor });
+/**
+ * What the list shows for these params, worded as of now: search results when there is a query
+ * (one page, no cursor), else one page of the user's clippings, newest first.
+ */
+export async function loadRows(
+  userId: string,
+  { q, tags, sources, sort }: BrowseParams,
+  cursor?: string,
+): Promise<RowsPage> {
   const now = constructNow(undefined);
+  if (q.trim()) {
+    const { items } = await getClippings().searchClippings(userId, { q, tags, sources, sort });
+    return {
+      rows: items.map((hit) => toRow(hit.clipping, now, hit.highlights)),
+      nextCursor: null,
+    };
+  }
+  const page = await getClippings().listClippings(userId, { cursor, tags, sources });
   return { rows: page.items.map((clipping) => toRow(clipping, now)), nextCursor: page.nextCursor };
 }
 

@@ -9,9 +9,16 @@
     "close",
     "delete",
     "download",
+    "edit",
+    "install_desktop",
+    "ios_share",
     "language",
     "logout",
+    "merge",
+    "more_vert",
     "open_in_new",
+    "palette",
+    "search",
     "sell",
     "settings"
   ]

@@ -11,7 +11,7 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Everything except the sign-in page, the API routes (auth callbacks, health), Next's own
-  // assets and files with an extension.
-  matcher: ["/((?!api|_next|sign-in|.*\\..*).*)"],
+  // Everything except the sign-in and offline pages, the API routes (auth callbacks, health),
+  // Next's own assets and files with an extension (the service worker, icons, the manifest).
+  matcher: ["/((?!api|_next|sign-in|offline|.*\\..*).*)"],
 };

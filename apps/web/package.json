@@ -10,7 +10,8 @@
     "lint": "oxlint -c ../../.oxlintrc.json .",
     "format:check": "oxfmt --check -c ../../.oxfmtrc.json .",
     "typecheck": "next typegen && tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:app-icons": "tsx scripts/render-app-icons.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "catalog:",
@@ -22,6 +23,7 @@
     "better-auth": "catalog:",
     "date-fns": "catalog:",
     "next": "catalog:",
+    "nuqs": "catalog:",
     "react": "catalog:",
     "react-aria-components": "catalog:",
     "react-dom": "catalog:",
@@ -33,7 +35,9 @@
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "sharp": "catalog:",
     "tailwindcss": "catalog:",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

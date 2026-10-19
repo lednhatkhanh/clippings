@@ -8,6 +8,7 @@ import {
   APPEARANCE_COOKIE,
   APPEARANCE_STORAGE_KEYS,
   NO_FLASH_SCRIPT,
+  appearanceTransitionFor,
   applyAppearance,
   encodeAppearanceCookie,
   transitionAppearance,
@@ -195,6 +196,27 @@ describe("applyAppearance", () => {
   });
 });
 
+describe("appearanceTransitionFor", () => {
+  it("reveals light and dark", () => {
+    expect(appearanceTransitionFor("theme")).toBe("reveal");
+  });
+
+  it("crossfades palette and contrast", () => {
+    expect(appearanceTransitionFor("palette")).toBe("fade");
+    expect(appearanceTransitionFor("contrast")).toBe("fade");
+  });
+
+  it("doesn't animate density", () => {
+    expect(appearanceTransitionFor("density")).toBe("none");
+  });
+
+  it("applies a revert after a failed save at once, whatever changed", () => {
+    for (const key of ["theme", "palette", "contrast", "density"] as const) {
+      expect(appearanceTransitionFor(key, { revert: true })).toBe("none");
+    }
+  });
+});
+
 describe("transitionAppearance", () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -207,25 +229,42 @@ describe("transitionAppearance", () => {
     expect(update).toHaveBeenCalledOnce();
   });
 
-  function stubBrowser({ reduced }: { reduced: boolean }) {
+  function stubBrowser({
+    reduced,
+    tokens = { "--md-sys-motion-easing-emphasized-decelerate": " ease-in " },
+  }: {
+    reduced: boolean;
+    tokens?: Record<string, string>;
+  }) {
     const animate = vi.fn();
     const root = { ...fakeRoot(), animate };
-    let finish = () => {};
+    // One per transition started, oldest first.
+    const finishers: (() => void)[] = [];
+    const skipTransition = vi.fn();
     const startViewTransition = vi.fn((callback: () => void) => {
       callback();
       return {
         ready: Promise.resolve(),
         finished: new Promise<void>((resolve) => {
-          finish = resolve;
+          finishers.push(resolve);
         }),
+        skipTransition,
       };
     });
     vi.stubGlobal("document", { documentElement: root, startViewTransition });
     vi.stubGlobal("matchMedia", () => ({ matches: reduced }));
     vi.stubGlobal("innerWidth", 100);
     vi.stubGlobal("innerHeight", 200);
-    vi.stubGlobal("getComputedStyle", () => ({ getPropertyValue: () => " ease-in " }));
-    return { root, animate, startViewTransition, finish: () => finish() };
+    vi.stubGlobal("getComputedStyle", () => ({
+      getPropertyValue: (name: string) => tokens[name] ?? "",
+    }));
+    return {
+      root,
+      animate,
+      startViewTransition,
+      skipTransition,
+      finish: (index = finishers.length - 1) => finishers[index]!(),
+    };
   }
 
   it("runs the update inside startViewTransition and reveals the new view from the origin", async () => {
@@ -258,16 +297,83 @@ describe("transitionAppearance", () => {
     expect(root.attributes.has("data-appearance-transition")).toBe(false);
   });
 
-  it("only crossfades under reduced motion", async () => {
-    const { root, animate, startViewTransition } = stubBrowser({ reduced: true });
+  it("reads the reveal's duration from the medium4 token", async () => {
+    const { animate } = stubBrowser({
+      reduced: false,
+      tokens: { "--md-sys-motion-duration-medium4": " 0.5s" },
+    });
+
+    transitionAppearance(vi.fn(), { kind: "reveal" });
+    await Promise.resolve();
+
+    expect(animate.mock.calls[0]![1]).toMatchObject({ duration: 500 });
+  });
+
+  it("crossfades a fade change without a reveal", async () => {
+    const { root, animate, startViewTransition } = stubBrowser({ reduced: false });
     const update = vi.fn();
 
-    transitionAppearance(update);
+    transitionAppearance(update, { kind: "fade", origin: { x: 10, y: 20 } });
     await Promise.resolve();
 
     expect(startViewTransition).toHaveBeenCalledOnce();
     expect(update).toHaveBeenCalledOnce();
     expect(root.attributes.get("data-appearance-transition")).toBe("fade");
     expect(animate).not.toHaveBeenCalled();
+  });
+
+  it("applies a change with no transition at once, outside a view transition", () => {
+    const { root, startViewTransition } = stubBrowser({ reduced: false });
+    const update = vi.fn();
+
+    transitionAppearance(update, { kind: "none" });
+
+    expect(update).toHaveBeenCalledOnce();
+    expect(startViewTransition).not.toHaveBeenCalled();
+    expect(root.attributes.has("data-appearance-transition")).toBe(false);
+  });
+
+  it("skips a running appearance transition when a change applies at once", async () => {
+    const { root, startViewTransition, skipTransition, finish } = stubBrowser({ reduced: false });
+
+    transitionAppearance(vi.fn(), { kind: "reveal" });
+    const revert = vi.fn();
+    transitionAppearance(revert, { kind: "none" });
+
+    expect(startViewTransition).toHaveBeenCalledOnce();
+    expect(skipTransition).toHaveBeenCalledOnce();
+    expect(revert).toHaveBeenCalledOnce();
+
+    finish();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(root.attributes.has("data-appearance-transition")).toBe(false);
+  });
+
+  it("keeps a newer transition's attribute when an older one finishes", async () => {
+    const { root, finish } = stubBrowser({ reduced: false });
+
+    transitionAppearance(vi.fn(), { kind: "reveal" });
+    transitionAppearance(vi.fn(), { kind: "fade" });
+
+    finish(0);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(root.attributes.get("data-appearance-transition")).toBe("fade");
+  });
+
+  it("only crossfades under reduced motion", async () => {
+    for (const kind of ["reveal", "fade"] as const) {
+      const { root, animate, startViewTransition } = stubBrowser({ reduced: true });
+      const update = vi.fn();
+
+      transitionAppearance(update, { kind });
+      await Promise.resolve();
+
+      expect(startViewTransition).toHaveBeenCalledOnce();
+      expect(update).toHaveBeenCalledOnce();
+      expect(root.attributes.get("data-appearance-transition")).toBe("fade");
+      expect(animate).not.toHaveBeenCalled();
+    }
   });
 });
