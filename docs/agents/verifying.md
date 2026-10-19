@@ -47,6 +47,12 @@ It prints a cookie value. Set it, then load `/`:
 - The Browser pane, with `javascript_tool`:
   `document.cookie = "better-auth.session_token=<value>; path=/"`.
 
+The service worker registers only in a production build. Build with `local.env` loaded and
+`BETTER_AUTH_URL=http://localhost:3200`, then `preview_start` `web-local-start` (`next start` on
+3200). Production cookies are `__Secure-` prefixed, so set
+`__Secure-better-auth.session_token=<value>; path=/; secure` instead. Stopping the server stands in
+for going offline; a second build gets a new build id, so it triggers the update toast.
+
 `get_request_insights` on `/_next/mcp` shows each request's render, fetch and cache spans
 (`experimental.requestInsights`, dev only): use it when a page is slow or a cache misses.
 
