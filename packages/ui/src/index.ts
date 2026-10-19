@@ -40,6 +40,12 @@ export {
   type TabsProps,
 } from "./components/tabs.tsx";
 export { SearchField, type SearchFieldProps } from "./components/search-field.tsx";
+export {
+  TagChips,
+  TagPicker,
+  type TagChipsProps,
+  type TagPickerProps,
+} from "./components/tags.tsx";
 export { TextField, type TextFieldProps } from "./components/text-field.tsx";
 export { ToastRegion, toasts, type ToastMessage } from "./components/toast.tsx";
 export { cn } from "./cn.ts";

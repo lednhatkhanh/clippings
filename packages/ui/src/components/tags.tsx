@@ -1,0 +1,270 @@
+"use client";
+
+import { useState } from "react";
+import {
+  Tag as AriaTag,
+  Button,
+  ComboBox,
+  Input,
+  Label,
+  Link,
+  ListBox,
+  ListBoxItem,
+  Popover,
+  TagGroup,
+  TagList,
+  Text,
+  type Key,
+} from "react-aria-components";
+
+import { normalizeTagName, tagNameKey, type Tag, type TagColor } from "@clippings/shared";
+
+import { cn } from "../cn.ts";
+import { Icon } from "../icons/icon.tsx";
+
+const DOTS: Record<Exclude<TagColor, "none">, string> = {
+  red: "bg-tag-red-dot",
+  orange: "bg-tag-orange-dot",
+  amber: "bg-tag-amber-dot",
+  green: "bg-tag-green-dot",
+  teal: "bg-tag-teal-dot",
+  blue: "bg-tag-blue-dot",
+  violet: "bg-tag-violet-dot",
+  pink: "bg-tag-pink-dot",
+};
+
+/** The 8px color dot. Decoration only: the name always says which tag it is. */
+function TagDot({ color }: { color: TagColor }) {
+  if (color === "none") return null;
+  return <span aria-hidden="true" className={cn("size-2 shrink-0 rounded-full", DOTS[color])} />;
+}
+
+// 24px tall at least (WCAG 2.5.8), and outlined, so forced colors still draw the chip's edge.
+const CHIP =
+  "state-layer inline-flex min-h-6 max-w-full items-center gap-1 rounded-sm border border-outline-variant px-2 typescale-label-md text-on-surface-variant data-focus-visible:outline-solid";
+
+/** A tag as a link, usually to the list filtered by it. */
+function TagChip({ tag, href }: { tag: Pick<Tag, "name" | "color">; href: string }) {
+  return (
+    <Link href={href} className={CHIP}>
+      <TagDot color={tag.color} />
+      <span className="truncate">{tag.name}</span>
+    </Link>
+  );
+}
+
+export interface TagChipsProps {
+  tags: readonly Pick<Tag, "name" | "color">[];
+  /** Where each chip leads. */
+  href: (name: string) => string;
+  "aria-label": string;
+  /** Layout only: placement in the parent, not appearance. */
+  className?: string;
+}
+
+/** A clipping's tags as a row of chips; nothing when it has none. */
+export function TagChips({ tags, href, className, ...props }: TagChipsProps) {
+  if (tags.length === 0) return null;
+  return (
+    <ul {...props} className={cn("flex flex-wrap gap-1", className)}>
+      {tags.map((tag) => (
+        <li key={tag.name} className="flex max-w-full">
+          <TagChip tag={tag} href={href(tag.name)} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** The key of a tag's option: its name as uniqueness sees it. */
+const keyOf = tagNameKey;
+const CREATE_KEY = "\u0000create";
+
+export interface TagPickerProps {
+  label: string;
+  /** Every tag the user has, offered as options. */
+  tags: readonly Tag[];
+  /** The chosen tags' names. */
+  value: readonly string[];
+  onChange: (names: string[]) => void;
+  /** Makes each chosen tag a link, usually to the list filtered by it. */
+  tagHref?: (name: string) => string;
+  /** Submits the chosen names with a form, one field of this name each. */
+  name?: string;
+  maxLength?: number;
+  /** Shown under the field and marks it invalid. */
+  errorMessage?: string;
+  /** Layout only: placement in the parent, not appearance. */
+  className?: string;
+}
+
+/**
+ * Chooses tags: a combo box that offers the user's tags as they type and can create a new one,
+ * then the chosen ones as removable chips. A chip added after it opens pops in on the
+ * expressive spring; under reduced motion it only fades.
+ */
+export function TagPicker({
+  label,
+  tags,
+  value,
+  onChange,
+  tagHref,
+  name,
+  maxLength,
+  errorMessage,
+  className,
+}: TagPickerProps) {
+  const [inputValue, setInputValue] = useState("");
+  // The chips there at first stay still; only ones added later pop in.
+  const [initial] = useState(() => new Set(value.map(keyOf)));
+  const typed = normalizeTagName(inputValue);
+  // The user's tags, and chosen names that aren't tags yet: they are created on save.
+  const known = [
+    ...tags,
+    ...value
+      .filter((tagName) => !tags.some((tag) => keyOf(tag.name) === keyOf(tagName)))
+      .map((tagName) => ({ id: keyOf(tagName), name: tagName, color: "none" as const })),
+  ];
+  const exists = known.some((tag) => keyOf(tag.name) === keyOf(typed));
+  const items = [
+    ...(typed && !exists ? [{ id: CREATE_KEY, name: typed, color: "none" as const }] : []),
+    ...known
+      .filter((tag) => keyOf(tag.name).includes(keyOf(typed)))
+      .map((tag) => ({ ...tag, id: keyOf(tag.name) })),
+  ];
+  const colorOf = (tagName: string) =>
+    known.find((tag) => keyOf(tag.name) === keyOf(tagName))?.color ?? "none";
+
+  function create(tagName: string) {
+    const normalized = normalizeTagName(tagName);
+    if (normalized && !value.some((chosen) => keyOf(chosen) === keyOf(normalized))) {
+      onChange([...value, normalized]);
+    }
+    setInputValue("");
+  }
+
+  /** The chosen keys from the combo box, back as names: kept ones in order, new ones last. */
+  function choose(keys: readonly Key[]) {
+    if (keys.includes(CREATE_KEY)) return create(typed);
+    const kept = value.filter((tagName) => keys.includes(keyOf(tagName)));
+    const added = keys
+      .filter((key) => !value.some((tagName) => keyOf(tagName) === key))
+      .flatMap((key) => known.filter((tag) => keyOf(tag.name) === key).map((tag) => tag.name));
+    onChange([...kept, ...added]);
+    setInputValue("");
+  }
+
+  return (
+    <div className={cn("flex flex-col gap-2", className)}>
+      <ComboBox
+        selectionMode="multiple"
+        items={items}
+        inputValue={inputValue}
+        onInputChange={setInputValue}
+        value={value.map(keyOf)}
+        onChange={choose}
+        allowsEmptyCollection
+        menuTrigger="focus"
+        isInvalid={errorMessage ? true : undefined}
+        className="flex flex-col gap-1"
+      >
+        <Label className="typescale-label-md text-on-surface-variant">{label}</Label>
+        <Input
+          placeholder="Add a tag"
+          maxLength={maxLength}
+          onKeyDown={(event) => {
+            // Enter on what was typed adds it, even before an option is highlighted.
+            if (
+              event.key === "Enter" &&
+              typed &&
+              !event.currentTarget.getAttribute("aria-activedescendant")
+            ) {
+              event.preventDefault();
+              create(typed);
+            }
+          }}
+          className="min-h-14 rounded-xs border border-outline bg-surface-container-high px-4 py-3 typescale-body-lg text-on-surface placeholder:text-on-surface-variant data-focused:border-primary data-invalid:border-error"
+        />
+        {errorMessage ? (
+          <Text slot="errorMessage" className="typescale-body-sm text-error">
+            {errorMessage}
+          </Text>
+        ) : null}
+        <Popover
+          offset={4}
+          className="max-h-72 w-(--trigger-width) overflow-y-auto rounded-xs bg-surface-container shadow-2 forced-colors:border forced-colors:border-solid"
+        >
+          <ListBox
+            renderEmptyState={() => (
+              <p className="px-4 py-3 typescale-body-md text-on-surface-variant">
+                Type to create a tag
+              </p>
+            )}
+            className="flex flex-col py-2 outline-none"
+          >
+            {(item: (typeof items)[number]) => (
+              <ListBoxItem
+                id={item.id}
+                textValue={item.name}
+                className="state-layer flex min-h-12 cursor-default items-center gap-3 px-4 typescale-body-lg text-on-surface outline-none data-focused:bg-surface-container-highest forced-colors:data-focused:outline-solid"
+              >
+                {({ isSelected }) =>
+                  item.id === CREATE_KEY ? (
+                    <>
+                      <Icon name="add" className="text-xl text-on-surface-variant" />
+                      <span className="truncate">Create &ldquo;{item.name}&rdquo;</span>
+                    </>
+                  ) : (
+                    <>
+                      <Icon
+                        name={isSelected ? "check" : "sell"}
+                        className="text-xl text-on-surface-variant"
+                      />
+                      <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                      <TagDot color={item.color} />
+                    </>
+                  )
+                }
+              </ListBoxItem>
+            )}
+          </ListBox>
+        </Popover>
+      </ComboBox>
+      {value.length > 0 ? (
+        <TagGroup
+          aria-label={`${label}: chosen`}
+          onRemove={(keys) => onChange(value.filter((tagName) => !keys.has(keyOf(tagName))))}
+        >
+          <TagList className="flex flex-wrap gap-1">
+            {value.map((tagName) => (
+              <AriaTag
+                key={keyOf(tagName)}
+                id={keyOf(tagName)}
+                textValue={tagName}
+                href={tagHref?.(tagName)}
+                className={cn(
+                  CHIP,
+                  "cursor-default pe-0",
+                  initial.has(keyOf(tagName)) ? null : "tag-pop",
+                )}
+              >
+                <TagDot color={colorOf(tagName)} />
+                <span className="truncate">{tagName}</span>
+                <Button
+                  slot="remove"
+                  aria-label={`Remove ${tagName}`}
+                  className="state-layer flex size-6 shrink-0 items-center justify-center rounded-full"
+                >
+                  <Icon name="close" className="text-base" />
+                </Button>
+              </AriaTag>
+            ))}
+          </TagList>
+        </TagGroup>
+      ) : null}
+      {name
+        ? value.map((tagName) => <input key={tagName} type="hidden" name={name} value={tagName} />)
+        : null}
+    </div>
+  );
+}
