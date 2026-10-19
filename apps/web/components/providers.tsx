@@ -6,6 +6,8 @@ import { NuqsAdapter } from "nuqs/adapters/next/app";
 import type { ReactNode } from "react";
 import { RouterProvider } from "react-aria-components";
 
+// Listens for Chromium's install event from the first signed-in page, for Settings' install row.
+import "@/lib/pwa/install-prompt.ts";
 import { ToastRegion } from "@clippings/ui";
 
 import { DeletedClippingsProvider } from "./clippings/deleted-clippings.tsx";

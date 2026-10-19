@@ -4,6 +4,7 @@ import { debounce, useQueryStates } from "nuqs";
 import { useEffect, useState } from "react";
 import useSWR from "swr";
 
+import { useLaunchParam } from "@/components/use-launch-param.ts";
 import {
   browseParsers,
   browseUrlKeys,
@@ -28,6 +29,8 @@ import { fetchRows } from "./fetch-row.ts";
 
 /** How long typing pauses before the query is searched. */
 const SEARCH_DEBOUNCE_MS = 200;
+/** The search input's id: React Aria puts the field's `id` on its input. */
+const SEARCH_INPUT_ID = "clippings-search";
 
 function NoResults({
   q,
@@ -78,6 +81,8 @@ export function ClippingsBrowser({
     urlKeys: browseUrlKeys,
   });
   const [searchedQuery, setSearchedQuery] = useState(query);
+  // `/?search`, the Search app shortcut, lands in the field.
+  useLaunchParam("search", () => document.getElementById(SEARCH_INPUT_ID)?.focus());
 
   function changeQuery(value: string) {
     // The URL takes the query after the same pause as the search. Clearing is immediate and
@@ -119,6 +124,7 @@ export function ClippingsBrowser({
   return (
     <div className="flex flex-col gap-3">
       <SearchField
+        id={SEARCH_INPUT_ID}
         aria-label="Search your clippings"
         placeholder="Search your clippings"
         value={query}
