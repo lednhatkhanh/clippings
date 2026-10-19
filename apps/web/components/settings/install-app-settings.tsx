@@ -19,28 +19,24 @@ import { SettingsSection } from "./settings-section.tsx";
 export function InstallAppSettings() {
   const option = useSyncExternalStore(subscribeInstallOption, getInstallOption, () => null);
 
-  if (option === "prompt") {
-    return (
-      <SettingsSection
-        title="Install app"
-        description="Open Clippings in its own window, from your dock, taskbar or home screen."
-      >
+  if (!option) return null;
+  return (
+    <SettingsSection
+      title="Install app"
+      description={
+        option === "prompt"
+          ? "Open Clippings in its own window, from your dock, taskbar or home screen."
+          : "Add Clippings to your Home Screen to open it in its own window."
+      }
+    >
+      {option === "prompt" ? (
         <div>
           <Button variant="tonal" onPress={() => void promptInstall()}>
             <Icon name="install_desktop" />
             Install app
           </Button>
         </div>
-      </SettingsSection>
-    );
-  }
-
-  if (option === "ios") {
-    return (
-      <SettingsSection
-        title="Install app"
-        description="Add Clippings to your Home Screen to open it in its own window."
-      >
+      ) : (
         <ol className="flex list-decimal flex-col gap-2 ps-6 typescale-body-md">
           <li>
             Tap Share <Icon name="ios_share" /> in Safari&apos;s toolbar.
@@ -48,9 +44,7 @@ export function InstallAppSettings() {
           <li>Choose Add to Home Screen. You may need to scroll the list or tap More.</li>
           <li>Tap Add.</li>
         </ol>
-      </SettingsSection>
-    );
-  }
-
-  return null;
+      )}
+    </SettingsSection>
+  );
 }

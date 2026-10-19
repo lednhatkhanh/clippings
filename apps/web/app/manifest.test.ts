@@ -1,18 +1,13 @@
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 
+import tokens from "@clippings/ui/tokens.json";
+
 import manifest from "./manifest.ts";
 
 const webRoot = join(import.meta.dirname, "..");
-const tokens = JSON.parse(
-  readFileSync(
-    join(webRoot, "..", "..", "packages", "ui", "src", "generated", "tokens.json"),
-    "utf8",
-  ),
-);
 const olive = tokens.palettes.olive.schemes.standard.light.roles;
 const app = manifest();
 
@@ -38,6 +33,17 @@ describe("manifest", () => {
       expect(`${width}x${height}`).toBe(sizes);
     },
   );
+
+  it("draws the icons on the olive secondary-container tile", async () => {
+    // A corner pixel inside the 512 px icon's rounded tile, so a token change shows up as a
+    // stale icon until `build:app-icons` runs again.
+    const { data } = await sharp(publicFile("/icons/icon-512.png"))
+      .extract({ left: 64, top: 64, width: 1, height: 1 })
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    expect([...data]).toEqual(channels(olive["secondary-container"]));
+  });
 
   it("keeps the whole mark inside the maskable icon's safe zone", async () => {
     const icon = app.icons?.find(({ purpose }) => purpose === "maskable");

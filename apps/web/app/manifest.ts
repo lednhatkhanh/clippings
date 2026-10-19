@@ -8,6 +8,8 @@ import tokens from "@clippings/ui/tokens.json";
 // root layout's per-scheme `viewport.themeColor` takes over the title bar.
 const light = tokens.palettes[DEFAULT_PALETTE].schemes.standard.light.roles;
 
+const SHORTCUT_ICONS = [{ src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }];
+
 /** Served at `/manifest.webmanifest`. Its path has an extension, so the proxy lets it through. */
 export default function manifest(): MetadataRoute.Manifest {
   return {
@@ -57,12 +59,12 @@ export default function manifest(): MetadataRoute.Manifest {
       {
         name: "New clipping",
         url: "/?new",
-        icons: [{ src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
+        icons: SHORTCUT_ICONS,
       },
       {
         name: "Search",
         url: "/?search",
-        icons: [{ src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
+        icons: SHORTCUT_ICONS,
       },
     ],
   };
