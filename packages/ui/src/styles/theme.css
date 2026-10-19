@@ -243,6 +243,31 @@
 }
 
 /*
+ * A newly added tag chip pops in: scale on the expressive fast spatial spring, one of the two
+ * places the expressive scheme is used, and opacity on fast effects. Reduced motion zeroes the
+ * spatial duration, so it only fades.
+ */
+@keyframes tag-pop-scale {
+  from {
+    scale: 0.6;
+  }
+}
+
+@keyframes tag-pop-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@utility tag-pop {
+  animation:
+    tag-pop-scale var(--md-sys-motion-expressive-spring-fast-spatial-duration)
+      var(--md-sys-motion-expressive-spring-fast-spatial),
+    tag-pop-fade var(--md-sys-motion-spring-fast-effects-duration)
+      var(--md-sys-motion-spring-fast-effects);
+}
+
+/*
  * Skeletons appear only if loading takes longer than 150 ms, so fast loads show nothing. The
  * delay survives `prefers-reduced-motion`, which stops only spatial motion.
  */

@@ -7,6 +7,7 @@ import { EnrichmentStatus } from "@/components/clippings/enrichment-status.tsx";
 import { Favicon } from "@/components/clippings/favicon.tsx";
 import { NoteEditor } from "@/components/clippings/note-editor.tsx";
 import { RelatedClippings } from "@/components/clippings/related-clippings.tsx";
+import { TagEditor } from "@/components/clippings/tag-editor.tsx";
 import { LoadError } from "@/components/load-error.tsx";
 import { getSession } from "@/lib/auth/session.ts";
 import { domainOf } from "@/lib/clippings/rows.ts";
@@ -111,6 +112,8 @@ async function ClippingDetail({ params }: { params: Promise<{ id: string }> }) {
           ) : (
             <EnrichmentStatus clippingId={clipping.id} status={clipping.status} />
           )}
+
+          <TagEditor clippingId={clipping.id} tags={clipping.tags} />
 
           <NoteEditor clippingId={clipping.id} note={clipping.note} />
 
