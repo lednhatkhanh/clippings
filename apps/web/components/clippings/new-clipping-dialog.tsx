@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { createContext, use, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 
 import { saveClippingAction, updateClippingAction, type SaveOutcome } from "@/app/(app)/actions.ts";
@@ -9,7 +9,6 @@ import { MAX_NOTE_LENGTH, MAX_TAG_LENGTH } from "@clippings/shared";
 import {
   Button,
   Dialog,
-  DialogTrigger,
   Heading,
   Icon,
   LinkButton,
@@ -93,7 +92,7 @@ function AlreadySaved({ existing, onDone }: { existing: Existing; onDone: () => 
   );
 }
 
-function SaveForm({ onSaved }: { onSaved: () => void }) {
+function SaveForm({ initialUrl, onSaved }: { initialUrl: string; onSaved: () => void }) {
   const [outcome, setOutcome] = useState<SaveOutcome | null>(null);
   const [tagNames, setTagNames] = useState<string[]>([]);
   const { tags, refresh } = useTags();
@@ -122,6 +121,9 @@ function SaveForm({ onSaved }: { onSaved: () => void }) {
       <TextField
         name="url"
         label="Address"
+        defaultValue={initialUrl}
+        // oxlint-disable-next-line jsx-a11y/no-autofocus -- ready to paste, or to check a dropped link
+        autoFocus
         placeholder="https://"
         inputMode="url"
         autoComplete="off"
@@ -155,23 +157,54 @@ function SaveForm({ onSaved }: { onSaved: () => void }) {
   );
 }
 
-/** The "New clipping" button and the dialog it opens. */
-export function NewClippingDialog() {
+/** Opens "New clipping", with the address filled in when there is one, such as a dropped link. */
+type OpenNewClipping = (url?: string) => void;
+
+const NewClippingContext = createContext<OpenNewClipping | null>(null);
+
+export function useOpenNewClipping(): OpenNewClipping {
+  const open = use(NewClippingContext);
+  if (!open) throw new Error("NewClippingProvider is missing");
+  return open;
+}
+
+/**
+ * The "New clipping" dialog, one for the whole app, so the button, the command palette and a
+ * dropped link all open the same one.
+ */
+export function NewClippingProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [initialUrl, setInitialUrl] = useState("");
+
+  const open: OpenNewClipping = (url = "") => {
+    // Already open: keep what has been typed rather than start over.
+    if (isOpen) return;
+    setInitialUrl(url);
+    setIsOpen(true);
+  };
 
   return (
-    <DialogTrigger isOpen={isOpen} onOpenChange={setIsOpen}>
-      <Button variant="filled">
-        <Icon name="add" />
-        New clipping
-      </Button>
-      <Modal isDismissable>
+    <NewClippingContext value={open}>
+      {children}
+      <Modal isDismissable isOpen={isOpen} onOpenChange={setIsOpen}>
         <Dialog>
           <Heading>New clipping</Heading>
           {/* The modal unmounts its children once it has closed, so every open starts a fresh form. */}
-          <SaveForm onSaved={() => setIsOpen(false)} />
+          <SaveForm initialUrl={initialUrl} onSaved={() => setIsOpen(false)} />
         </Dialog>
       </Modal>
-    </DialogTrigger>
+    </NewClippingContext>
+  );
+}
+
+/** The "New clipping" button. */
+export function NewClippingDialog() {
+  const open = useOpenNewClipping();
+
+  return (
+    <Button variant="filled" onPress={() => open()}>
+      <Icon name="add" />
+      New clipping
+    </Button>
   );
 }
