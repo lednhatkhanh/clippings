@@ -8,7 +8,7 @@ import {
   Menu,
   MenuItem,
   MenuSection,
-  SearchField,
+  TextField,
   useFilter,
 } from "react-aria-components";
 import type { MenuItemProps } from "react-aria-components";
@@ -27,7 +27,8 @@ export interface CommandMenuProps {
 
 /**
  * A search field that filters the commands under it, for a command palette: put it in a `Dialog`.
- * Focus stays in the field while the arrow keys move through the commands and Enter runs one.
+ * Focus stays in the field while the arrow keys move through the commands and Enter runs one. A
+ * text field, not a search field, so Esc closes the palette at once instead of clearing the text.
  */
 export function CommandMenu({
   "aria-label": label,
@@ -39,7 +40,7 @@ export function CommandMenu({
 
   return (
     <Autocomplete filter={contains}>
-      <SearchField
+      <TextField
         aria-label={label}
         // oxlint-disable-next-line jsx-a11y/no-autofocus -- the palette opens to type a command
         autoFocus
@@ -48,9 +49,9 @@ export function CommandMenu({
         <Icon name="search" className="shrink-0 text-2xl text-on-surface-variant" />
         <Input
           placeholder={placeholder}
-          className="h-full min-w-0 flex-1 bg-transparent typescale-body-lg outline-none placeholder:text-on-surface-variant [&::-webkit-search-cancel-button]:appearance-none"
+          className="h-full min-w-0 flex-1 bg-transparent typescale-body-lg outline-none placeholder:text-on-surface-variant"
         />
-      </SearchField>
+      </TextField>
       <Menu
         aria-label={label}
         className="-mx-2 flex max-h-96 flex-col gap-2 overflow-y-auto px-2 outline-none"

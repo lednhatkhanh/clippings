@@ -177,6 +177,8 @@ export function NewClippingProvider({ children }: { children: ReactNode }) {
   const [initialUrl, setInitialUrl] = useState("");
 
   const open: OpenNewClipping = (url = "") => {
+    // Already open: keep what has been typed rather than start over.
+    if (isOpen) return;
     setInitialUrl(url);
     setIsOpen(true);
   };
@@ -188,7 +190,7 @@ export function NewClippingProvider({ children }: { children: ReactNode }) {
         <Dialog>
           <Heading>New clipping</Heading>
           {/* The modal unmounts its children once it has closed, so every open starts a fresh form. */}
-          <SaveForm key={initialUrl} initialUrl={initialUrl} onSaved={() => setIsOpen(false)} />
+          <SaveForm initialUrl={initialUrl} onSaved={() => setIsOpen(false)} />
         </Dialog>
       </Modal>
     </NewClippingContext>
