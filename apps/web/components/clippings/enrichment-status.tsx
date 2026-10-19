@@ -5,6 +5,7 @@ import { useState } from "react";
 import useSWR from "swr";
 
 import { retryEnrichmentAction } from "@/app/(app)/actions.ts";
+import { useOnline } from "@/components/online-status.tsx";
 import type { ClippingStatus } from "@clippings/shared";
 import { Button, ProgressBar } from "@clippings/ui";
 
@@ -23,6 +24,7 @@ export function EnrichmentStatus({
 }) {
   const router = useRouter();
   const [retrying, setRetrying] = useState(false);
+  const online = useOnline();
 
   useSWR(status === "pending" ? `/api/clippings/${clippingId}` : null, fetchRow, {
     refreshInterval: POLL_EVERY_MS,
@@ -54,7 +56,7 @@ export function EnrichmentStatus({
   return (
     <div className="flex flex-wrap items-center gap-x-3 typescale-body-md text-on-surface-variant">
       <span>Couldn&apos;t read this page. Your link and note are saved.</span>
-      <Button variant="text" onPress={retry} isPending={retrying}>
+      <Button variant="text" onPress={retry} isPending={retrying} isDisabled={!online}>
         Retry
       </Button>
     </div>

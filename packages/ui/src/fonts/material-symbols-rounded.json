@@ -10,6 +10,8 @@
     "delete",
     "download",
     "edit",
+    "install_desktop",
+    "ios_share",
     "language",
     "logout",
     "merge",

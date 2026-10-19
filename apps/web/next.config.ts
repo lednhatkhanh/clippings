@@ -1,6 +1,13 @@
+import { randomUUID } from "node:crypto";
+
 import type { NextConfig } from "next";
 
+// One id per build, also handed to the code: off Vercel it is the service worker's cache version.
+const buildId = randomUUID();
+
 const config: NextConfig = {
+  generateBuildId: () => buildId,
+  env: { CLIPPINGS_BUILD_ID: buildId },
   typedRoutes: true,
   cacheComponents: true,
   partialPrefetching: true,

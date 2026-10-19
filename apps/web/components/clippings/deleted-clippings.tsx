@@ -5,11 +5,19 @@ import { createContext, use, useState, type ReactNode } from "react";
 import { deleteClippingAction, restoreClippingAction } from "@/app/(app)/actions.ts";
 import { toasts } from "@clippings/ui";
 
+/**
+ * Where a deleted clipping's row is in its motion: "leaving" while it fades and collapses, "gone"
+ * once it has, and "returning" while an undone one expands and fades back in.
+ */
+export type RowPresence = "leaving" | "gone" | "returning";
+
 interface DeletedClippings {
-  /** Clippings deleted in this tab, hidden before the server has confirmed. */
-  hidden: ReadonlySet<string>;
+  /** Clippings deleted in this tab, hidden before the server has confirmed, and those coming back. */
+  presence: ReadonlyMap<string, RowPresence>;
   hide: (clippingId: string) => void;
   show: (clippingId: string) => void;
+  /** A row finished leaving or returning. */
+  settle: (clippingId: string) => void;
 }
 
 const DeletedClippingsContext = createContext<DeletedClippings | null>(null);
@@ -20,26 +28,51 @@ function useDeletedClippings(): DeletedClippings {
   return context;
 }
 
+function withPresence(
+  current: ReadonlyMap<string, RowPresence>,
+  clippingId: string,
+  presence: RowPresence | null,
+): ReadonlyMap<string, RowPresence> {
+  const next = new Map(current);
+  if (presence) next.set(clippingId, presence);
+  else next.delete(clippingId);
+  return next;
+}
+
 /** Holds the clippings deleted in this tab, so every view drops them at once. */
 export function DeletedClippingsProvider({ children }: { children: ReactNode }) {
-  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
+  const [presence, setPresence] = useState<ReadonlyMap<string, RowPresence>>(new Map());
 
-  const hide = (clippingId: string) => setHidden((current) => new Set(current).add(clippingId));
+  const hide = (clippingId: string) =>
+    setPresence((current) => withPresence(current, clippingId, "leaving"));
+  // The row expands back in, whether it is still collapsing, has gone, or is only now coming back
+  // from the server (after a delete there, a list loaded fresh no longer had it).
   const show = (clippingId: string) =>
-    setHidden((current) => {
-      const next = new Set(current);
-      next.delete(clippingId);
-      return next;
+    setPresence((current) =>
+      withPresence(current, clippingId, current.has(clippingId) ? "returning" : null),
+    );
+  const settle = (clippingId: string) =>
+    setPresence((current) => {
+      const state = current.get(clippingId);
+      if (state === "leaving") return withPresence(current, clippingId, "gone");
+      if (state === "returning") return withPresence(current, clippingId, null);
+      return current;
     });
 
   return (
-    <DeletedClippingsContext value={{ hidden, hide, show }}>{children}</DeletedClippingsContext>
+    <DeletedClippingsContext value={{ presence, hide, show, settle }}>
+      {children}
+    </DeletedClippingsContext>
   );
 }
 
-/** The ids of clippings deleted in this tab, for lists to leave out. */
-export function useHiddenClippings(): ReadonlySet<string> {
-  return useDeletedClippings().hidden;
+/**
+ * Where each deleted clipping's row is in its motion, for lists to animate it out and back, and
+ * `settle` for a row to call when its animation ends.
+ */
+export function useRowPresence(): Pick<DeletedClippings, "presence" | "settle"> {
+  const { presence, settle } = useDeletedClippings();
+  return { presence, settle };
 }
 
 /** Shows a clipping again in this tab, such as one just saved again after it was deleted. */

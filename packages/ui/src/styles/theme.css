@@ -362,22 +362,144 @@
 }
 
 /*
- * The moving bar of an indeterminate progress bar: it sweeps across its track. The sweep travels,
- * so reduced motion leaves it parked at the start.
+ * An indeterminate progress bar: Material Web's two bars, ported from MDC's linear progress
+ * (Apache-2.0, research A11). Each bar spans the track and runs its own 2 s loop of translate and
+ * scaleX keyframes, transform only, so it keeps moving while the main thread is busy. Reduced
+ * motion leaves both parked; the secondary bar then shows as a still segment at the start.
  */
-@keyframes progress-sweep {
-  from {
-    transform: translateX(-100%);
+@keyframes progress-primary-translate {
+  0% {
+    transform: translateX(0);
   }
-  to {
-    transform: translateX(250%);
+  20% {
+    animation-timing-function: cubic-bezier(0.5, 0, 0.701732, 0.495819);
+    transform: translateX(0);
+  }
+  59.15% {
+    animation-timing-function: cubic-bezier(0.302435, 0.381352, 0.55, 0.956352);
+    transform: translateX(83.67142%);
+  }
+  100% {
+    transform: translateX(200.611057%);
   }
 }
 
-@utility progress-sweep {
-  animation: progress-sweep 1.5s var(--ease-standard) infinite;
+@keyframes progress-primary-scale {
+  0% {
+    transform: scaleX(0.08);
+  }
+  36.65% {
+    animation-timing-function: cubic-bezier(0.334731, 0.12482, 0.785844, 1);
+    transform: scaleX(0.08);
+  }
+  69.15% {
+    animation-timing-function: cubic-bezier(0.06, 0.11, 0.6, 1);
+    transform: scaleX(0.661479);
+  }
+  100% {
+    transform: scaleX(0.08);
+  }
+}
+
+@keyframes progress-secondary-translate {
+  0% {
+    animation-timing-function: cubic-bezier(0.15, 0, 0.515058, 0.409685);
+    transform: translateX(0);
+  }
+  25% {
+    animation-timing-function: cubic-bezier(0.31033, 0.284058, 0.8, 0.733712);
+    transform: translateX(37.651913%);
+  }
+  48.35% {
+    animation-timing-function: cubic-bezier(0.4, 0.627035, 0.6, 0.902026);
+    transform: translateX(84.386165%);
+  }
+  100% {
+    transform: translateX(160.277782%);
+  }
+}
+
+@keyframes progress-secondary-scale {
+  0% {
+    animation-timing-function: cubic-bezier(0.205028, 0.057051, 0.57661, 0.453971);
+    transform: scaleX(0.08);
+  }
+  19.15% {
+    animation-timing-function: cubic-bezier(0.152313, 0.196432, 0.648374, 1.004315);
+    transform: scaleX(0.457104);
+  }
+  44.15% {
+    animation-timing-function: cubic-bezier(0.257759, -0.003163, 0.211762, 1.38179);
+    transform: scaleX(0.72796);
+  }
+  100% {
+    transform: scaleX(0.08);
+  }
+}
+
+/* The track. The keyframes move rightwards, so a right-to-left page mirrors it. */
+@utility progress-track {
+  position: relative;
+
+  &:dir(rtl) {
+    scale: -1 1;
+  }
+}
+
+/* One of the two bars: it travels across the track, and its one child, the fill, scales. */
+@utility progress-bar-primary {
+  position: absolute;
+  inset-block: 0;
+  left: -145.166611%;
+  width: 100%;
+  animation: progress-primary-translate 2s linear infinite;
+
+  & > * {
+    animation: progress-primary-scale 2s linear infinite;
+  }
 
   @media (prefers-reduced-motion: reduce) {
-    animation: none;
+    &,
+    & > * {
+      animation: none;
+    }
+  }
+}
+
+@utility progress-bar-secondary {
+  position: absolute;
+  inset-block: 0;
+  left: -54.888891%;
+  width: 100%;
+  animation: progress-secondary-translate 2s linear infinite;
+
+  & > * {
+    animation: progress-secondary-scale 2s linear infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &,
+    & > * {
+      animation: none;
+    }
+  }
+}
+
+/*
+ * A toast as it appears: it fades in on fast effects and grows from 0.8 on fast spatial, as
+ * Compose's snackbar does. `@starting-style`, not a view transition: deleting from the detail page
+ * navigates and adds a toast in the same tick, and a second transition would cut the navigation's
+ * short. Reduced motion zeroes the spatial spring, so it only fades.
+ */
+@utility toast-enter {
+  transform-origin: bottom;
+  transition:
+    opacity var(--md-sys-motion-spring-fast-effects-duration)
+      var(--md-sys-motion-spring-fast-effects),
+    scale var(--md-sys-motion-spring-fast-spatial-duration) var(--md-sys-motion-spring-fast-spatial);
+
+  @starting-style {
+    opacity: 0;
+    scale: 0.8;
   }
 }

@@ -1,9 +1,10 @@
 import { signOutAction } from "@/app/(app)/settings/actions.ts";
 import { Button, Icon, LinkButton } from "@clippings/ui";
 
+import { InstallAppSettings } from "./install-app-settings.tsx";
 import { SettingsSection } from "./settings-section.tsx";
 
-/** Who is signed in, signing out, and taking every clipping along as JSON. */
+/** Who is signed in, signing out, installing the app, and taking every clipping along as JSON. */
 export function AccountSettings({ email }: { email: string }) {
   return (
     <div className="flex flex-col gap-8">
@@ -18,6 +19,8 @@ export function AccountSettings({ email }: { email: string }) {
           </Button>
         </form>
       </SettingsSection>
+
+      <InstallAppSettings />
 
       <SettingsSection
         title="Export"

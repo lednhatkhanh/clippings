@@ -2,9 +2,11 @@ export {
   APPEARANCE_COOKIE,
   APPEARANCE_STORAGE_KEYS,
   NO_FLASH_SCRIPT,
+  appearanceTransitionFor,
   applyAppearance,
   encodeAppearanceCookie,
   transitionAppearance,
+  type AppearanceTransition,
 } from "./appearance/appearance.ts";
 export {
   Button,
@@ -12,6 +14,14 @@ export {
   type ButtonProps,
   type LinkButtonProps,
 } from "./components/button.tsx";
+export {
+  Command,
+  CommandGroup,
+  CommandMenu,
+  type CommandGroupProps,
+  type CommandMenuProps,
+  type CommandProps,
+} from "./components/command-menu.tsx";
 export { Disclosure, type DisclosureProps } from "./components/disclosure.tsx";
 export {
   FilterChip,

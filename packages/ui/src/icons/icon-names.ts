@@ -13,6 +13,8 @@ export const ICON_NAMES = [
   "delete",
   "download",
   "edit",
+  "install_desktop",
+  "ios_share",
   "language",
   "logout",
   "merge",
