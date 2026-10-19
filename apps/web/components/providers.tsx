@@ -10,6 +10,13 @@ import { ToastRegion } from "@clippings/ui";
 
 import { DeletedClippingsProvider } from "./clippings/deleted-clippings.tsx";
 
+declare module "react-aria-components" {
+  interface RouterConfig {
+    // React Aria links pass `routerOptions` through, so a link can name its transition types.
+    routerOptions: NonNullable<Parameters<ReturnType<typeof useRouter>["push"]>[1]>;
+  }
+}
+
 /**
  * What every signed-in page shares: React Aria links navigate through the Next.js router, URL
  * state reads and writes through nuqs, deletes are hidden everywhere at once, and toasts outlive
@@ -20,7 +27,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   return (
     <NuqsAdapter>
-      <RouterProvider navigate={(href) => router.push(href as Route)}>
+      <RouterProvider navigate={(href, options) => router.push(href as Route, options)}>
         <DeletedClippingsProvider>
           {children}
           <ToastRegion />

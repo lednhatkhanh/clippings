@@ -3,6 +3,7 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 
 import { LoadError } from "@/components/load-error.tsx";
+import { PageTransition, RevealTransition } from "@/components/page-transition.tsx";
 import { AccountSettings } from "@/components/settings/account-settings.tsx";
 import { AppearanceSettings } from "@/components/settings/appearance-settings.tsx";
 import { getSession } from "@/lib/auth/session.ts";
@@ -42,11 +43,15 @@ async function SettingsTabs() {
 
 export default function SettingsPage() {
   return (
-    <div className="mx-auto max-w-180">
-      <h1 className="py-4 typescale-headline-sm">Settings</h1>
-      <Suspense fallback={null}>
-        <SettingsTabs />
-      </Suspense>
-    </div>
+    <PageTransition>
+      <div className="mx-auto max-w-180">
+        <h1 className="py-4 typescale-headline-sm">Settings</h1>
+        <Suspense fallback={null}>
+          <RevealTransition>
+            <SettingsTabs />
+          </RevealTransition>
+        </Suspense>
+      </div>
+    </PageTransition>
   );
 }

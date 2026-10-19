@@ -257,6 +257,17 @@
   animation: appear 1ms linear 150ms forwards;
 }
 
+/* A skeleton's shapes pulse slowly while they wait. Only opacity changes, so it survives reduced motion. */
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@utility skeleton-pulse {
+  animation: skeleton-pulse 2s var(--ease-standard) infinite;
+}
+
 /*
  * The moving bar of an indeterminate progress bar: it sweeps across its track. The sweep travels,
  * so reduced motion leaves it parked at the start.

@@ -3,11 +3,17 @@ import { notFound, redirect, unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 
 import { DeleteClippingButton } from "@/components/clippings/delete-clipping-button.tsx";
+import { DetailSheet, Sheet } from "@/components/clippings/detail-sheet.tsx";
 import { EnrichmentStatus } from "@/components/clippings/enrichment-status.tsx";
 import { Favicon } from "@/components/clippings/favicon.tsx";
 import { NoteEditor } from "@/components/clippings/note-editor.tsx";
 import { RelatedClippings } from "@/components/clippings/related-clippings.tsx";
 import { LoadError } from "@/components/load-error.tsx";
+import {
+  PageTransition,
+  RevealTransition,
+  SkeletonTransition,
+} from "@/components/page-transition.tsx";
 import { getSession } from "@/lib/auth/session.ts";
 import { domainOf } from "@/lib/clippings/rows.ts";
 import { getClippings } from "@/lib/clippings/service.ts";
@@ -56,14 +62,15 @@ async function loadClipping(userId: string, clippingId: string) {
     : null;
 }
 
-async function ClippingDetail({ params }: { params: Promise<{ id: string }> }) {
+/** The clipping's text and actions, inside the sheet the page puts around it. */
+async function ClippingDetail({ params }: Pick<PageProps<"/c/[id]">, "params">) {
   const session = await getSession();
   if (!session) redirect("/sign-in");
-  const { id } = await params;
+  const { id: clippingId } = await params;
 
   let loaded: Awaited<ReturnType<typeof loadClipping>>;
   try {
-    loaded = await loadClipping(session.user.id, id);
+    loaded = await loadClipping(session.user.id, clippingId);
   } catch (error) {
     unstable_rethrow(error);
     return <LoadError message="Couldn't load this clipping." />;
@@ -72,88 +79,108 @@ async function ClippingDetail({ params }: { params: Promise<{ id: string }> }) {
   const { clipping, savedOn } = loaded;
 
   return (
-    <>
-      <article className="mx-auto w-fit max-w-full rounded-lg border border-outline-variant bg-surface-container-lowest p-6 medium:p-12">
-        {/* The reading measure is set in the reading type, so 66ch means 66 of its characters. */}
-        <div className="flex w-reading max-w-full flex-col gap-6 typescale-reading">
-          <header className="flex flex-col gap-3">
-            <h1 className="typescale-headline-sm text-balance wrap-anywhere">{clipping.title}</h1>
-            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 typescale-label-md text-on-surface-variant">
-              <Favicon url={clipping.url} />
-              <span className="font-mono">{domainOf(clipping.url)}</span>
-              <span aria-hidden="true">·</span>
-              <time dateTime={clipping.createdAt}>Saved {savedOn}</time>
-              <span className="ms-1 inline-flex h-6 items-center rounded-sm border border-outline px-2 typescale-label-sm">
-                <span className="sr-only">Source:&nbsp;</span>
-                {SOURCE_LABELS[clipping.source]}
-              </span>
-            </p>
-          </header>
+    <div className="flex flex-col gap-6">
+      <header className="flex flex-col gap-3">
+        <h1 className="typescale-headline-sm text-balance wrap-anywhere">{clipping.title}</h1>
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 typescale-label-md text-on-surface-variant">
+          <Favicon url={clipping.url} />
+          <span className="font-mono">{domainOf(clipping.url)}</span>
+          <span aria-hidden="true">·</span>
+          <time dateTime={clipping.createdAt}>Saved {savedOn}</time>
+          <span className="ms-1 inline-flex h-6 items-center rounded-sm border border-outline px-2 typescale-label-sm">
+            <span className="sr-only">Source:&nbsp;</span>
+            {SOURCE_LABELS[clipping.source]}
+          </span>
+        </p>
+      </header>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <LinkButton
-              variant="filled"
-              href={clipping.url}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Icon name="open_in_new" />
-              Open original
-              <span className="sr-only">(opens in a new tab)</span>
-            </LinkButton>
-            <DeleteClippingButton clippingId={clipping.id} />
-          </div>
-
-          {clipping.status === "ready" ? (
-            clipping.summary ? (
-              <p className="typescale-reading text-pretty">{clipping.summary}</p>
-            ) : null
-          ) : (
-            <EnrichmentStatus clippingId={clipping.id} status={clipping.status} />
-          )}
-
-          <NoteEditor clippingId={clipping.id} note={clipping.note} />
-
-          <RawMetadata clipping={clipping} />
-        </div>
-      </article>
-      {/* Streamed after the sheet, since finding neighbours is a second query, and lined up with
-          its text: the same padding, and the measure in the reading type. */}
-      <div className="mx-auto w-fit max-w-full px-6 pt-6 medium:px-12">
-        <div className="w-reading max-w-full typescale-reading">
-          <Suspense>
-            <RelatedClippings userId={session.user.id} clippingId={clipping.id} />
-          </Suspense>
-        </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <LinkButton variant="filled" href={clipping.url} target="_blank" rel="noopener noreferrer">
+          <Icon name="open_in_new" />
+          Open original
+          <span className="sr-only">(opens in a new tab)</span>
+        </LinkButton>
+        <DeleteClippingButton clippingId={clipping.id} />
       </div>
-    </>
+
+      {clipping.status === "ready" ? (
+        clipping.summary ? (
+          <p className="typescale-reading text-pretty">{clipping.summary}</p>
+        ) : null
+      ) : (
+        <EnrichmentStatus clippingId={clipping.id} status={clipping.status} />
+      )}
+
+      <NoteEditor clippingId={clipping.id} note={clipping.note} />
+
+      <RawMetadata clipping={clipping} />
+    </div>
   );
 }
 
-/** A sheet-shaped placeholder. It appears only after 150 ms, so a fast load shows nothing. */
+/** The neighbours, streamed after the sheet: finding them is a second query. */
+async function Related({ params }: Pick<PageProps<"/c/[id]">, "params">) {
+  const session = await getSession();
+  if (!session) redirect("/sign-in");
+  const { id } = await params;
+  return <RelatedClippings userId={session.user.id} clippingId={id} />;
+}
+
+/** Text-shaped placeholders. They appear only after 150 ms, so a fast load shows nothing. */
 function DetailSkeleton() {
   return (
-    <div
-      aria-hidden="true"
-      className="mx-auto flex w-full appear-delayed flex-col gap-4 rounded-lg border border-outline-variant p-6 medium:max-w-180 medium:p-12"
-    >
-      <div className="h-8 w-4/5 rounded-xs bg-surface-container-high" />
-      <div className="h-4 w-2/5 rounded-xs bg-surface-container-high" />
-      <div className="h-24 w-full rounded-xs bg-surface-container-high" />
+    <div aria-hidden="true" className="flex appear-delayed flex-col gap-4">
+      <div className="h-8 w-4/5 skeleton-pulse rounded-xs bg-surface-container-high" />
+      <div className="h-4 w-2/5 skeleton-pulse rounded-xs bg-surface-container-high" />
+      <div className="h-24 w-full skeleton-pulse rounded-xs bg-surface-container-high" />
     </div>
   );
 }
 
-export default function ClippingPage({ params }: { params: Promise<{ id: string }> }) {
+export default function ClippingPage({ params }: PageProps<"/c/[id]">) {
   return (
-    <div className="flex flex-col gap-2 py-4">
-      <LinkButton href="/" className="self-start">
-        <Icon name="arrow_back" />
-        Clippings
-      </LinkButton>
-      <Suspense fallback={<DetailSkeleton />}>
-        <ClippingDetail params={params} />
-      </Suspense>
-    </div>
+    <PageTransition>
+      <div className="flex flex-col gap-2 py-4">
+        <LinkButton
+          href="/"
+          routerOptions={{ transitionTypes: ["nav-back"] }}
+          className="self-start"
+        >
+          <Icon name="arrow_back" />
+          Clippings
+        </LinkButton>
+        <Suspense
+          fallback={
+            <Sheet>
+              <DetailSkeleton />
+            </Sheet>
+          }
+        >
+          <DetailSheet>
+            <Suspense
+              fallback={
+                <SkeletonTransition>
+                  <DetailSkeleton />
+                </SkeletonTransition>
+              }
+            >
+              <RevealTransition>
+                <ClippingDetail params={params} />
+              </RevealTransition>
+            </Suspense>
+          </DetailSheet>
+        </Suspense>
+        {/* Lined up with the sheet's text: the same padding, and the measure in the reading type. */}
+        <div className="mx-auto w-fit max-w-full px-6 pt-6 medium:px-12">
+          <div className="w-reading max-w-full typescale-reading">
+            <Suspense>
+              <RevealTransition>
+                <Related params={params} />
+              </RevealTransition>
+            </Suspense>
+          </div>
+        </div>
+      </div>
+    </PageTransition>
   );
 }
