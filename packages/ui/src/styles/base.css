@@ -102,9 +102,9 @@ body::before {
 /*
  * Appearance changes (see `transitionAppearance`) run in a view transition. The attribute is set
  * only while one runs, so page transitions added elsewhere keep the browser's defaults.
- * "reveal" (light and dark): the script clips the new view into a growing circle over the old
- * one, so both snapshots just sit still and opaque. "fade" (palette and contrast, and every change
- * under reduced motion): a crossfade on the default effects spring.
+ * `appearanceTransitionFor` picks which change gets which. "reveal": the script clips the new view
+ * into a growing circle over the old one, so both snapshots just sit still and opaque. "fade": a
+ * crossfade on the default effects spring.
  */
 :root[data-appearance-transition="reveal"]::view-transition-old(root),
 :root[data-appearance-transition="reveal"]::view-transition-new(root) {

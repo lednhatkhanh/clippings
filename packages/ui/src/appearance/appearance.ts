@@ -129,7 +129,7 @@ export function transitionAppearance(
     return;
   }
   if (kind === "none") {
-    // An animation still running would play on after a change that should apply at once.
+    // A transition still running would keep showing its snapshot over this change until it ends.
     running?.skipTransition();
     update();
     return;
