@@ -143,8 +143,8 @@ export function NewClippingDialog() {
       <Modal isDismissable>
         <Dialog>
           <Heading>New clipping</Heading>
-          {/* Remounts on every open, so a previous result never lingers. */}
-          {isOpen ? <SaveForm onSaved={() => setIsOpen(false)} /> : null}
+          {/* The modal unmounts its children once it has closed, so every open starts a fresh form. */}
+          <SaveForm onSaved={() => setIsOpen(false)} />
         </Dialog>
       </Modal>
     </DialogTrigger>
