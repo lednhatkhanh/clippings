@@ -23,6 +23,7 @@ function NavLinkView({ href, icon, label, active }: NavLinkProps & { active: boo
   return (
     <Link
       href={href}
+      transitionTypes={["nav-top"]}
       aria-current={active ? "page" : undefined}
       data-active={active ? "" : undefined}
       className={cn(

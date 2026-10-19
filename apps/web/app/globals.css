@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "@clippings/ui/styles.css";
+@import "./view-transitions.css";
 
 /* Tailwind only scans this app by default; the design system's components live next door. */
 @source "../../../packages/ui/src";

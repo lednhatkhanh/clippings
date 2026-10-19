@@ -6,6 +6,11 @@ import { EmptyState } from "@/components/clippings/empty-state.tsx";
 import { ListSkeleton } from "@/components/clippings/list-skeleton.tsx";
 import { NewClippingDialog } from "@/components/clippings/new-clipping-dialog.tsx";
 import { LoadError } from "@/components/load-error.tsx";
+import {
+  PageTransition,
+  RevealTransition,
+  SkeletonTransition,
+} from "@/components/page-transition.tsx";
 import { getSession } from "@/lib/auth/session.ts";
 import { loadBrowseParams, toQueryString } from "@/lib/clippings/browse-params.ts";
 import { loadRows } from "@/lib/clippings/rows.ts";
@@ -32,14 +37,24 @@ async function Clippings({ searchParams }: Pick<PageProps<"/">, "searchParams">)
 
 export default function HomePage({ searchParams }: PageProps<"/">) {
   return (
-    <div className="mx-auto max-w-180">
-      <div className="flex items-center justify-between gap-4 py-4">
-        <h1 className="typescale-headline-sm">Clippings</h1>
-        <NewClippingDialog />
+    <PageTransition>
+      <div className="mx-auto max-w-180">
+        <div className="flex items-center justify-between gap-4 py-4">
+          <h1 className="typescale-headline-sm">Clippings</h1>
+          <NewClippingDialog />
+        </div>
+        <Suspense
+          fallback={
+            <SkeletonTransition>
+              <ListSkeleton />
+            </SkeletonTransition>
+          }
+        >
+          <RevealTransition>
+            <Clippings searchParams={searchParams} />
+          </RevealTransition>
+        </Suspense>
       </div>
-      <Suspense fallback={<ListSkeleton />}>
-        <Clippings searchParams={searchParams} />
-      </Suspense>
-    </div>
+    </PageTransition>
   );
 }

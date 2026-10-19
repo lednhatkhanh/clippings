@@ -18,13 +18,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         Skip to content
       </a>
 
-      <header className="sticky top-0 z-20 flex h-16 items-center bg-surface px-4 medium:px-6 large:px-8">
+      {/* Named, so page transitions run beneath the header and navigation without moving them. */}
+      <header className="sticky top-0 z-20 flex h-16 items-center bg-surface px-4 vt-anchored-header medium:px-6 large:px-8">
         <span className="typescale-title-lg">Clippings</span>
       </header>
 
       <nav
         aria-label="Main"
-        className="fixed inset-x-0 bottom-0 z-30 bg-surface-container pb-safe medium:inset-y-0 medium:end-auto medium:w-24 medium:bg-surface medium:pb-0 large:w-60"
+        className="fixed inset-x-0 bottom-0 z-30 bg-surface-container pb-safe vt-anchored-nav medium:inset-y-0 medium:end-auto medium:w-24 medium:bg-surface medium:pb-0 large:w-60"
       >
         <ul className="flex h-20 items-stretch medium:h-auto medium:flex-col medium:gap-3 medium:px-3 medium:pt-20 large:px-4">
           <li className="flex flex-1 medium:flex-none">

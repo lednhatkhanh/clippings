@@ -1,0 +1,181 @@
+/*
+ * Navigation motion: the classes `components/page-transition.tsx` hands to React's
+ * `<ViewTransition>`. Timings follow M3's transition patterns (top level, forward and backward,
+ * container transform, skeleton loaders); see docs/research/2026-10-18-motion.md §3.1 and §4.4.
+ */
+
+@keyframes vt-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes vt-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes vt-scale-in {
+  from {
+    scale: 0.92;
+  }
+}
+
+@keyframes vt-slide-in {
+  from {
+    translate: var(--vt-slide) 0;
+  }
+}
+
+@keyframes vt-slide-out {
+  to {
+    translate: var(--vt-slide) 0;
+  }
+}
+
+/* The page stays clickable while a transition runs; only named participants skip hit-testing. */
+::view-transition {
+  pointer-events: none;
+}
+
+@utility vt-anchored-header {
+  view-transition-name: app-header;
+}
+
+@utility vt-anchored-nav {
+  view-transition-name: app-nav;
+}
+
+/*
+ * The header and the navigation don't move: page content slides and scales beneath them, and
+ * the old snapshot is hidden so the two never show at once.
+ */
+::view-transition-group(app-header),
+::view-transition-group(app-nav) {
+  animation: none;
+  z-index: 1;
+}
+
+::view-transition-old(app-header),
+::view-transition-old(app-nav) {
+  display: none;
+}
+
+::view-transition-new(app-header),
+::view-transition-new(app-nav) {
+  animation: none;
+}
+
+/*
+ * Top level (Clippings, Tags, Settings): the old page fades out over the first 35% of 300 ms,
+ * then the new one fades in while it scales from 0.92. Nothing slides.
+ */
+::view-transition-old(.fade-through-out) {
+  animation: 105ms var(--md-sys-motion-easing-standard-accelerate) both vt-fade-out;
+}
+
+::view-transition-new(.fade-through-in) {
+  animation:
+    195ms var(--md-sys-motion-easing-emphasized-decelerate) 105ms both vt-fade-in,
+    var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized) both vt-scale-in;
+}
+
+/*
+ * Forward and backward (shared axis x): 30 px along the axis with the same fade-through, 450 ms
+ * emphasized. Forward leaves to the left and arrives from the right; back mirrors it.
+ */
+::view-transition-old(.nav-forward),
+::view-transition-old(.nav-back) {
+  animation:
+    158ms var(--md-sys-motion-easing-standard-accelerate) both vt-fade-out,
+    var(--md-sys-motion-duration-long1) var(--md-sys-motion-easing-emphasized) both vt-slide-out;
+}
+
+::view-transition-new(.nav-forward),
+::view-transition-new(.nav-back) {
+  animation:
+    292ms var(--md-sys-motion-easing-emphasized-decelerate) 158ms both vt-fade-in,
+    var(--md-sys-motion-duration-long1) var(--md-sys-motion-easing-emphasized) both vt-slide-in;
+}
+
+::view-transition-old(.nav-forward),
+::view-transition-new(.nav-back) {
+  --vt-slide: -30px;
+}
+
+::view-transition-new(.nav-forward),
+::view-transition-old(.nav-back) {
+  --vt-slide: 30px;
+}
+
+/*
+ * Container transform: the list row's sheet grows into the detail sheet, 500 ms emphasized, and
+ * shrinks back in 400 ms. The incoming snapshot fades in over the first quarter, on top.
+ */
+::view-transition-group(.morph-in) {
+  animation-duration: var(--md-sys-motion-duration-long2);
+  animation-timing-function: var(--md-sys-motion-easing-emphasized);
+}
+
+::view-transition-group(.morph-back) {
+  animation-duration: var(--md-sys-motion-duration-medium4);
+  animation-timing-function: var(--md-sys-motion-easing-emphasized);
+}
+
+::view-transition-old(.morph-in) {
+  animation: var(--md-sys-motion-duration-short3) linear both vt-fade-out;
+}
+
+::view-transition-new(.morph-in) {
+  animation: var(--md-sys-motion-duration-short3) linear both vt-fade-in;
+}
+
+::view-transition-old(.morph-back) {
+  animation: var(--md-sys-motion-duration-short2) linear both vt-fade-out;
+}
+
+::view-transition-new(.morph-back) {
+  animation: var(--md-sys-motion-duration-short2) linear both vt-fade-in;
+}
+
+/*
+ * Suspense reveals: the skeleton fades out over 150 ms while the content fades in over 210 ms. The
+ * content doesn't wait, since some boundaries (Settings, Related) have no skeleton to wait for.
+ */
+::view-transition-old(.skeleton-out) {
+  animation: var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard-accelerate)
+    both vt-fade-out;
+}
+
+::view-transition-new(.content-in) {
+  animation: 210ms var(--md-sys-motion-easing-standard-decelerate) both vt-fade-in;
+}
+
+/*
+ * Reduced motion: no group geometry, and slides, scales and morphs become 150 ms crossfades.
+ * Suspense reveals are fades already, so they stay.
+ */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-group(.morph-in),
+  ::view-transition-group(.morph-back) {
+    animation-duration: 0s;
+  }
+
+  ::view-transition-old(.fade-through-out),
+  ::view-transition-old(.nav-forward),
+  ::view-transition-old(.nav-back),
+  ::view-transition-old(.morph-in),
+  ::view-transition-old(.morph-back) {
+    animation: var(--md-sys-motion-duration-short3) linear both vt-fade-out;
+  }
+
+  ::view-transition-new(.fade-through-in),
+  ::view-transition-new(.nav-forward),
+  ::view-transition-new(.nav-back),
+  ::view-transition-new(.morph-in),
+  ::view-transition-new(.morph-back) {
+    animation: var(--md-sys-motion-duration-short3) linear both vt-fade-in;
+  }
+}

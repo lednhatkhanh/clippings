@@ -16,7 +16,7 @@ export function DeleteClippingButton({ clippingId }: { clippingId: string }) {
       variant="text"
       onPress={() => {
         deleteClipping(clippingId);
-        router.push("/");
+        router.push("/", { transitionTypes: ["nav-back"] });
       }}
     >
       <Icon name="delete" />

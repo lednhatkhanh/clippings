@@ -8,7 +8,7 @@ export default function ClippingNotFound() {
       <p className="typescale-body-lg text-on-surface-variant">
         It may have been deleted, or the link is wrong.
       </p>
-      <LinkButton variant="tonal" href="/">
+      <LinkButton variant="tonal" href="/" routerOptions={{ transitionTypes: ["nav-back"] }}>
         Back to your clippings
       </LinkButton>
     </div>
