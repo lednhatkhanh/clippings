@@ -57,13 +57,14 @@ body::before {
   }
 }
 
-/* Reduced motion keeps opacity fades and removes everything that travels. */
+/*
+ * Reduced motion: the spatial factor (tokens.css) stops spatial springs and keeps fades. Smooth
+ * scrolling travels too, so it goes.
+ */
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,
   ::after {
-    animation-duration: 1ms !important;
-    transition-duration: 1ms !important;
     scroll-behavior: auto !important;
   }
 }
@@ -81,5 +82,6 @@ body::before {
 }
 
 :root[data-appearance-transition="fade"]::view-transition-group(root) {
-  animation-duration: var(--md-sys-motion-duration-short3);
+  animation-duration: var(--md-sys-motion-spring-default-effects-duration);
+  animation-timing-function: var(--md-sys-motion-spring-default-effects);
 }

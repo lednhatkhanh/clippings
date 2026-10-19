@@ -143,9 +143,48 @@
   --ease-emphasized: var(--md-sys-motion-easing-emphasized);
   --ease-emphasized-decelerate: var(--md-sys-motion-easing-emphasized-decelerate);
   --ease-emphasized-accelerate: var(--md-sys-motion-easing-emphasized-accelerate);
-  --ease-spring: var(--md-sys-motion-spring-default-spatial);
-  --ease-spring-effects: var(--md-sys-motion-spring-default-effects);
-  --ease-spring-expressive: var(--md-sys-motion-spring-expressive-spatial);
+
+  /*
+   * Springs, each curve paired with its duration: `transition-transform ease-spatial-fast
+   * duration-spatial-fast`, `transition-colors ease-effects duration-effects`. Spatial is for
+   * position, size, rotation and corners; effects for color and opacity. Fast suits small
+   * components, default panes, slow full-screen motion.
+   */
+  --ease-spatial-fast: var(--md-sys-motion-spring-fast-spatial);
+  --ease-spatial: var(--md-sys-motion-spring-default-spatial);
+  --ease-spatial-slow: var(--md-sys-motion-spring-slow-spatial);
+  --ease-effects-fast: var(--md-sys-motion-spring-fast-effects);
+  --ease-effects: var(--md-sys-motion-spring-default-effects);
+  --ease-effects-slow: var(--md-sys-motion-spring-slow-effects);
+
+  --transition-duration-*: initial;
+  --transition-duration-spatial-fast: var(--md-sys-motion-spring-fast-spatial-duration);
+  --transition-duration-spatial: var(--md-sys-motion-spring-default-spatial-duration);
+  --transition-duration-spatial-slow: var(--md-sys-motion-spring-slow-spatial-duration);
+  --transition-duration-effects-fast: var(--md-sys-motion-spring-fast-effects-duration);
+  --transition-duration-effects: var(--md-sys-motion-spring-default-effects-duration);
+  --transition-duration-effects-slow: var(--md-sys-motion-spring-slow-effects-duration);
+  /* M3's fixed durations, for the easing-based transitions */
+  --transition-duration-short1: var(--md-sys-motion-duration-short1);
+  --transition-duration-short2: var(--md-sys-motion-duration-short2);
+  --transition-duration-short3: var(--md-sys-motion-duration-short3);
+  --transition-duration-short4: var(--md-sys-motion-duration-short4);
+  --transition-duration-medium1: var(--md-sys-motion-duration-medium1);
+  --transition-duration-medium2: var(--md-sys-motion-duration-medium2);
+  --transition-duration-medium3: var(--md-sys-motion-duration-medium3);
+  --transition-duration-medium4: var(--md-sys-motion-duration-medium4);
+  --transition-duration-long1: var(--md-sys-motion-duration-long1);
+  --transition-duration-long2: var(--md-sys-motion-duration-long2);
+  --transition-duration-long3: var(--md-sys-motion-duration-long3);
+  --transition-duration-long4: var(--md-sys-motion-duration-long4);
+  --transition-duration-extra-long1: var(--md-sys-motion-duration-extra-long1);
+  --transition-duration-extra-long2: var(--md-sys-motion-duration-extra-long2);
+  --transition-duration-extra-long3: var(--md-sys-motion-duration-extra-long3);
+  --transition-duration-extra-long4: var(--md-sys-motion-duration-extra-long4);
+
+  /* What a bare `transition` or `transition-colors` uses: the default effects spring. */
+  --default-transition-duration: var(--md-sys-motion-spring-default-effects-duration);
+  --default-transition-timing-function: var(--md-sys-motion-spring-default-effects);
 
   /* The reading measure: never wider, so lines stay easy to follow (WCAG 1.4.8). */
   --container-reading: 66ch;
@@ -205,7 +244,7 @@
 
 /*
  * Skeletons appear only if loading takes longer than 150 ms, so fast loads show nothing. The
- * delay survives `prefers-reduced-motion`, which only shortens animation durations.
+ * delay survives `prefers-reduced-motion`, which stops only spatial motion.
  */
 @keyframes appear {
   to {
@@ -219,8 +258,8 @@
 }
 
 /*
- * The moving bar of an indeterminate progress bar: it sweeps across its track. Reduced motion
- * leaves it parked at the start, since the 1 ms duration it would get makes a loop strobe.
+ * The moving bar of an indeterminate progress bar: it sweeps across its track. The sweep travels,
+ * so reduced motion leaves it parked at the start.
  */
 @keyframes progress-sweep {
   from {
