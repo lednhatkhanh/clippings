@@ -7,6 +7,11 @@
  * medium size class up it is Material Web's dialog: it drops 50px and grows from 35% of its height
  * (a `clip-path` stands in for MW's `::before` height animation), its content fades in after the
  * container, and it leaves the same way, faster. No scale. Reduced motion makes both a short fade.
+ * The spatial factor (tokens.css) can't reach into keyframes, so the reduced-motion blocks here
+ * swap the travel for a fade themselves, and shorten the scrim to match.
+ *
+ * Exits name only their end state, so they start from wherever the element is. An Escape mid-enter
+ * pins the pose it reached (`Modal` writes it inline), and the exit leaves from there.
  */
 @keyframes modal-fade-in {
   from {
@@ -36,27 +41,24 @@
 @keyframes modal-dialog-in {
   from {
     translate: 0 -50px;
-    clip-path: inset(0 0 65% 0 round var(--md-sys-shape-corner-extra-large));
+    clip-path: inset(0 0 65% 0 round var(--radius-xl));
     opacity: 0;
   }
   10% {
     opacity: 1;
   }
   to {
-    clip-path: inset(0 round var(--md-sys-shape-corner-extra-large));
+    clip-path: inset(0 round var(--radius-xl));
   }
 }
 
 @keyframes modal-dialog-out {
-  from {
-    clip-path: inset(0 round var(--md-sys-shape-corner-extra-large));
-  }
   66% {
     opacity: 1;
   }
   to {
     translate: 0 -50px;
-    clip-path: inset(0 0 65% 0 round var(--md-sys-shape-corner-extra-large));
+    clip-path: inset(0 0 65% 0 round var(--radius-xl));
     opacity: 0;
   }
 }
@@ -108,6 +110,9 @@
   }
 
   @variant medium {
+    /* At rest too, so the exit's clip has a shape to grow from. */
+    clip-path: inset(0 round var(--radius-xl));
+
     &[data-entering] {
       animation: modal-dialog-in var(--md-sys-motion-duration-long2)
         var(--md-sys-motion-easing-emphasized) both;
