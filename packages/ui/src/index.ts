@@ -12,6 +12,14 @@ export {
   type ButtonProps,
   type LinkButtonProps,
 } from "./components/button.tsx";
+export {
+  Command,
+  CommandGroup,
+  CommandMenu,
+  type CommandGroupProps,
+  type CommandMenuProps,
+  type CommandProps,
+} from "./components/command-menu.tsx";
 export { Disclosure, type DisclosureProps } from "./components/disclosure.tsx";
 export {
   FilterChip,
