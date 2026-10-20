@@ -1,4 +1,5 @@
 import { getAuth } from "@/lib/auth/auth.ts";
+import { getConnections } from "@/lib/auth/connections.ts";
 import { getClippings } from "@/lib/clippings/service.ts";
 import { createMcpRoute } from "@/lib/mcp/handler.ts";
 import { mcpResourceUrl } from "@/lib/mcp/resource.ts";
@@ -10,6 +11,7 @@ function getHandler() {
   return (handler ??= createMcpRoute({
     auth: getAuth(),
     clippings: getClippings(),
+    connections: getConnections(),
     resource: mcpResourceUrl(),
     allowedEmails: process.env.ALLOWED_EMAILS,
   }));
