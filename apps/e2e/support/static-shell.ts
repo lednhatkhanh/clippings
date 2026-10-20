@@ -6,7 +6,7 @@ import type { Page } from "@playwright/test";
 import { WEB_DIR } from "./env.ts";
 
 /** Where Next writes each route's prerendered static shell, in the production build. */
-const SHELLS_DIR = path.join(WEB_DIR, ".next/server/app");
+const SHELLS_DIR = path.join(WEB_DIR, ".next-e2e/server/app");
 
 /**
  * Serves the route's prerendered static shell as its document, which is what a CDN returns first
@@ -21,7 +21,7 @@ const SHELLS_DIR = path.join(WEB_DIR, ".next/server/app");
  * is released, so the refresh that follows streams the real page.
  *
  * @param pathname The route's path in the browser, such as `/c/0b1d…`.
- * @param shellFile The shell's file under `.next/server/app`, such as `c/[id].html`.
+ * @param shellFile The shell's file under `.next-e2e/server/app`, such as `c/[id].html`.
  */
 export async function serveStaticShell(page: Page, pathname: string, shellFile: string) {
   const html = readFileSync(path.join(SHELLS_DIR, shellFile), "utf8");

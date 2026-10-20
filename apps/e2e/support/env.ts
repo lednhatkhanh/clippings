@@ -46,6 +46,8 @@ export const APP_ENV: Record<string, string> = {
   ...localEnv,
   DATABASE_URL: E2E_DATABASE_URL,
   BETTER_AUTH_URL: BASE_URL,
+  // `next start` reads the config again: this points it at the end-to-end build's directory.
+  EXPOSE_TESTING_API: "1",
   ALLOWED_EMAILS: [localEnv.ALLOWED_EMAILS, EXTENSION_USER_EMAIL].filter(Boolean).join(","),
 };
 

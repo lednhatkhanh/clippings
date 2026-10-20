@@ -6,10 +6,13 @@ import type { NextConfig } from "next";
 const buildId = randomUUID();
 
 // Only the end-to-end build exposes the testing API `instant()` needs (`EXPOSE_TESTING_API=1`,
-// declared in turbo.json's `build` env so a cached normal build is never replayed for it).
+// declared in turbo.json's `build` env so a cached normal build is never replayed for it). It goes
+// to its own directory: Turborepo restores a cached build over what is there without clearing it,
+// so the two builds sharing `.next` leave stale files that break server actions.
 const exposeTestingApi = process.env.EXPOSE_TESTING_API === "1";
 
 const config: NextConfig = {
+  distDir: exposeTestingApi ? ".next-e2e" : ".next",
   generateBuildId: () => buildId,
   env: { CLIPPINGS_BUILD_ID: buildId },
   typedRoutes: true,

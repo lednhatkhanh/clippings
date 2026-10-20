@@ -26,7 +26,13 @@
     "build": {
       "dependsOn": ["^build", "typecheck"],
       "env": ["EXPOSE_TESTING_API"],
-      "outputs": [".next/**", "!.next/cache/**", ".output/**"]
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        ".next-e2e/**",
+        "!.next-e2e/cache/**",
+        ".output/**"
+      ]
     },
     "e2e": {
       "dependsOn": ["^build"],
