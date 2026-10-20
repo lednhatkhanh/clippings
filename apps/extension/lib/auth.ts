@@ -82,7 +82,12 @@ async function requestTokens(params: Record<string, string>): Promise<Tokens | n
   });
   // 400 and 401 are the grant or the client being refused: an expired or revoked refresh token,
   // or a client the server no longer knows. Anything else is the server or the network.
-  if (response.status === 400 || response.status === 401) return null;
+  if (response.status === 400 || response.status === 401) {
+    // Only this says the client is gone; a refused grant leaves the client as it is.
+    const { error } = (await response.json().catch(() => ({}))) as { error?: unknown };
+    if (error === "invalid_client") await browser.storage.local.remove("clientId");
+    return null;
+  }
   if (!response.ok) throw new Error(`The token endpoint answered ${response.status}`);
   const body = (await response.json()) as {
     access_token?: unknown;
@@ -163,10 +168,9 @@ export async function signIn(): Promise<boolean> {
         interactive: true,
       });
     } catch {
-      // The window was closed before the authorization came back. That is also how a client the
-      // server no longer knows ends (on the server's own page), so the next sign-in registers
-      // this install afresh.
-      await browser.storage.local.remove("clientId");
+      // The window was closed before the authorization came back. The client stays: registration
+      // is open to anyone, so a new client for every cancelled sign-in would pile up on the
+      // server. The token endpoint is what says a client is unknown (`requestTokens`).
       await setSignInProblem("cancelled");
       return false;
     }
