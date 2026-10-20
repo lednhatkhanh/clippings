@@ -9,6 +9,7 @@ import {
   createConnectionsService,
   createDatabase,
   createPool,
+  createSettingsService,
   systemClock,
   type ConnectionsService,
 } from "@clippings/db";
@@ -52,6 +53,7 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
     const api = createExtensionApi({
       auth,
       clippings: fixture.service,
+      settings: createSettingsService({ pool, clock: systemClock }),
       connections,
       resource: apiResource,
       allowedEmails,
@@ -189,13 +191,13 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
     );
   }
 
-  function updateNote(
+  function update(
     api: ReturnType<typeof app>["api"],
     id: string,
-    note: string,
+    changes: { note?: string; tags?: string[] },
     accessToken: string,
   ) {
-    return api.updateNote(
+    return api.update(
       new Request(`${apiResource}/clippings/${id}`, {
         method: "PATCH",
         headers: {
@@ -203,11 +205,24 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
           origin: EXTENSION_ORIGIN,
           authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ note }),
+        body: JSON.stringify(changes),
       }),
       id,
     );
   }
+
+  const updateNote = (
+    api: ReturnType<typeof app>["api"],
+    id: string,
+    note: string,
+    accessToken: string,
+  ) => update(api, id, { note }, accessToken);
+
+  /** A GET the popup sends, such as for the user's tags or settings. */
+  const get = (path: string, accessToken: string) =>
+    new Request(`${apiResource}${path}`, {
+      headers: { origin: EXTENSION_ORIGIN, authorization: `Bearer ${accessToken}` },
+    });
 
   beforeEach(async () => {
     port += 1;
@@ -241,7 +256,7 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
     const ours = preflight(EXTENSION_ORIGIN);
     expect(ours.status).toBe(204);
     expect(ours.headers.get("access-control-allow-origin")).toBe(EXTENSION_ORIGIN);
-    expect(ours.headers.get("access-control-allow-methods")).toBe("POST, PATCH");
+    expect(ours.headers.get("access-control-allow-methods")).toBe("GET, POST, PATCH");
     expect(ours.headers.get("access-control-allow-headers")).toBe("authorization, content-type");
     // A bearer token, never cookies.
     expect(ours.headers.get("access-control-allow-credentials")).toBeNull();
@@ -300,6 +315,76 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
     });
   });
 
+  it("sets tags by name, creating new ones, and lists them for the picker", async () => {
+    const setup = app(ALLOWED);
+    const tokens = await connect(setup, await signIn("ada", ALLOWED));
+    // A tag the user made in the web app, on another clipping.
+    const other = await fixture.service.saveClipping("ada", {
+      url: "https://example.com/b",
+      source: "web",
+      tags: ["Reading"],
+    });
+    const [existing] = other.clipping.tags;
+
+    const saved = (await (
+      await save(setup.api, "https://example.com/a", tokens.access_token)
+    ).json()) as ExtensionSaveResponse;
+    expect(saved.clipping.tags).toEqual([]);
+
+    const tagged = await update(
+      setup.api,
+      saved.clipping.id,
+      { tags: ["reading", " New  idea "] },
+      tokens.access_token,
+    );
+    expect(tagged.status).toBe(200);
+    const body = (await tagged.json()) as ExtensionSaveResponse["clipping"];
+    expect(body.tags.map((tag) => tag.name).sort()).toEqual(["New idea", "Reading"]);
+    expect(body.tags.find((tag) => tag.name === "Reading")?.id).toBe(existing?.id);
+
+    // What the web app shows for the clipping.
+    const stored = await fixture.service.getClipping("ada", saved.clipping.id);
+    expect(stored?.tags.map((tag) => tag.name).sort()).toEqual(["New idea", "Reading"]);
+    expect(stored?.note).toBe("");
+
+    const reopened = (await (
+      await save(setup.api, "https://example.com/a", tokens.access_token)
+    ).json()) as ExtensionSaveResponse;
+    expect(reopened.clipping.tags.map((tag) => tag.name).sort()).toEqual(["New idea", "Reading"]);
+
+    const listed = await setup.api.listTags(get("/tags", tokens.access_token));
+    expect(listed.status).toBe(200);
+    expect(listed.headers.get("access-control-allow-origin")).toBe(EXTENSION_ORIGIN);
+    expect(((await listed.json()) as { name: string }[]).map((tag) => tag.name).sort()).toEqual([
+      "New idea",
+      "Reading",
+    ]);
+
+    const cleared = await update(setup.api, saved.clipping.id, { tags: [] }, tokens.access_token);
+    expect(((await cleared.json()) as ExtensionSaveResponse["clipping"]).tags).toEqual([]);
+  });
+
+  it("answers the user's palette, the default until they choose one", async () => {
+    const setup = app(ALLOWED);
+    const tokens = await connect(setup, await signIn("ada", ALLOWED));
+
+    const before = await setup.api.settings(get("/settings", tokens.access_token));
+    expect(before.status).toBe(200);
+    expect(await before.json()).toEqual({ palette: "olive" });
+
+    await createSettingsService({ pool, clock: systemClock }).updateSettings("ada", {
+      palette: "ink",
+      theme: "dark",
+    });
+    const after = await setup.api.settings(get("/settings", tokens.access_token));
+    expect(await after.json()).toEqual({ palette: "ink" });
+
+    const signedOut = await setup.api.settings(
+      new Request(`${apiResource}/settings`, { headers: { origin: EXTENSION_ORIGIN } }),
+    );
+    expect(signedOut.status).toBe(401);
+  });
+
   it("refuses the extension's tokens once the user revokes it in Settings", async () => {
     const setup = app(ALLOWED);
     const tokens = await connect(setup, await signIn("ada", ALLOWED));
@@ -345,6 +430,15 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
       tokens.access_token,
     );
     expect(long.status).toBe(400);
+
+    for (const changes of [
+      {},
+      { tags: ["x".repeat(51)] },
+      { tags: Array.from({ length: 21 }, (_, index) => `tag ${index}`) },
+    ]) {
+      const refused = await update(setup.api, saved.clipping.id, changes, tokens.access_token);
+      expect(refused.status).toBe(400);
+    }
   });
 
   it("refuses a token issued for /mcp", async () => {

@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 
-import { saveAppearanceAction } from "@/app/(app)/settings/actions.ts";
 import { useOpenNewClipping } from "@/components/clippings/new-clipping-dialog.tsx";
 import { useTags } from "@/components/clippings/use-tags.ts";
+import { saveAppearance } from "@/components/settings/save-appearance.ts";
 import { hrefWithTag, loadBrowseParams } from "@/lib/clippings/browse-params.ts";
 import {
   APPEARANCE_DEFAULTS,
@@ -59,7 +59,7 @@ function switchAppearance<K extends Switchable>(key: K, value: Appearance[K]) {
   if (previous === value) return;
   transitionAppearance(() => applyAppearance({ ...shown, [key]: value }));
 
-  saveAppearanceAction({ [key]: value }).catch(() => {
+  saveAppearance({ [key]: value }).catch(() => {
     const now = shownAppearance();
     if (now[key] === value)
       transitionAppearance(() => applyAppearance({ ...now, [key]: previous }));

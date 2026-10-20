@@ -10,7 +10,8 @@
     "lint": "oxlint -c ../../.oxlintrc.json .",
     "format:check": "oxfmt --check -c ../../.oxfmtrc.json .",
     "typecheck": "wxt prepare && tsc --noEmit",
-    "zip": "wxt zip"
+    "zip": "wxt zip",
+    "test": "vitest run"
   },
   "dependencies": {
     "@clippings/shared": "workspace:*",
@@ -27,6 +28,7 @@
     "@types/react-dom": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
+    "vitest": "catalog:",
     "wxt": "catalog:"
   }
 }

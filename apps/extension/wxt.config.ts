@@ -17,10 +17,13 @@ export default defineConfig({
     description: "Save the page you're on to Clippings, with a note.",
     key: MANIFEST_KEY,
     // activeTab: the current tab's address when the toolbar button opens the popup, without
-    // access to every tab. identity: the sign-in window. storage: the sign-in, kept on this device.
-    permissions: ["activeTab", "identity", "storage"],
+    // access to every tab. identity: the sign-in window. storage: the sign-in, kept on this device,
+    // and the palette, synced. scripting: the page's selection, under that activeTab grant.
+    permissions: ["activeTab", "identity", "storage", "scripting"],
     // Only the Clippings API; the service worker makes every call.
     host_permissions: [`${CLIPPINGS_ORIGIN}/*`],
+    // Clippings pages may tell the extension the palette the user picks; nothing else may.
+    externally_connectable: { matches: [`${CLIPPINGS_ORIGIN}/*`] },
   },
   zip: { artifactTemplate: "clippings-extension-{{version}}-{{browser}}.zip" },
   vite: () => ({

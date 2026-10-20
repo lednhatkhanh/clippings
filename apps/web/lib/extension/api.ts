@@ -10,24 +10,31 @@ import type * as z from "zod";
 import { isAllowlisted, parseAllowlist } from "@/lib/auth/allowlist.ts";
 import type { createAuth } from "@/lib/auth/auth.ts";
 import {
+  InvalidTagsError,
   InvalidUrlError,
   NoteTooLongError,
   type ClippingsService,
   type ConnectionsService,
+  type SettingsService,
 } from "@clippings/db";
 import {
-  extensionNoteRequestSchema,
   extensionSaveRequestSchema,
+  extensionUpdateRequestSchema,
   type Clipping,
   type ExtensionApiError,
   type ExtensionClipping,
   type ExtensionSaveResponse,
+  type ExtensionSettings,
+  type Tag,
 } from "@clippings/shared";
 
 import { extensionOrigin } from "./origins.ts";
 
 /** What the API needs from the Clippings service. */
-export type ExtensionClippings = Pick<ClippingsService, "saveClipping" | "updateClipping">;
+export type ExtensionClippings = Pick<
+  ClippingsService,
+  "saveClipping" | "updateClipping" | "listTags"
+>;
 
 /** Who is calling: the token's user and the OAuth client (the extension install) it went to. */
 interface Caller {
@@ -35,11 +42,12 @@ interface Caller {
   clientId: string;
 }
 
-const ALLOWED_METHODS = "POST, PATCH";
+const ALLOWED_METHODS = "GET, POST, PATCH";
 const ALLOWED_HEADERS = "authorization, content-type";
 
 /**
- * The extension's REST API: it saves the current page and edits its note, for the user its bearer
+ * The extension's REST API: it saves the current page and edits its note and tags, and reads the
+ * user's tags and palette, for the user its bearer
  * token acts for. Only the token counts: cookies are never read, so a page the user visits can't
  * act through their web session, and no answer sets one. CORS lets the trusted extensions' origins
  * in; the service worker could call without it, since it holds a host permission, but the API
@@ -48,6 +56,7 @@ const ALLOWED_HEADERS = "authorization, content-type";
 export function createExtensionApi({
   auth,
   clippings,
+  settings,
   connections,
   resource,
   allowedEmails,
@@ -55,6 +64,7 @@ export function createExtensionApi({
 }: {
   auth: ReturnType<typeof createAuth>;
   clippings: ExtensionClippings;
+  settings: Pick<SettingsService, "getSettings">;
   connections: Pick<ConnectionsService, "recordUse">;
   /** The resource identifier the extension's tokens are issued for. */
   resource: string;
@@ -155,11 +165,14 @@ export function createExtensionApi({
     }
   }
 
+  const presentTag = ({ id, name, color }: Tag): Tag => ({ id, name, color });
+
   const present = (clipping: Clipping): ExtensionClipping => ({
     id: clipping.id,
     url: clipping.url,
     title: clipping.title,
     note: clipping.note,
+    tags: clipping.tags.map(presentTag),
     createdAt: clipping.createdAt,
     link: new URL(`/c/${clipping.id}`, appOrigin).toString(),
   });
@@ -207,23 +220,43 @@ export function createExtensionApi({
       }
     },
 
-    /** Replaces the note on one of the caller's clippings. */
-    async updateNote(request: Request, clippingId: string): Promise<Response> {
+    /**
+     * Replaces the note, the tags or both on one of the caller's clippings. Tags are names, as in
+     * the web app: a name the user has no tag for creates one.
+     */
+    async update(request: Request, clippingId: string): Promise<Response> {
       const caller = await authenticate(request);
       if (caller instanceof Response) return caller;
-      const body = await readBody(request, extensionNoteRequestSchema);
+      const body = await readBody(request, extensionUpdateRequestSchema);
       if (!body) return refuse(request, 400, "invalid_request");
 
       try {
-        const updated = await clippings.updateClipping(caller.userId, clippingId, {
-          note: body.note,
-        });
+        const updated = await clippings.updateClipping(caller.userId, clippingId, body);
         return updated ? reply(request, present(updated), 200) : refuse(request, 404, "not_found");
       } catch (error) {
-        // The schema caps the note already; this is the service's own check agreeing.
-        if (error instanceof NoteTooLongError) return refuse(request, 400, "invalid_request");
+        // The schema caps both already; these are the service's own checks agreeing.
+        if (error instanceof NoteTooLongError || error instanceof InvalidTagsError) {
+          return refuse(request, 400, "invalid_request");
+        }
         throw error;
       }
+    },
+
+    /** Every tag the caller has, for the popup's tag picker to offer. */
+    async listTags(request: Request): Promise<Response> {
+      const caller = await authenticate(request);
+      if (caller instanceof Response) return caller;
+      const tags = await clippings.listTags(caller.userId);
+      return reply(request, tags.map(presentTag), 200);
+    },
+
+    /** The caller's palette, which the popup keeps in sync storage and paints before it renders. */
+    async settings(request: Request): Promise<Response> {
+      const caller = await authenticate(request);
+      if (caller instanceof Response) return caller;
+      const { palette } = await settings.getSettings(caller.userId);
+      const answer: ExtensionSettings = { palette };
+      return reply(request, answer, 200);
     },
   };
 }
