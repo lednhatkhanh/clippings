@@ -1,20 +1,9 @@
 import { UTCDate } from "@date-fns/utc";
-import {
-  differenceInDays,
-  differenceInHours,
-  differenceInMinutes,
-  format,
-  isSameYear,
-  parseISO,
-} from "date-fns";
+import { differenceInDays, differenceInHours, differenceInMinutes, parseISO } from "date-fns";
+
+import { formatAbsoluteDate } from "@clippings/shared";
 
 const relative = new Intl.RelativeTimeFormat("en-US", { numeric: "auto" });
-
-/** "3 Oct", or "3 Oct 2025" when the year isn't the current one. Days are UTC days. */
-export function formatAbsoluteDate(iso: string, now: Date): string {
-  const date = new UTCDate(parseISO(iso));
-  return format(date, isSameYear(date, new UTCDate(now)) ? "d MMM" : "d MMM yyyy");
-}
 
 /** "2 days ago" for the last seven days, the absolute date after that. */
 export function formatClippingDate(iso: string, now: Date): string {

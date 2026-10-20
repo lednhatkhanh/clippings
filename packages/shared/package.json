@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "@date-fns/utc": "catalog:",
-    "date-fns": "catalog:"
+    "date-fns": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@clippings/config": "workspace:*",

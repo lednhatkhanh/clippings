@@ -14,6 +14,25 @@ describe("isAllowedRedirectUri", () => {
     expect(isAllowedRedirectUri("http://[::1]:8080/callback")).toBe(true);
   });
 
+  it("accepts a trusted extension's chromiumapp.org redirect, and no other extension's", () => {
+    const trusted = ["niennihgpnpplljbiaddgeoliojiffdc"];
+    expect(
+      isAllowedRedirectUri("https://niennihgpnpplljbiaddgeoliojiffdc.chromiumapp.org/", trusted),
+    ).toBe(true);
+    expect(
+      isAllowedRedirectUri("https://niennihgpnpplljbiaddgeoliojiffdc.chromiumapp.org/", []),
+    ).toBe(false);
+    expect(
+      isAllowedRedirectUri("https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.chromiumapp.org/", trusted),
+    ).toBe(false);
+    expect(
+      isAllowedRedirectUri(
+        "https://niennihgpnpplljbiaddgeoliojiffdc.chromiumapp.org.evil.example/",
+        trusted,
+      ),
+    ).toBe(false);
+  });
+
   it("refuses anywhere else", () => {
     expect(isAllowedRedirectUri("https://claude.ai/api/mcp/other")).toBe(false);
     expect(isAllowedRedirectUri("https://evil.example/api/mcp/auth_callback")).toBe(false);

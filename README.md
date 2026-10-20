@@ -30,7 +30,7 @@ Hosted on Vercel Hobby and Neon Launch. The reasoning is in
 ```text
 apps/
 ├── web/          Next.js app: UI, auth, API routes
-└── extension/    WXT browser extension (scaffold)
+└── extension/    WXT browser extension: toolbar popup that saves the current page
 packages/
 ├── ui/           Design system: generated theme, tokens, icons, illustrations
 ├── db/           Postgres pool, SQL migrations and the migration runner
@@ -91,6 +91,21 @@ The MCP server is at `<BETTER_AUTH_URL>/mcp`. It has three tools: `save_clipping
 Either one opens a browser window: sign in with an allowlisted Google account, then Allow.
 Clippings is the OAuth authorization server (Better Auth's MCP plugin), so there are no keys to
 copy.
+
+## The browser extension
+
+The Chrome extension saves the page you're on from its toolbar popup, with a note. Build it for
+your Clippings, then load `apps/extension/.output/chrome-mv3` as an unpacked extension
+(`chrome://extensions`, Developer mode, Load unpacked):
+
+```bash
+CLIPPINGS_ORIGIN=https://<your Clippings> pnpm --filter @clippings/extension build
+```
+
+Without `CLIPPINGS_ORIGIN` it talks to `http://localhost:3100`. CI zips a build for the
+`CLIPPINGS_ORIGIN` repository variable as the `clippings-extension` artifact. A key in the
+manifest pins the extension's id, which the web app trusts for sign-in; a Chrome Web Store
+listing gets its own id, which goes in the web app's `EXTENSION_IDS`.
 
 ## Environments and releases
 

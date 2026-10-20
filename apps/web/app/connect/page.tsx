@@ -10,6 +10,7 @@ import { getAuth } from "@/lib/auth/auth.ts";
 import { closedPage } from "@/lib/auth/connection.ts";
 import { signedOAuthQuery } from "@/lib/auth/oauth-query.ts";
 import { getSession } from "@/lib/auth/session.ts";
+import { isExtensionRedirectUri, parseExtensionIds } from "@/lib/extension/origins.ts";
 import { Button, ClippingsStackIllustration } from "@clippings/ui";
 
 import { allowConnectionAction, denyConnectionAction, switchAccountAction } from "./actions.ts";
@@ -34,10 +35,14 @@ async function clientName(clientId: string): Promise<string> {
 
 /**
  * Where Allow sends the authorization, in words: the client's own name can say anything, but
- * this is where its access ends up. The provider only allows claude.ai and loopback ports.
+ * this is where its access ends up. The provider only allows claude.ai, loopback ports and the
+ * trusted extensions.
  */
 function returnsTo(redirectUri: string): string {
   if (!URL.canParse(redirectUri)) return "the app";
+  if (isExtensionRedirectUri(redirectUri, parseExtensionIds(process.env.EXTENSION_IDS))) {
+    return "the Clippings extension";
+  }
   const { protocol, hostname } = new URL(redirectUri);
   return protocol === "http:" ? "an app on this computer" : hostname;
 }
@@ -84,6 +89,7 @@ async function ConsentContent({ searchParams }: { searchParams: SearchParams }) 
           </Button>
         </form>
         <form action={denyConnectionAction}>
+          <input type="hidden" name="oauth_query" value={oauthQuery} />
           <Button type="submit" variant="outlined" className="w-full">
             Deny
           </Button>

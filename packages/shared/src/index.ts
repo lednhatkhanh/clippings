@@ -1,5 +1,5 @@
-// Shared by web and extension: DTO types, appearance settings, tag names, the URL normalizer and
-// the share-sheet link reader.
+// Shared by web and extension: DTO types, appearance settings, tag names, the URL normalizer, the
+// share-sheet link reader and the extension API's schemas.
 export {
   APPEARANCE_DEFAULTS,
   APPEARANCE_KEYS,
@@ -20,7 +20,23 @@ export {
   type ClippingSource,
   type ClippingStatus,
 } from "./clipping.ts";
-export { formatIsoUtc } from "./dates.ts";
+export { formatAbsoluteDate, formatIsoUtc } from "./dates.ts";
+export {
+  CLIPPINGS_EXTENSION_ID,
+  EXTENSION_API_ERRORS,
+  EXTENSION_API_PATH,
+  extensionClippingSchema,
+  extensionNoteRequestSchema,
+  extensionSaveRequestSchema,
+  extensionSaveResponseSchema,
+  isSaveablePage,
+  type ExtensionApiError,
+  type ExtensionClipping,
+  type ExtensionNoteRequest,
+  type ExtensionSaveRequest,
+  type ExtensionSaveResponse,
+  type ExtensionSignInError,
+} from "./extension.ts";
 export {
   MAX_QUERY_LENGTH,
   SEARCH_RESULT_LIMIT,

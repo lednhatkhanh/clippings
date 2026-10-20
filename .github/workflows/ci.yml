@@ -60,3 +60,16 @@ jobs:
         env:
           BEFORE_SHA: ${{ github.event.before }}
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+
+      # The extension, built for the web app at the `CLIPPINGS_ORIGIN` repository variable
+      # (localhost when it's unset), zipped to load unpacked or upload as an unlisted item.
+      - name: Zip the extension
+        run: pnpm --filter @clippings/extension zip
+        env:
+          CLIPPINGS_ORIGIN: ${{ vars.CLIPPINGS_ORIGIN }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: clippings-extension
+          path: apps/extension/.output/*.zip
+          if-no-files-found: error

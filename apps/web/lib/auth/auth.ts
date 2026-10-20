@@ -7,6 +7,8 @@ import { nextCookies } from "better-auth/next-js";
 import { jwt } from "better-auth/plugins/jwt";
 
 import { getDatabase } from "@/lib/db.ts";
+import { extensionResourceUrl, parseExtensionIds } from "@/lib/extension/origins.ts";
+import { extensionResourceGate } from "@/lib/extension/resource-gate.ts";
 import { mcpResourceUrl } from "@/lib/mcp/resource.ts";
 import {
   account,
@@ -46,9 +48,19 @@ export interface AuthSetup {
   secret?: string;
   allowedEmails: string | undefined;
   google: { clientId: string; clientSecret: string };
+  /** The browser extensions that may sign in, by id. */
+  extensionIds: readonly string[];
 }
 
-export function createAuth({ database, baseURL, secret, allowedEmails, google }: AuthSetup) {
+export function createAuth({
+  database,
+  baseURL,
+  secret,
+  allowedEmails,
+  google,
+  extensionIds,
+}: AuthSetup) {
+  const extensionResource = extensionResourceUrl(baseURL);
   return betterAuth({
     baseURL,
     secret,
@@ -86,7 +98,8 @@ export function createAuth({ database, baseURL, secret, allowedEmails, google }:
     onAPIError: { errorURL: "/sign-in" },
     // Deliberately left at Better Auth's defaults, for a Google-only, allowlisted app:
     // - trustedOrigins: `BETTER_AUTH_URL` is trusted; previews don't sign in (spec, "Hosting").
-    //   Add the extension's origin when its sign-in lands.
+    //   The extension needs no entry: it sends no cookies, and only requests with cookies have
+    //   their origin checked.
     // - rateLimit: on in production by default; the surface is one OAuth start and callback.
     // - accountLinking: one provider, and `validateUserInfo` also gates linking.
     // - email verification, passwords, 2FA: not enabled; there is no email/password sign-in.
@@ -94,14 +107,18 @@ export function createAuth({ database, baseURL, secret, allowedEmails, google }:
       // Signs access tokens, and serves the keys `/mcp` verifies them with. No JWT on every
       // session lookup: nothing reads it, and it would sign one per page.
       jwt({ disableSettingJwtHeader: true }),
-      // The OAuth 2.1 authorization server for Claude (claude.ai connectors and Claude Code):
-      // RFC 8414 and RFC 9728 metadata, PKCE S256, refresh-token rotation, and access tokens
-      // bound to `/mcp`. Scopes stay at the defaults, which include `offline_access`, so a
-      // client that asks for none gets a refresh token.
+      // The OAuth 2.1 authorization server for Claude (claude.ai connectors and Claude Code)
+      // and the extension: RFC 8414 and RFC 9728 metadata, PKCE S256, refresh-token rotation,
+      // and access tokens bound to `/mcp` or to the extension API. Scopes stay at the defaults,
+      // which include `offline_access`, so a client that asks for none gets a refresh token.
       mcp({
         loginPage: OAUTH_LOGIN_PAGE,
         consentPage: OAUTH_CONSENT_PAGE,
         resource: mcpResourceUrl(baseURL),
+        // The extension registers for its API's resource as well as `/mcp`, which every new
+        // client is linked to, and asks for tokens bound to it.
+        resources: [extensionResource],
+        clientRegistrationAllowedResources: [extensionResource],
         // Tokens always act for a user: no client-credentials grant.
         grantTypes: ["authorization_code", "refresh_token"],
         // Dynamic registration as well as metadata documents: clients that predate CIMD still
@@ -109,14 +126,16 @@ export function createAuth({ database, baseURL, secret, allowedEmails, google }:
         allowDynamicClientRegistration: true,
         allowUnauthenticatedClientRegistration: true,
         clientRegistrationDefaultApplicationType: "infer",
-        // However a client registered, it gets the code only at claude.ai or a loopback port.
+        // However a client registered, it gets the code only at claude.ai, a loopback port or a
+        // trusted extension.
         validateRedirectUri: (uri, _registered, defaultResult) =>
-          defaultResult && isAllowedRedirectUri(uri),
+          defaultResult && isAllowedRedirectUri(uri, extensionIds),
       }),
       // Client ID Metadata Documents, preferred over registration: a client's id is the URL of
       // its metadata, fetched with a transport that refuses private addresses and redirects.
       cimd({ fetchClientMetadataResource, metadataProfile: "mcp-2026-07-28" }),
-      consentGate({ allowedEmails }),
+      consentGate({ allowedEmails, extensionIds }),
+      extensionResourceGate({ resource: extensionResource, extensionIds }),
       nextCookies(),
     ],
   });
@@ -140,5 +159,6 @@ export function getAuth() {
       clientId: requireEnv("GOOGLE_CLIENT_ID"),
       clientSecret: requireEnv("GOOGLE_CLIENT_SECRET"),
     },
+    extensionIds: parseExtensionIds(process.env.EXTENSION_IDS),
   }));
 }

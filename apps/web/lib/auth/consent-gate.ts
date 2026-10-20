@@ -1,8 +1,11 @@
 import type { BetterAuthPlugin } from "better-auth";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 
+import { extensionErrorRedirect } from "@/lib/extension/origins.ts";
+
 import { isAllowlisted, parseAllowlist } from "./allowlist.ts";
 import { closedPage } from "./connection.ts";
+import { NOT_ALLOWLISTED } from "./validate-user.ts";
 
 const AUTHORIZE_PATH = "/oauth2/authorize";
 const CONSENT_PATH = "/oauth2/consent";
@@ -27,7 +30,13 @@ function promptWithConsent(prompt: unknown): string {
  * claude.ai user, so a stored consent would let a link someone else started finish for this
  * user without a click. Claude connects rarely, so the page costs little.
  */
-export function consentGate({ allowedEmails }: { allowedEmails: string | undefined }) {
+export function consentGate({
+  allowedEmails,
+  extensionIds,
+}: {
+  allowedEmails: string | undefined;
+  extensionIds: readonly string[];
+}) {
   const allowlist = parseAllowlist(allowedEmails);
 
   return {
@@ -43,7 +52,18 @@ export function consentGate({ allowedEmails }: { allowedEmails: string | undefin
             if (!session) return;
 
             if (!isAllowlisted(allowlist, session.user.email)) {
-              if (ctx.path === AUTHORIZE_PATH) throw ctx.redirect(closedPage("private"));
+              if (ctx.path === AUTHORIZE_PATH) {
+                // The extension's sign-in window closes on its redirect, and the popup says why.
+                const query = new URLSearchParams(
+                  Object.entries(ctx.query ?? {}).filter(
+                    (entry): entry is [string, string] => typeof entry[1] === "string",
+                  ),
+                );
+                throw ctx.redirect(
+                  extensionErrorRedirect(query, extensionIds, "access_denied", NOT_ALLOWLISTED) ??
+                    closedPage("private"),
+                );
+              }
               throw new APIError("FORBIDDEN", {
                 error: "access_denied",
                 error_description: "This account is not on the allowlist.",

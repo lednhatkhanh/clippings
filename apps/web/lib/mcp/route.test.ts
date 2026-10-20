@@ -34,6 +34,7 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
       secret: SECRET,
       allowedEmails,
       google: { clientId: "test", clientSecret: "test" },
+      extensionIds: [],
     });
     const connections = createConnectionsService({ pool, clock: systemClock });
     const mcp = createMcpRoute({

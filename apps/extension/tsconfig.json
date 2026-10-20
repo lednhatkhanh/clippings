@@ -1,5 +1,8 @@
 {
   "extends": ["@clippings/config/tsconfig/base.json", "./.wxt/tsconfig.json"],
-  "include": ["**/*.ts", ".wxt/wxt.d.ts"],
+  "compilerOptions": {
+    "jsx": "react-jsx"
+  },
+  "include": ["**/*.ts", "**/*.tsx", ".wxt/wxt.d.ts"],
   "exclude": ["node_modules", ".output"]
 }

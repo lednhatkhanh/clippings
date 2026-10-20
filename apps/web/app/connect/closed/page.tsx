@@ -10,8 +10,8 @@ export const metadata: Metadata = { title: "Not connected · Clippings", robots:
 const REASONS: Record<string, string> = {
   denied: "You chose not to connect.",
   private: "That account isn't on this Clippings' list.",
-  expired: "The request expired. Connect again from Claude.",
-  failed: "Something went wrong while connecting. Try again from Claude.",
+  expired: "The request expired. Connect again from where you started.",
+  failed: "Something went wrong while connecting. Try again from where you started.",
 };
 
 async function Reason({ searchParams }: { searchParams: Promise<{ reason?: string }> }) {
@@ -24,8 +24,8 @@ async function Reason({ searchParams }: { searchParams: Promise<{ reason?: strin
 }
 
 /**
- * Where a denied or failed OAuth connection ends. It has nothing to act on: Claude starts a new
- * connection, so the page only says what happened.
+ * Where a denied or failed OAuth connection ends. It has nothing to act on: Claude or the
+ * extension starts a new connection, so the page only says what happened.
  */
 export default function ConnectionClosedPage({
   searchParams,
@@ -35,7 +35,7 @@ export default function ConnectionClosedPage({
   return (
     <AuthCard>
       <LetterboxIllustration className="h-auto w-50" />
-      <h1 className="typescale-headline-sm">Claude wasn&apos;t connected.</h1>
+      <h1 className="typescale-headline-sm">Not connected.</h1>
       <Suspense fallback={null}>
         <Reason searchParams={searchParams} />
       </Suspense>
