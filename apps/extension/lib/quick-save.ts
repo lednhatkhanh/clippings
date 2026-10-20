@@ -6,29 +6,31 @@ import { lookupClipping, saveClipping, saveNote } from "./api.ts";
 import { isSignedIn } from "./auth.ts";
 import type { SaveResult } from "./messages.ts";
 import { enqueue, pauseRetrying, sendQueued, type PendingSave, type SendOutcome } from "./queue.ts";
+import { quoteSelection } from "./quote.ts";
 import { showsSavedPages } from "./settings.ts";
 import { flashSaved, resetTab, showError, showQueued, showSaved } from "./toolbar.ts";
 
 const CANT_SAVE = "Clippings can't save this page.";
 
 /**
- * The selection as a quote at the end of the note, in a block of its own. A quote block the note
- * holds already isn't added again, so saving the same selection twice (or a queued save sent
- * twice) leaves one copy. A quote too long for the note is cut to fit.
+ * The selection as a quote at the end of the note, in a block of its own, quoted as the popup
+ * quotes it. A quote block the note holds already isn't added again, so saving the same selection
+ * twice (or a queued save sent twice) leaves one copy. A quote too long for the note is cut to
+ * fit, at a line where it can.
  */
 export function noteWithQuote(note: string, selection: string): string {
-  const lines = selection
-    .trim()
-    .split(/\r?\n/)
-    .map((line) => `> ${line}`.trimEnd());
+  const quoted = quoteSelection(selection);
+  if (!quoted) return note;
   const separator = note.trim() ? "\n\n" : "";
   const base = note.trim() ? note.trimEnd() : "";
   const room = MAX_NOTE_LENGTH - base.length - separator.length;
-  const quote = room > 0 ? lines.join("\n").slice(0, room) : "";
+  let quote = room > 0 ? quoted.slice(0, room) : "";
+  if (quote.length < quoted.length && quote.lastIndexOf("\n") > 0) {
+    quote = quote.slice(0, quote.lastIndexOf("\n"));
+  }
   if (!quote.replace(/^>\s*/, "")) return note;
   // A whole block: after a blank line (or at the start), and before one (or at the end).
-  const blocks = `\n\n${note.trim()}\n\n`;
-  if (blocks.includes(`\n\n${quote}\n\n`)) return note;
+  if (`\n\n${note.trim()}\n\n`.includes(`\n\n${quote}\n\n`)) return note;
   return `${base}${separator}${quote}`;
 }
 

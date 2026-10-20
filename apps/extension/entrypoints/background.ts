@@ -1,6 +1,6 @@
 import { browser, type Browser } from "wxt/browser";
 
-import { saveNote } from "@/lib/api.ts";
+import { listTags, refreshPalette, saveNote, saveTags } from "@/lib/api.ts";
 import { isSignedIn, signIn, signOut, takeSignInProblem } from "@/lib/auth.ts";
 import {
   NOTE_PORT,
@@ -8,10 +8,25 @@ import {
   type NotePortReply,
   type PopupRequest,
   type PopupResponses,
+  type TagsReply,
 } from "@/lib/messages.ts";
+import { openOnboarding } from "@/lib/onboarding.ts";
+import { acceptSharedPalette } from "@/lib/palette.ts";
 import { clearQueue, ensureRetrying } from "@/lib/queue.ts";
 import { saveFromPopup, sendOfflineSaves } from "@/lib/quick-save.ts";
 import { registerQuickSave } from "@/lib/save-triggers.ts";
+
+/**
+ * Tag saves, one after another, so an older choice never lands after a newer one. It only lives
+ * as long as the service worker, which a save in flight keeps alive.
+ */
+let tagSaves: Promise<unknown> = Promise.resolve();
+
+function queueTags(clippingId: string, tags: string[]): Promise<TagsReply> {
+  const saved = tagSaves.then(() => saveTags(clippingId, tags));
+  tagSaves = saved;
+  return saved;
+}
 
 /** After a sign-in, the saves that waited for one go out, and retrying starts again. */
 async function resumeOfflineSaves() {
@@ -19,15 +34,25 @@ async function resumeOfflineSaves() {
   await sendOfflineSaves();
 }
 
+/**
+ * Signs in, then seeds the palette from the user's settings for the extension's pages, and sends
+ * the saves that waited for a sign-in.
+ */
+async function signInAndSeed(): Promise<boolean> {
+  const signedIn = await signIn();
+  if (signedIn) {
+    await refreshPalette();
+    void resumeOfflineSaves();
+  }
+  return signedIn;
+}
+
 async function answer(request: PopupRequest): Promise<PopupResponses[PopupRequest["type"]]> {
   switch (request.type) {
     case "status":
       return { signedIn: await isSignedIn(), signInProblem: await takeSignInProblem() };
-    case "signIn": {
-      const signedIn = await signIn();
-      if (signedIn) void resumeOfflineSaves();
-      return { signedIn };
-    }
+    case "signIn":
+      return { signedIn: await signInAndSeed() };
     case "signOut":
       await signOut();
       // Saves made offline are this account's: they must not go to the next one.
@@ -35,6 +60,12 @@ async function answer(request: PopupRequest): Promise<PopupResponses[PopupReques
       return { signedIn: false };
     case "save":
       return saveFromPopup(request.url);
+    case "tags":
+      return { tags: await listTags() };
+    case "setTags":
+      return queueTags(request.clippingId, request.tags);
+    case "refreshPalette":
+      return { palette: await refreshPalette() };
   }
 }
 
@@ -71,6 +102,14 @@ function keepNote(port: Browser.runtime.Port) {
 }
 
 export default defineBackground(() => {
+  browser.runtime.onInstalled.addListener((details) => void openOnboarding(details));
+  // A Clippings page telling the extension the palette the user just picked.
+  browser.runtime.onMessageExternal.addListener((message, sender) => {
+    acceptSharedPalette(message, sender).catch((error: unknown) =>
+      console.error("Couldn't keep the shared palette", error),
+    );
+  });
+
   browser.runtime.onMessage.addListener((message: PopupRequest, sender, sendResponse) => {
     if (sender.id !== browser.runtime.id) return false;
     answer(message).then(sendResponse, (error: unknown) => {

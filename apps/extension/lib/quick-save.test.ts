@@ -49,6 +49,7 @@ function saved(note = "", status: "created" | "existing" = "created"): SaveResul
       url: PAGE,
       title: "Essay",
       note,
+      tags: [],
       createdAt: "2026-10-20T10:00:00.000Z",
       link: "http://localhost:3100/c/c1",
     },
@@ -96,6 +97,8 @@ describe("noteWithQuote", () => {
   it("quotes the selection, line by line, after the note", () => {
     expect(noteWithQuote("", "  First line\nSecond line ")).toBe("> First line\n> Second line");
     expect(noteWithQuote("Mine.\n", "Theirs")).toBe("Mine.\n\n> Theirs");
+    // As the popup quotes a selection: blank lines keep the quote one block.
+    expect(noteWithQuote("", "One\n\n\nTwo")).toBe("> One\n>\n> Two");
   });
 
   it("doesn't add a quote the note holds already", () => {
