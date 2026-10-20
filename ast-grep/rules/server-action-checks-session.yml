@@ -1,0 +1,47 @@
+id: server-action-checks-session
+language: tsx
+severity: error
+message: A server action must check the session first, because anyone can POST to it directly.
+note: |
+  Start the function with `await requireUserId()` or `await getSession()`. An action that is
+  public on purpose (sign-in, sign-out) opts out with a `// ast-grep-ignore: server-action-checks-session`
+  comment above it that says why.
+files:
+  - apps/web/**/*.ts
+  - apps/web/**/*.tsx
+rule:
+  any:
+    - kind: function_declaration
+      regex: ^async\b
+    - kind: arrow_function
+      regex: ^async\b
+      inside:
+        kind: variable_declarator
+        inside:
+          kind: lexical_declaration
+  all:
+    - inside:
+        any:
+          - kind: export_statement
+          - kind: variable_declarator
+            inside:
+              kind: lexical_declaration
+              inside:
+                kind: export_statement
+    - inside:
+        stopBy: end
+        kind: program
+        has:
+          kind: expression_statement
+          regex: ^["']use server["']
+    - not:
+        has:
+          field: body
+          kind: statement_block
+          has:
+            nthChild: 1
+            has:
+              stopBy: end
+              any:
+                - pattern: await requireUserId()
+                - pattern: await getSession()

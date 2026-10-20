@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 
 import { getAuth, OAUTH_LOGIN_PAGE } from "@/lib/auth/auth.ts";
 import { closedPage, INVALID_SIGNATURE } from "@/lib/auth/connection.ts";
+import { requireUserId } from "@/lib/auth/session.ts";
 import { extensionErrorRedirect, parseExtensionIds } from "@/lib/extension/origins.ts";
 
 const readOAuthQuery = (formData: FormData) => {
@@ -17,6 +18,7 @@ const readOAuthQuery = (formData: FormData) => {
  * Allow: records the consent and sends the browser back to the client with its authorization
  * code. The consent endpoint checks the signed request, the session and the allowlist.
  */
+// ast-grep-ignore: server-action-checks-session
 export async function allowConnectionAction(formData: FormData): Promise<void> {
   let url: unknown;
   let expired = false;
@@ -61,6 +63,7 @@ export async function allowConnectionAction(formData: FormData): Promise<void> {
  * window is closed by its redirect instead, so it gets the refusal and the popup says so.
  */
 export async function denyConnectionAction(formData: FormData): Promise<void> {
+  await requireUserId();
   const toExtension = extensionErrorRedirect(
     new URLSearchParams(readOAuthQuery(formData)),
     parseExtensionIds(process.env.EXTENSION_IDS),
@@ -71,6 +74,7 @@ export async function denyConnectionAction(formData: FormData): Promise<void> {
 }
 
 /** "Not you?": signs out and starts sign-in again, keeping the authorization request. */
+// ast-grep-ignore: server-action-checks-session
 export async function switchAccountAction(formData: FormData): Promise<void> {
   await getAuth().api.signOut({ headers: await headers() });
   const oauthQuery = readOAuthQuery(formData);

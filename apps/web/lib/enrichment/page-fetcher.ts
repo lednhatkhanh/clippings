@@ -28,26 +28,46 @@ type LookupCallback = (
   family?: number,
 ) => void;
 
+/** `dns.lookup` as the connect step calls it. Tests swap it to decide what a name resolves to. */
+export type Lookup = (
+  hostname: string,
+  options: { all: true },
+  callback: (error: NodeJS.ErrnoException | null, addresses: LookupAddress[]) => void,
+) => void;
+
 /**
  * DNS resolution that refuses internal addresses. It runs at connect time, so a name that
  * resolves differently on the second lookup (DNS rebinding) can't slip past a check made earlier.
+ * `resolve` only supplies the addresses: the check on them is the same whoever answers.
  */
-function publicOnlyLookup(
-  hostname: string,
-  options: { all?: boolean },
-  callback: LookupCallback,
-): void {
-  dnsLookup(hostname, { all: true }, (error, addresses) => {
-    if (error) return callback(error, "", 0);
-    const internal = addresses.find(({ address }) => !isPublicAddress(address));
-    if (internal || addresses.length === 0) {
-      return callback(new PageFetchError(`${hostname} is not a public address`), "", 0);
-    }
-    if (options.all) return callback(null, addresses);
-    const [first] = addresses;
-    return callback(null, first!.address, first!.family);
-  });
+function publicOnlyLookup(resolve: Lookup) {
+  return (hostname: string, options: { all?: boolean }, callback: LookupCallback): void => {
+    resolve(hostname, { all: true }, (error, addresses) => {
+      if (error) return callback(error, "", 0);
+      const internal = addresses.find(({ address }) => !isPublicAddress(address));
+      if (internal || addresses.length === 0) {
+        return callback(new PageFetchError(`${hostname} is not a public address`), "", 0);
+      }
+      if (options.all) return callback(null, addresses);
+      const [first] = addresses;
+      return callback(null, first!.address, first!.family);
+    });
+  };
 }
+
+export interface PageFetcherOptions {
+  /** Resolves host names. The real resolver by default. */
+  lookup?: Lookup;
+  /** Sockets for `http:` URLs. Lets a test reach a local server; none by default. */
+  agent?: http.Agent;
+  /** Where the body is cut off. */
+  maxBytes?: number;
+  /** For the whole fetch, redirects included. */
+  budgetMs?: number;
+}
+
+type RequestOptions = Required<Omit<PageFetcherOptions, "agent" | "budgetMs">> &
+  Pick<PageFetcherOptions, "agent">;
 
 interface RawResponse {
   status: number;
@@ -56,7 +76,11 @@ interface RawResponse {
 }
 
 /** One request, without following a redirect. */
-function requestOnce(url: URL, signal: AbortSignal): Promise<RawResponse> {
+function requestOnce(
+  url: URL,
+  signal: AbortSignal,
+  { lookup, agent, maxBytes }: RequestOptions,
+): Promise<RawResponse> {
   // An IP in the URL skips DNS, so `publicOnlyLookup` never sees it.
   const host = url.hostname.replace(/^\[|\]$/g, "");
   if (isIP(host) && !isPublicAddress(host)) {
@@ -68,7 +92,8 @@ function requestOnce(url: URL, signal: AbortSignal): Promise<RawResponse> {
       url,
       {
         method: "GET",
-        lookup: publicOnlyLookup as unknown as http.RequestOptions["lookup"],
+        lookup: publicOnlyLookup(lookup) as unknown as http.RequestOptions["lookup"],
+        ...(agent && url.protocol === "http:" ? { agent } : {}),
         signal,
         headers: {
           "user-agent": "Clippings/1.0 (reads pages people saved)",
@@ -89,7 +114,7 @@ function requestOnce(url: URL, signal: AbortSignal): Promise<RawResponse> {
           chunks.push(chunk);
           size += chunk.length;
           // The start of a long page is enough to summarize it.
-          if (size > MAX_BYTES) response.destroy();
+          if (size > maxBytes) response.destroy();
         });
         response.on("end", finish);
         response.on("close", finish);
@@ -111,16 +136,25 @@ function decode(body: Buffer, contentType: string): string {
 }
 
 /** The real fetcher: follows redirects itself so every hop is checked, and never reaches an internal address. */
-export function createPageFetcher(): PageFetcher {
+export function createPageFetcher({
+  lookup = dnsLookup as Lookup,
+  agent,
+  maxBytes = MAX_BYTES,
+  budgetMs = FETCH_BUDGET_MS,
+}: PageFetcherOptions = {}): PageFetcher {
   return {
     async fetchPage(address) {
       let url = new URL(address);
-      const signal = AbortSignal.timeout(FETCH_BUDGET_MS);
+      const signal = AbortSignal.timeout(budgetMs);
       for (let hops = 0; hops <= MAX_REDIRECTS; hops++) {
         if (url.protocol !== "http:" && url.protocol !== "https:") {
           throw new PageFetchError(`Not a web address: ${url.href}`);
         }
-        const { status, headers, body } = await requestOnce(url, signal);
+        const { status, headers, body } = await requestOnce(url, signal, {
+          lookup,
+          agent,
+          maxBytes,
+        });
 
         if (status >= 300 && status < 400 && headers.location) {
           url = new URL(headers.location, url);

@@ -61,6 +61,11 @@ type-aware) and types (`tsc`); this file holds what none of them says.
 `apps/web/proxy.ts` only checks that a session cookie exists. Server code that reads or writes user
 data validates the session itself, as the `(app)` layout does.
 
+An ast-grep rule (`ast-grep/rules/server-action-checks-session.yml`, run by `apps/web`'s `lint`)
+fails an exported async function in a `"use server"` file unless its first statement awaits
+`requireUserId()` or `getSession()`. A public action (sign-in, sign-out) opts out with an
+`// ast-grep-ignore: server-action-checks-session` comment above it.
+
 ## Tests
 
 - Tests sit next to the code as `*.test.ts` and run with Vitest.

@@ -17,6 +17,7 @@ import { RETURN_TO_PARAM, safeReturnPath, withReturnTo } from "@/lib/auth/return
  * in `oauth_query` instead. Passing it on lets the provider resume the authorization once the
  * session exists, and a refused account comes back to sign-in with the request still attached.
  */
+// ast-grep-ignore: server-action-checks-session
 export async function signInWithGoogle(formData: FormData) {
   const returnTo = safeReturnPath(formData.get(RETURN_TO_PARAM));
   const value = formData.get("oauth_query");

@@ -3,6 +3,8 @@
   "globalDependencies": [
     ".oxlintrc.json",
     ".oxfmtrc.json",
+    "sgconfig.yml",
+    "ast-grep/**",
     ".node-version",
     "scripts/*.mjs",
     "pnpm-workspace.yaml"
