@@ -15,7 +15,7 @@ import {
   RevealTransition,
   SkeletonTransition,
 } from "@/components/page-transition.tsx";
-import { getSession } from "@/lib/auth/session.ts";
+import { getSession, signInRedirect } from "@/lib/auth/session.ts";
 import { domainOf } from "@/lib/clippings/rows.ts";
 import { getClippings } from "@/lib/clippings/service.ts";
 import { SOURCE_LABELS } from "@/lib/clippings/source-labels.ts";
@@ -66,7 +66,7 @@ async function loadClipping(userId: string, clippingId: string) {
 /** The clipping's text and actions, inside the sheet the page puts around it. */
 async function ClippingDetail({ params }: Pick<PageProps<"/c/[id]">, "params">) {
   const session = await getSession();
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInRedirect());
   const { id: clippingId } = await params;
 
   let loaded: Awaited<ReturnType<typeof loadClipping>>;
@@ -128,7 +128,7 @@ async function ClippingDetail({ params }: Pick<PageProps<"/c/[id]">, "params">) 
 /** The neighbours, streamed after the sheet: finding them is a second query. */
 async function Related({ params }: Pick<PageProps<"/c/[id]">, "params">) {
   const session = await getSession();
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInRedirect());
   const { id } = await params;
   return <RelatedClippings userId={session.user.id} clippingId={id} />;
 }

@@ -1,3 +1,5 @@
+import type { Route } from "next";
+
 /** The query parameter that carries where sign-in should return to. */
 export const RETURN_TO_PARAM = "returnTo";
 
@@ -25,4 +27,20 @@ export function safeReturnPath(value: unknown): string | null {
 /** `path`, carrying the page to return to after sign-in when there is one. */
 export function withReturnTo(path: string, returnTo: string | null): string {
   return returnTo ? `${path}?${new URLSearchParams({ [RETURN_TO_PARAM]: returnTo })}` : path;
+}
+
+/**
+ * The header the proxy sets to the requested path and query, so server code that finds the
+ * session invalid can send sign-in back there. The proxy overwrites whatever a client sent.
+ */
+export const REQUESTED_PATH_HEADER = "x-clippings-requested-path";
+
+/**
+ * The sign-in page, returning to `requested` (a path with its query) afterwards when it is a safe
+ * path other than the home page.
+ */
+export function signInPath(requested: string | null): Route {
+  const returnTo = safeReturnPath(requested);
+  // Always the sign-in page, which typed routes can't see through the query string.
+  return withReturnTo("/sign-in", returnTo === "/" ? null : returnTo) as Route;
 }
