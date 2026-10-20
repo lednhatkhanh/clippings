@@ -30,7 +30,8 @@ Hosted on Vercel Hobby and Neon Launch. The reasoning is in
 ```text
 apps/
 ├── web/          Next.js app: UI, auth, API routes
-└── extension/    WXT browser extension: toolbar popup that saves the current page
+├── extension/    WXT browser extension: toolbar popup that saves the current page
+└── e2e/          Playwright end-to-end tests against a production build of the web app
 packages/
 ├── ui/           Design system: generated theme, tokens, icons, illustrations
 ├── db/           Postgres pool, SQL migrations and the migration runner
@@ -67,6 +68,7 @@ Run from the repo root.
 | `pnpm typecheck`          | `tsc` in every package                                                |
 | `pnpm test`               | Vitest in every package                                               |
 | `pnpm build`              | Production build of every app                                         |
+| `pnpm e2e`                | End-to-end tests (Playwright) on a production build; needs the Postgres below and `pnpm --filter @clippings/e2e browsers` once |
 | `pnpm format`             | Rewrite files with oxfmt                                              |
 | `pnpm format:check`       | Check formatting without writing                                      |
 | `pnpm check:root`         | Format, lint and icon checks for root files, `scripts/` and workflows |

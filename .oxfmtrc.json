@@ -10,6 +10,8 @@
   },
   "ignorePatterns": [
     "pnpm-lock.yaml",
+    "playwright-report",
+    "test-results",
     ".next",
     ".wxt",
     ".output",

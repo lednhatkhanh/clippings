@@ -1,0 +1,29 @@
+{
+  "name": "@clippings/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "oxlint -c ../../.oxlintrc.json .",
+    "format:check": "oxfmt --check -c ../../.oxfmtrc.json .",
+    "typecheck": "tsc --noEmit",
+    "e2e": "playwright test",
+    "test:e2e": "pnpm run e2e",
+    "browsers": "playwright install --with-deps chromium"
+  },
+  "dependencies": {
+    "@clippings/db": "workspace:*",
+    "@clippings/shared": "workspace:*",
+    "@clippings/web": "workspace:*"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "catalog:",
+    "@clippings/config": "workspace:*",
+    "@next/playwright": "catalog:",
+    "@playwright/test": "catalog:",
+    "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "pg": "catalog:",
+    "typescript": "catalog:"
+  }
+}
