@@ -10,7 +10,7 @@ export const WEB_DIR = fileURLToPath(new URL("../../web/", import.meta.url));
  * The production app's port. Not the dev server's (3100) or the local trial build's (3200), so
  * `pnpm e2e` never collides with a server a person left running.
  */
-export const APP_PORT = 3300;
+export const APP_PORT = Number(process.env.E2E_PORT ?? 3300);
 export const BASE_URL = `http://localhost:${APP_PORT}`;
 
 /** The fakes' ports (`scripts/local/fakes.mjs`): QStash, Anthropic, Voyage AI. */
