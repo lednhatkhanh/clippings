@@ -7,7 +7,7 @@ import {
   RevealTransition,
   SkeletonTransition,
 } from "@/components/page-transition.tsx";
-import { getSession } from "@/lib/auth/session.ts";
+import { getSession, signInRedirect } from "@/lib/auth/session.ts";
 import { loadBrowseParams, toQueryString } from "@/lib/clippings/browse-params.ts";
 import { loadRows } from "@/lib/clippings/rows.ts";
 
@@ -20,7 +20,7 @@ type SearchParams = PageProps<"/">["searchParams"];
 
 async function Clippings({ searchParams }: { searchParams: SearchParams }) {
   const session = await getSession();
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInRedirect());
   // `?q=`, `source=` and `sort=` decide the first result, so a reload shows what was on screen.
   const params = await loadBrowseParams(searchParams);
 

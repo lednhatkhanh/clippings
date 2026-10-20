@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { RETURN_TO_PARAM, safeReturnPath } from "@/lib/auth/return-path.ts";
+import { RETURN_TO_PARAM, safeReturnPath, signInPath } from "@/lib/auth/return-path.ts";
 import { getSession } from "@/lib/auth/session.ts";
 import { getSettings } from "@/lib/settings/service.ts";
 import { APPEARANCE_COOKIE, encodeAppearanceCookie } from "@clippings/ui";
@@ -11,10 +11,11 @@ import { APPEARANCE_COOKIE, encodeAppearanceCookie } from "@clippings/ui";
  * back to the page that sent them to sign in.
  */
 export async function GET(request: Request) {
+  const requestedReturn = new URL(request.url).searchParams.get(RETURN_TO_PARAM);
   const session = await getSession();
-  if (!session) return NextResponse.redirect(new URL("/sign-in", request.url));
+  if (!session) return NextResponse.redirect(new URL(signInPath(requestedReturn), request.url));
 
-  const returnTo = safeReturnPath(new URL(request.url).searchParams.get(RETURN_TO_PARAM));
+  const returnTo = safeReturnPath(requestedReturn);
   const response = NextResponse.redirect(new URL(returnTo ?? "/", request.url));
   try {
     const value = encodeAppearanceCookie(await getSettings().getSettings(session.user.id));
