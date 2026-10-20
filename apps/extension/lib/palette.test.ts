@@ -5,6 +5,7 @@ import {
   acceptSharedPalette,
   followStoredPalette,
   paintMirroredPalette,
+  paintStoredPalette,
   readStoredPalette,
   storePalette,
 } from "./palette.ts";
@@ -42,29 +43,22 @@ describe("the palette", () => {
     }
   });
 
-  it("catches up with a palette synced since the mirror was written", async () => {
+  it("catches up with a palette synced since the mirror was written, before rendering", async () => {
     await storePalette("terracotta");
     const stale = page("ink");
     paintMirroredPalette(stale.root, stale.storage);
-    const apply = vi.fn((palette: string) => stale.root.setAttribute("data-palette", palette));
 
-    followStoredPalette(apply, stale.root, stale.storage);
+    await paintStoredPalette(stale.root, stale.storage);
 
-    await vi.waitFor(() => expect(apply).toHaveBeenCalledWith("terracotta"));
+    expect(stale.root.getAttribute("data-palette")).toBe("terracotta");
     expect(stale.items.get("clippings.palette")).toBe("terracotta");
   });
 
-  it("leaves a page alone when the stored palette is the one it painted", async () => {
-    await storePalette("ink");
-    const current = page("ink");
-    paintMirroredPalette(current.root, current.storage);
-    const apply = vi.fn();
-
-    followStoredPalette(apply, current.root, current.storage);
-    await storePalette("ink");
-
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(apply).not.toHaveBeenCalled();
+  it("keeps the mirrored palette before one is stored", async () => {
+    const fresh = page("ochre");
+    paintMirroredPalette(fresh.root, fresh.storage);
+    await paintStoredPalette(fresh.root, fresh.storage);
+    expect(fresh.root.getAttribute("data-palette")).toBe("ochre");
   });
 
   it("follows a palette refreshed while the page shows, until it stops", async () => {
@@ -73,14 +67,23 @@ describe("the palette", () => {
     const apply = vi.fn((palette: string) => open.root.setAttribute("data-palette", palette));
 
     const stop = followStoredPalette(apply, open.root, open.storage);
+    await storePalette("olive");
     await storePalette("ochre");
     await vi.waitFor(() => expect(apply).toHaveBeenCalledWith("ochre"));
+    expect(apply).toHaveBeenCalledTimes(1);
     expect(open.items.get("clippings.palette")).toBe("ochre");
 
     stop();
     await storePalette("ink");
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(apply).toHaveBeenCalledTimes(1);
+  });
+
+  it("writes sync storage only when the palette changes", async () => {
+    const writes = vi.spyOn(fakeBrowser.storage.sync, "set");
+    await storePalette("ink");
+    await storePalette("ink");
+    expect(writes).toHaveBeenCalledTimes(1);
   });
 });
 

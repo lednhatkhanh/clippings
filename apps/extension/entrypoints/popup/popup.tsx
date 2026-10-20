@@ -8,7 +8,9 @@ import {
   SIGN_IN_PROBLEMS,
   type NotePortMessage,
   type NotePortReply,
+  type PopupResponses,
   type SignInProblem,
+  type TagsReply,
 } from "@/lib/messages.ts";
 import { quoteSelection, readSelection } from "@/lib/quote.ts";
 import {
@@ -221,8 +223,9 @@ function TagField({ clippingId, initialTags }: { clippingId: string; initialTags
   const latest = useRef(value);
 
   const reload = () => {
-    void ask({ type: "tags" }).then(({ tags: loaded }) => {
-      if (loaded) setTags(loaded);
+    // No answer is the service worker failing: nothing to offer yet.
+    void ask({ type: "tags" }).then((answer: PopupResponses["tags"] | undefined) => {
+      if (answer?.tags) setTags(answer.tags);
     });
   };
   useEffect(reload, []);
@@ -233,12 +236,12 @@ function TagField({ clippingId, initialTags }: { clippingId: string; initialTags
     setValue(names);
     latest.current = names;
     setState("saving");
-    const reply = await ask({ type: "setTags", clippingId, tags: names });
-    if (reply.type === "saved") {
+    const reply: TagsReply | undefined = await ask({ type: "setTags", clippingId, tags: names });
+    if (reply?.type === "saved") {
       setStored(reply.tags);
       reload();
     }
-    if (latest.current === names) setState(reply.type);
+    if (latest.current === names) setState(reply?.type ?? "failed");
   }
 
   return (

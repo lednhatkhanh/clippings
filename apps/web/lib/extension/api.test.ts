@@ -410,6 +410,13 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
 
     expect(response.status).toBe(404);
     expect((await fixture.service.getClipping("ada", adas.clipping.id))?.note).toBe("");
+
+    const tagged = await update(setup.api, adas.clipping.id, { tags: ["Bob's"] }, bob.access_token);
+    expect(tagged.status).toBe(404);
+    expect((await fixture.service.getClipping("ada", adas.clipping.id))?.tags).toEqual([]);
+    await update(setup.api, adas.clipping.id, { tags: ["Ada's"] }, ada.access_token);
+    const bobs = await setup.api.listTags(get("/tags", bob.access_token));
+    expect(await bobs.json()).toEqual([]);
   });
 
   it("refuses bad input", async () => {

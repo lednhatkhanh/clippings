@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
+import { saveAppearanceAction } from "@/app/(app)/settings/actions.ts";
 import type { Appearance, AppearanceKey } from "@clippings/shared";
 import {
   appearanceTransitionFor,
@@ -15,7 +16,6 @@ import {
 } from "@clippings/ui";
 
 import { PalettePicker } from "./palette-picker.tsx";
-import { saveAppearance } from "./save-appearance.ts";
 import { SettingsSection } from "./settings-section.tsx";
 
 /** Where the circular reveal starts: the control just pressed, or the middle of the window. */
@@ -54,7 +54,7 @@ export function AppearanceSettings({ initial }: { initial: Appearance }) {
     if (previous === value) return;
     show({ ...shown.current, [key]: value }, appearanceTransitionFor(key));
 
-    saveAppearance({ [key]: value }).catch(() => {
+    saveAppearanceAction({ [key]: value }).catch(() => {
       // Unsaved, the next page load would put the server's value back anyway: do it now, unless
       // the user has picked something else since.
       if (shown.current[key] === value)

@@ -31,7 +31,8 @@ export function quoteSelection(selection: string): string {
 
 /**
  * What is selected in the tab's page, read with `scripting` under the `activeTab` grant the
- * toolbar click gave. Empty when nothing is, or when the page can't be scripted (another
+ * toolbar click gave. Only the top frame: `activeTab` covers the page's own origin, not its
+ * iframes'. Empty when nothing is selected, or when the page can't be scripted (another
  * extension's page, the PDF viewer, a page that has navigated since).
  */
 export async function readSelection(tabId: number): Promise<string> {

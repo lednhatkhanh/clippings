@@ -88,7 +88,9 @@ export default defineBackground(() => {
   browser.runtime.onInstalled.addListener((details) => void openOnboarding(details));
   // A Clippings page telling the extension the palette the user just picked.
   browser.runtime.onMessageExternal.addListener((message, sender) => {
-    void acceptSharedPalette(message, sender);
+    acceptSharedPalette(message, sender).catch((error: unknown) =>
+      console.error("Couldn't keep the shared palette", error),
+    );
   });
 
   browser.runtime.onMessage.addListener((message: PopupRequest, sender, sendResponse) => {

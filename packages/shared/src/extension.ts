@@ -69,7 +69,8 @@ export const extensionClippingSchema = z.object({
   url: z.string(),
   title: z.string(),
   note: z.string(),
-  tags: z.array(extensionTagSchema),
+  /** Defaults to none, for a server from before tags reached the extension. */
+  tags: z.array(extensionTagSchema).default([]),
   /** ISO 8601. */
   createdAt: z.string(),
   /** The clipping's detail page in the web app. */
