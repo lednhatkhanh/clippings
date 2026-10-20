@@ -27,6 +27,19 @@ export const extensionNoteRequestSchema = z.object({
 });
 export type ExtensionNoteRequest = z.infer<typeof extensionNoteRequestSchema>;
 
+/**
+ * `POST /api/extension/lookup`: whether the user has saved the page, for the toolbar icon. The
+ * extension only asks when the user turned on "Show when a page is already saved", and sends the
+ * page's normalized address (no fragment), in the body so it stays out of request logs.
+ */
+export const extensionLookupRequestSchema = z.object({
+  url: z.string().min(1).max(MAX_URL_LENGTH),
+});
+export type ExtensionLookupRequest = z.infer<typeof extensionLookupRequestSchema>;
+
+export const extensionLookupResponseSchema = z.object({ saved: z.boolean() });
+export type ExtensionLookupResponse = z.infer<typeof extensionLookupResponseSchema>;
+
 /** A clipping as the popup shows it. */
 export const extensionClippingSchema = z.object({
   id: z.string(),

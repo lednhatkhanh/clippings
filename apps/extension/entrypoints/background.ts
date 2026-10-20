@@ -1,6 +1,6 @@
 import { browser, type Browser } from "wxt/browser";
 
-import { saveClipping, saveNote } from "@/lib/api.ts";
+import { saveNote } from "@/lib/api.ts";
 import { isSignedIn, signIn, signOut, takeSignInProblem } from "@/lib/auth.ts";
 import {
   NOTE_PORT,
@@ -9,18 +9,32 @@ import {
   type PopupRequest,
   type PopupResponses,
 } from "@/lib/messages.ts";
+import { clearQueue, ensureRetrying } from "@/lib/queue.ts";
+import { saveFromPopup, sendOfflineSaves } from "@/lib/quick-save.ts";
+import { registerQuickSave } from "@/lib/save-triggers.ts";
+
+/** After a sign-in, the saves that waited for one go out, and retrying starts again. */
+async function resumeOfflineSaves() {
+  await ensureRetrying();
+  await sendOfflineSaves();
+}
 
 async function answer(request: PopupRequest): Promise<PopupResponses[PopupRequest["type"]]> {
   switch (request.type) {
     case "status":
       return { signedIn: await isSignedIn(), signInProblem: await takeSignInProblem() };
-    case "signIn":
-      return { signedIn: await signIn() };
+    case "signIn": {
+      const signedIn = await signIn();
+      if (signedIn) void resumeOfflineSaves();
+      return { signedIn };
+    }
     case "signOut":
       await signOut();
+      // Saves made offline are this account's: they must not go to the next one.
+      await clearQueue();
       return { signedIn: false };
     case "save":
-      return saveClipping(request.url);
+      return saveFromPopup(request.url);
   }
 }
 
@@ -69,4 +83,6 @@ export default defineBackground(() => {
   browser.runtime.onConnect.addListener((port) => {
     if (port.name === NOTE_PORT) keepNote(port);
   });
+
+  registerQuickSave();
 });

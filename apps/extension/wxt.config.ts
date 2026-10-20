@@ -18,7 +18,19 @@ export default defineConfig({
     key: MANIFEST_KEY,
     // activeTab: the current tab's address when the toolbar button opens the popup, without
     // access to every tab. identity: the sign-in window. storage: the sign-in, kept on this device.
-    permissions: ["activeTab", "identity", "storage"],
+    // contextMenus: the save entries. alarms: retrying the saves made offline.
+    permissions: ["activeTab", "identity", "storage", "contextMenus", "alarms"],
+    // tabs: each tab's address, asked for only when the user turns on "Show when a page is
+    // already saved".
+    optional_permissions: ["tabs"],
+    commands: {
+      // Opens the popup, which saves the page.
+      _execute_action: { suggested_key: { default: "Alt+Shift+C" } },
+      "save-silently": {
+        suggested_key: { default: "Alt+Shift+S" },
+        description: "Save the page without opening Clippings",
+      },
+    },
     // Only the Clippings API; the service worker makes every call.
     host_permissions: [`${CLIPPINGS_ORIGIN}/*`],
   },

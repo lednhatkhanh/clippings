@@ -1,6 +1,7 @@
 import {
   EXTENSION_API_ERRORS,
   extensionClippingSchema,
+  extensionLookupResponseSchema,
   extensionSaveResponseSchema,
   type ExtensionApiError,
 } from "@clippings/shared";
@@ -86,5 +87,22 @@ export async function saveNote(
   } catch (error) {
     console.error("Couldn't save the note", error);
     return "failed";
+  }
+}
+
+/**
+ * Whether the user has saved the page, for the toolbar icon. Only called when the user turned on
+ * "Show when a page is already saved"; "unknown" when the answer couldn't be had.
+ */
+export async function lookupClipping(url: string): Promise<"saved" | "not_saved" | "unknown"> {
+  try {
+    const response = await call("/lookup", "POST", { url });
+    if (response === SIGNED_OUT || !response.ok) return "unknown";
+    const answer = extensionLookupResponseSchema.safeParse(await response.json());
+    if (!answer.success) return "unknown";
+    return answer.data.saved ? "saved" : "not_saved";
+  } catch (error) {
+    console.error("Couldn't look the page up", error);
+    return "unknown";
   }
 }

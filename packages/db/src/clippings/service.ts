@@ -876,6 +876,23 @@ export function createClippingsService({
   }
 
   /**
+   * Whether the user has a live clipping of the page at `url`, matched as saving it would match
+   * it (by its normalized address). False for an address that isn't a web page.
+   */
+  async function hasClippingOfUrl(userId: string, url: string): Promise<boolean> {
+    const parsed = parseWebUrl(url);
+    if (!parsed) return false;
+    const rows = await db
+      .select({ id: clippings.id })
+      .from(clippings)
+      .where(
+        and(eq(clippings.userId, userId), eq(clippings.urlNormalized, parsed.normalized), live),
+      )
+      .limit(1);
+    return rows.length > 0;
+  }
+
+  /**
    * Hides the clipping from every read until `restoreClipping` brings it back, so a delete can be
    * undone. Returns false when the user has no such clipping, or it is already deleted.
    */
@@ -1093,6 +1110,7 @@ export function createClippingsService({
     exportClippings,
     updateClipping,
     getClipping,
+    hasClippingOfUrl,
     deleteClipping,
     restoreClipping,
     enrichClipping,

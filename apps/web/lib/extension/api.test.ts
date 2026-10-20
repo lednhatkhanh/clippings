@@ -189,6 +189,20 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
     );
   }
 
+  function lookup(api: ReturnType<typeof app>["api"], url: string, accessToken: string) {
+    return api.lookup(
+      new Request(`${apiResource}/lookup`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: EXTENSION_ORIGIN,
+          authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ url }),
+      }),
+    );
+  }
+
   function updateNote(
     api: ReturnType<typeof app>["api"],
     id: string,
@@ -298,6 +312,33 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
         createdAt: created.clipping.createdAt,
       },
     });
+  });
+
+  it("says whether the caller saved a page, and nothing more", async () => {
+    const setup = app(`${ALLOWED} bob@example.com`);
+    const ada = await connect(setup, await signIn("ada", ALLOWED));
+    const bob = await connect(setup, await signIn("bob", "bob@example.com"));
+    expect((await save(setup.api, "https://example.com/a", ada.access_token)).status).toBe(201);
+
+    const saved = await lookup(setup.api, "https://example.com/a/?utm_source=x", ada.access_token);
+    expect(saved.status).toBe(200);
+    expect(saved.headers.get("access-control-allow-origin")).toBe(EXTENSION_ORIGIN);
+    expect(await saved.json()).toEqual({ saved: true });
+
+    const other = await lookup(setup.api, "https://example.com/b", ada.access_token);
+    expect(await other.json()).toEqual({ saved: false });
+    const notBobs = await lookup(setup.api, "https://example.com/a", bob.access_token);
+    expect(await notBobs.json()).toEqual({ saved: false });
+
+    const unsigned = await setup.api.lookup(
+      new Request(`${apiResource}/lookup`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: EXTENSION_ORIGIN },
+        body: JSON.stringify({ url: "https://example.com/a" }),
+      }),
+    );
+    expect(unsigned.status).toBe(401);
+    expect((await lookup(setup.api, "", ada.access_token)).status).toBe(400);
   });
 
   it("refuses the extension's tokens once the user revokes it in Settings", async () => {

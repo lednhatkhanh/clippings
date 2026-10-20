@@ -211,6 +211,24 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
     expect(await fixture.service.getClipping(ana, clipping.id)).toBeNull();
   });
 
+  it("says whether a user has a live clipping of an address that normalizes the same", async () => {
+    const ana = await fixture.createUser("ana");
+    const ben = await fixture.createUser("ben");
+    const { clipping } = await fixture.service.saveClipping(ana, {
+      url: "https://example.com/essay?b=2&a=1",
+      source: "extension",
+    });
+    const has = (user: string, url: string) => fixture.service.hasClippingOfUrl(user, url);
+
+    expect(await has(ana, "https://EXAMPLE.com/essay/?a=1&b=2&utm_source=feed#top")).toBe(true);
+    expect(await has(ana, "https://example.com/other")).toBe(false);
+    expect(await has(ana, "mailto:ana@example.com")).toBe(false);
+    expect(await has(ben, "https://example.com/essay?a=1&b=2")).toBe(false);
+
+    await fixture.service.deleteClipping(ana, clipping.id);
+    expect(await has(ana, "https://example.com/essay?a=1&b=2")).toBe(false);
+  });
+
   describe("exporting", () => {
     it("exports exactly the user's own live clippings, newest first, with notes and no tags yet", async () => {
       const ana = await fixture.createUser("ana");

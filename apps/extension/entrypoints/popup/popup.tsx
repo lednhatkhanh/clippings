@@ -235,7 +235,7 @@ function CurrentView({ view, reopen }: { view: Promise<View>; reopen: () => void
         <Panel>
           <p role="alert" className="typescale-body-lg">
             {current.reason === "offline"
-              ? "You're offline. Try again when you're back online."
+              ? "You're offline. Clippings will save this page when you're back online."
               : "Couldn't save this page."}
           </p>
           <Button onPress={reopen}>Try again</Button>
