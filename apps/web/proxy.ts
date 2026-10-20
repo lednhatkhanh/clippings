@@ -23,6 +23,9 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   // Everything except the sign-in and offline pages, the API routes (auth callbacks, health),
-  // Next's own assets and files with an extension (the service worker, icons, the manifest).
-  matcher: ["/((?!api|_next|sign-in|offline|.*\\..*).*)"],
+  // Next's own assets and files with an extension (the service worker, icons, the manifest,
+  // `/.well-known`). Also the OAuth consent and closing pages, which check the session
+  // themselves so the authorization request in their query isn't lost, and `/mcp`, which
+  // answers with an OAuth challenge instead of a redirect.
+  matcher: ["/((?!api|_next|sign-in|offline|connect(?:/|$)|mcp$|.*\\..*).*)"],
 };
