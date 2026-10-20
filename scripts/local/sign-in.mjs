@@ -6,10 +6,12 @@
 // Then, on http://localhost:3100 (Browser pane, javascript_tool):
 //   document.cookie = "better-auth.session_token=<printed value>; path=/"
 //
-// Needs the Postgres container from docs/agents/verifying.md. Local development only.
-import { createHmac } from "node:crypto";
+// Needs the Postgres container from docs/agents/verifying.md. Local development only. The
+// end-to-end suite (apps/e2e) signs its users in with the same function.
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+
+import { createTestSession } from "../../packages/db/src/test/session.ts";
 
 const env = Object.fromEntries(
   readFileSync(new URL("./local.env", import.meta.url), "utf8")
@@ -19,20 +21,15 @@ const env = Object.fromEntries(
 );
 
 const pg = createRequire(new URL("../../packages/db/package.json", import.meta.url))("pg");
-const token = "local-session-token-0123456789abcdef";
 const client = new pg.Client({ connectionString: env.DATABASE_URL });
 await client.connect();
-await client.query(
-  `insert into "user" (id, name, email, "emailVerified") values ('local-user', 'Local', 'local@example.com', true)
-   on conflict do nothing`,
-);
-await client.query(
-  `insert into session (id, "expiresAt", token, "updatedAt", "userId")
-   values ('local-session', now() + interval '7 days', $1, now(), 'local-user')
-   on conflict (id) do update set "expiresAt" = excluded."expiresAt"`,
-  [token],
-);
+const { cookieValue } = await createTestSession({
+  db: client,
+  secret: env.BETTER_AUTH_SECRET,
+  user: { id: "local-user", name: "Local", email: "local@example.com" },
+  sessionId: "local-session",
+  token: "local-session-token-0123456789abcdef",
+});
 await client.end();
 
-const signature = createHmac("sha256", env.BETTER_AUTH_SECRET).update(token).digest("base64");
-console.log(encodeURIComponent(`${token}.${signature}`));
+console.log(cookieValue);

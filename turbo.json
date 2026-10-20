@@ -23,7 +23,14 @@
     },
     "build": {
       "dependsOn": ["^build", "typecheck"],
+      "env": ["EXPOSE_TESTING_API"],
       "outputs": [".next/**", "!.next/cache/**", ".output/**"]
+    },
+    "e2e": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "env": ["E2E_DATABASE_URL", "PLAYWRIGHT_*"],
+      "passThroughEnv": ["CI"]
     }
   }
 }

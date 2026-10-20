@@ -7,12 +7,16 @@ catalogMode: strict
 catalog:
   "@anthropic-ai/sdk": 0.135.0
   "@ast-grep/cli": 0.51.0
+  "@axe-core/playwright": 4.14.0
   "@better-auth/cimd": 1.7.10
   "@better-auth/mcp": 1.7.10
   "@better-auth/oauth-provider": 1.7.10
   "@date-fns/utc": 2.1.1
   "@material/material-color-utilities": 0.4.0
   "@modelcontextprotocol/server": 2.3.1
+  # Always the same version as `next`: bump them together.
+  "@next/playwright": 16.4.1
+  "@playwright/test": 1.64.1
   "@shadcn/lint": 0.2.1
   "@tailwindcss/postcss": 4.3.3
   "@types/node": 24.19.2

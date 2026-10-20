@@ -9,6 +9,7 @@
     "format": "oxfmt --write apps packages scripts package.json turbo.json pnpm-workspace.yaml .oxlintrc.json .oxfmtrc.json .github",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "e2e": "EXPOSE_TESTING_API=1 turbo run e2e",
     "build": "turbo run build"
   },
   "devDependencies": {
