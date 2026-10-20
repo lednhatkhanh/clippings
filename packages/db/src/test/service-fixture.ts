@@ -11,6 +11,7 @@ import type {
   Summarizer,
 } from "../clippings/ports.ts";
 import { createClippingsService } from "../clippings/service.ts";
+import { createConnectionsService } from "../connections/service.ts";
 import { migrate } from "../migrate.ts";
 import { createPool } from "../pool.ts";
 import { EMBEDDING_DIMENSIONS } from "../schema.ts";
@@ -73,8 +74,13 @@ export async function createServiceFixture() {
   };
 
   return {
+    /** The throwaway database's URL, for code that opens its own pool (Better Auth in web tests). */
+    databaseUrl: database.url,
     service: createClippingsService({ pool, jobs, clock, fetcher, summarizer, embedder }),
     settings: createSettingsService({ pool, clock }),
+    connections: createConnectionsService({ pool, clock }),
+    /** The fixture's pool, for tests that set up rows no service writes (Better Auth's). */
+    pool,
     web,
     enrichmentRequests,
     /** Makes the publisher throw (or work again), the way an unreachable queue does. */

@@ -1,0 +1,7 @@
+ruleDirs:
+  - ast-grep/rules
+testConfigs:
+  - testDir: ast-grep/rule-tests
+# Parse .ts as TSX too, so one rule covers both.
+languageGlobs:
+  tsx: ["**/*.ts"]

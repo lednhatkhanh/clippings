@@ -3,20 +3,42 @@
   "globalDependencies": [
     ".oxlintrc.json",
     ".oxfmtrc.json",
+    "sgconfig.yml",
+    "ast-grep/**",
     ".node-version",
     "scripts/*.mjs",
     "pnpm-workspace.yaml"
   ],
   "tasks": {
-    "lint": {},
+    "typegen": {
+      "outputs": [".next/types/**", "next-env.d.ts", ".wxt/**"]
+    },
+    "lint": {
+      "dependsOn": ["typegen"]
+    },
     "format:check": {},
-    "typecheck": {},
+    "typecheck": {
+      "dependsOn": ["typegen"]
+    },
     "test": {
       "env": ["TEST_DATABASE_URL"]
     },
     "build": {
       "dependsOn": ["^build", "typecheck"],
-      "outputs": [".next/**", "!.next/cache/**", ".output/**"]
+      "env": ["EXPOSE_TESTING_API"],
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        ".next-e2e/**",
+        "!.next-e2e/cache/**",
+        ".output/**"
+      ]
+    },
+    "e2e": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "env": ["E2E_DATABASE_URL", "E2E_PORT", "PLAYWRIGHT_*"],
+      "passThroughEnv": ["CI"]
     }
   }
 }

@@ -9,14 +9,17 @@
   "scripts": {
     "lint": "oxlint -c ../../.oxlintrc.json .",
     "format:check": "oxfmt --check -c ../../.oxfmtrc.json .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@date-fns/utc": "catalog:",
-    "date-fns": "catalog:"
+    "date-fns": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@clippings/config": "workspace:*",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

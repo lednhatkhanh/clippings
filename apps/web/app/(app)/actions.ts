@@ -7,9 +7,8 @@ import { requireUserId } from "@/lib/auth/session.ts";
 import { loadBrowseParams } from "@/lib/clippings/browse-params.ts";
 import { loadRows, toRow, type ClippingRowData, type RowsPage } from "@/lib/clippings/rows.ts";
 import { getClippings } from "@/lib/clippings/service.ts";
-import { formatAbsoluteDate } from "@/lib/format-date.ts";
 import { InvalidTagsError, InvalidUrlError, NoteTooLongError } from "@clippings/db";
-import type { Tag } from "@clippings/shared";
+import { formatAbsoluteDate, type Tag } from "@clippings/shared";
 
 export type SaveOutcome =
   | { status: "created"; clippingId: string }
@@ -120,7 +119,8 @@ export async function updateClippingTagsAction(
 
 /** Deletes one of the user's clippings, so that Undo can restore it. False if it isn't theirs. */
 export async function deleteClippingAction(clippingId: string): Promise<boolean> {
-  const deleted = await getClippings().deleteClipping(await requireUserId(), clippingId);
+  const userId = await requireUserId();
+  const deleted = await getClippings().deleteClipping(userId, clippingId);
   revalidatePath("/");
   revalidatePath(`/c/${clippingId}`);
   return deleted;
@@ -128,7 +128,8 @@ export async function deleteClippingAction(clippingId: string): Promise<boolean>
 
 /** Undoes `deleteClippingAction`. False if the user has no such deleted clipping. */
 export async function restoreClippingAction(clippingId: string): Promise<boolean> {
-  const restored = await getClippings().restoreClipping(await requireUserId(), clippingId);
+  const userId = await requireUserId();
+  const restored = await getClippings().restoreClipping(userId, clippingId);
   revalidatePath("/");
   revalidatePath(`/c/${clippingId}`);
   return restored;
@@ -136,12 +137,14 @@ export async function restoreClippingAction(clippingId: string): Promise<boolean
 
 /** The page after `cursor` of the list that `query` (a `toQueryString` result) describes. */
 export async function loadMoreClippingsAction(query: string, cursor: string): Promise<RowsPage> {
-  return loadRows(await requireUserId(), loadBrowseParams(query), cursor);
+  const userId = await requireUserId();
+  return loadRows(userId, loadBrowseParams(query), cursor);
 }
 
 /** Starts a failed clipping over. Returns its row as it now stands, or null if it isn't theirs. */
 export async function retryEnrichmentAction(clippingId: string): Promise<ClippingRowData | null> {
-  const clipping = await getClippings().retryEnrichment(await requireUserId(), clippingId);
+  const userId = await requireUserId();
+  const clipping = await getClippings().retryEnrichment(userId, clippingId);
   revalidatePath("/");
   return clipping ? toRow(clipping, constructNow(undefined)) : null;
 }

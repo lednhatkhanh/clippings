@@ -1,0 +1,263 @@
+id: server-action-checks-session
+valid:
+  # The three accepted checks.
+  - |
+    "use server";
+    export async function save() {
+      await requireUserId();
+      return 1;
+    }
+  - |
+    "use server";
+    export async function save() {
+      const userId = await requireUserId();
+      return userId;
+    }
+  - |
+    "use server";
+    export async function save() {
+      const session = await getSession();
+      if (!session) throw new Error("Not signed in");
+    }
+  - |
+    "use server";
+    export async function save() {
+      const session = await getSession();
+      if (!session?.user) return null;
+    }
+  - |
+    "use server";
+    export async function save() {
+      const session = await getSession();
+      if (!session || session.user.banned) throw new Error("Not signed in");
+    }
+  # Other shapes of the same thing.
+  - |
+    'use server'
+    export async function save() {
+      await requireUserId();
+    }
+  - |
+    "use server";
+    export async function save() {
+      // Comments before the check don't count as statements.
+      await requireUserId();
+    }
+  - |
+    "use server";
+    export default async function save() {
+      await requireUserId();
+    }
+  - |
+    "use server";
+    export default async function () {
+      await requireUserId();
+    }
+  # Type exports are erased, and a helper that isn't exported isn't an action.
+  - |
+    "use server";
+    export type Outcome = { status: "created" } | { status: "invalid" };
+    export interface Row {
+      id: string;
+    }
+    export type { Tag } from "@clippings/shared";
+    export type { Other };
+    async function helper() {
+      return 1;
+    }
+    export async function save() {
+      await requireUserId();
+    }
+  # Not a "use server" file: ordinary code is not checked.
+  - |
+    export async function load() {
+      return 1;
+    }
+    export { load as again };
+    export default () => 1;
+invalid:
+  # No check, or the check is not the first statement.
+  - |
+    "use server";
+    export async function save() {
+      return 1;
+    }
+  - |
+    "use server";
+    export async function save() {
+      const value = compute();
+      await requireUserId();
+      return value;
+    }
+  - |
+    "use server";
+    export async function save() {
+      doWork();
+      const userId = await requireUserId();
+    }
+  - |
+    "use server";
+    export async function save() {
+      await somethingElse();
+    }
+  - |
+    "use server";
+    export async function ok() {
+      await requireUserId();
+    }
+    export async function forgotten() {
+      return 1;
+    }
+  # The check is only somewhere inside the first statement.
+  - |
+    "use server";
+    export async function save() {
+      if (false) {
+        await requireUserId();
+      }
+    }
+  - |
+    "use server";
+    export async function save() {
+      const run = async () => await requireUserId();
+      return run();
+    }
+  - |
+    "use server";
+    export async function save() {
+      try {
+        await requireUserId();
+      } catch {
+        return null;
+      }
+    }
+  - |
+    "use server";
+    export async function save() {
+      return loadRows(await requireUserId(), "all");
+    }
+  - |
+    "use server";
+    export async function save() {
+      const rows = await loadRows(await requireUserId(), "all");
+      return rows;
+    }
+  - |
+    "use server";
+    export async function save() {
+      void requireUserId();
+    }
+  # A session that is read but not checked.
+  - |
+    "use server";
+    export async function save() {
+      await getSession();
+      return 1;
+    }
+  - |
+    "use server";
+    export async function save() {
+      const session = await getSession();
+      doWork();
+      if (!session) throw new Error("Not signed in");
+    }
+  - |
+    "use server";
+    export async function save() {
+      const session = await getSession();
+      return session;
+    }
+  - |
+    "use server";
+    export async function save() {
+      const session = await getSession();
+      if (session) return 1;
+    }
+  - |
+    "use server";
+    export async function save() {
+      const session = await getSession();
+      if (!other) return 1;
+    }
+  # An export that isn't `export async function`.
+  - |
+    "use server";
+    export function save() {
+      return 1;
+    }
+  - |
+    "use server";
+    export function save() {
+      await requireUserId();
+    }
+  - |
+    "use server";
+    export const save = async () => {
+      await requireUserId();
+    };
+  - |
+    "use server";
+    export const save = async () => 1;
+  - |
+    "use server";
+    export let save = async function () {
+      await requireUserId();
+    };
+  - |
+    "use server";
+    export var save = async function () {
+      await requireUserId();
+    };
+  - |
+    "use server";
+    export const save = wrap(async () => {
+      await requireUserId();
+    });
+  - |
+    "use server";
+    export default async () => {
+      await requireUserId();
+    };
+  - |
+    "use server";
+    export default (async function () {
+      await requireUserId();
+    });
+  - |
+    "use server";
+    export default wrap(async () => {
+      await requireUserId();
+    });
+  - |
+    "use server";
+    export default async function () {
+      return 1;
+    }
+  # An export that points at a function declared elsewhere.
+  - |
+    "use server";
+    async function save() {
+      await requireUserId();
+    }
+    export { save };
+  - |
+    "use server";
+    async function save() {
+      await requireUserId();
+    }
+    export { save as persist };
+  - |
+    "use server";
+    export { save } from "./save.ts";
+  - |
+    "use server";
+    export { save as persist } from "./save.ts";
+  - |
+    "use server";
+    export * from "./actions.ts";
+  - |
+    "use server";
+    export * as actions from "./actions.ts";
+  - |
+    "use server";
+    export default save;

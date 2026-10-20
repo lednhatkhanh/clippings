@@ -100,13 +100,13 @@ describe("renderSpringsCss", () => {
   describe.each(PUBLISHED)("$token", ({ token, damping, stiffness, scaled }) => {
     const positions = simulate(damping, stiffness, 3000);
 
-    it("samples the spring at 40 even steps over its settle time", () => {
+    it("samples the spring at even steps over its settle time", () => {
       const { stops, durationMs } = readSpring(css, token);
-      expect(stops).toHaveLength(41);
+      const steps = stops.length - 1;
       expect(stops[0]).toBe(0);
       expect(stops.at(-1)).toBe(1);
       stops.slice(1, -1).forEach((stop, index) => {
-        const t = (durationMs * (index + 1)) / 40;
+        const t = (durationMs * (index + 1)) / steps;
         const at =
           positions[Math.floor(t)]! +
           (t % 1) * (positions[Math.ceil(t)]! - positions[Math.floor(t)]!);

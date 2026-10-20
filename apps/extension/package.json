@@ -9,11 +9,27 @@
     "build": "wxt build",
     "lint": "oxlint -c ../../.oxlintrc.json .",
     "format:check": "oxfmt --check -c ../../.oxfmtrc.json .",
-    "typecheck": "wxt prepare && tsc --noEmit"
+    "typegen": "wxt prepare",
+    "typecheck": "tsc --noEmit",
+    "zip": "wxt zip",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@clippings/shared": "workspace:*",
+    "@clippings/ui": "workspace:*",
+    "date-fns": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
   },
   "devDependencies": {
     "@clippings/config": "workspace:*",
+    "@tailwindcss/postcss": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "tailwindcss": "catalog:",
     "typescript": "catalog:",
+    "vitest": "catalog:",
     "wxt": "catalog:"
   }
 }

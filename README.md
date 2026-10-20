@@ -30,7 +30,8 @@ Hosted on Vercel Hobby and Neon Launch. The reasoning is in
 ```text
 apps/
 ├── web/          Next.js app: UI, auth, API routes
-└── extension/    WXT browser extension (scaffold)
+├── extension/    WXT browser extension: toolbar popup that saves the current page
+└── e2e/          Playwright end-to-end tests against a production build of the web app
 packages/
 ├── ui/           Design system: generated theme, tokens, icons, illustrations
 ├── db/           Postgres pool, SQL migrations and the migration runner
@@ -67,6 +68,7 @@ Run from the repo root.
 | `pnpm typecheck`          | `tsc` in every package                                                |
 | `pnpm test`               | Vitest in every package                                               |
 | `pnpm build`              | Production build of every app                                         |
+| `pnpm e2e`                | End-to-end tests (Playwright) on a production build; needs the Postgres below and `pnpm --filter @clippings/e2e browsers` once |
 | `pnpm format`             | Rewrite files with oxfmt                                              |
 | `pnpm format:check`       | Check formatting without writing                                      |
 | `pnpm check:root`         | Format, lint and icon checks for root files, `scripts/` and workflows |
@@ -78,6 +80,34 @@ Database tests need a Postgres server and are skipped without one:
 docker run --rm -d -e POSTGRES_PASSWORD=postgres -p 55432:5432 pgvector/pgvector:pg18
 TEST_DATABASE_URL=postgres://postgres:postgres@localhost:55432/postgres pnpm test
 ```
+
+## Connecting Claude
+
+The MCP server is at `<BETTER_AUTH_URL>/mcp`. It has three tools: `save_clipping`,
+`search_clippings` and `list_recent`.
+
+- **claude.ai**: Settings → Connectors → Add custom connector, with that URL.
+- **Claude Code**: `claude mcp add --transport http clippings <BETTER_AUTH_URL>/mcp`, then `/mcp`
+  to sign in.
+
+Either one opens a browser window: sign in with an allowlisted Google account, then Allow.
+Clippings is the OAuth authorization server (Better Auth's MCP plugin), so there are no keys to
+copy.
+
+## The browser extension
+
+The Chrome extension saves the page you're on from its toolbar popup, with a note. Build it for
+your Clippings, then load `apps/extension/.output/chrome-mv3` as an unpacked extension
+(`chrome://extensions`, Developer mode, Load unpacked):
+
+```bash
+CLIPPINGS_ORIGIN=https://<your Clippings> pnpm --filter @clippings/extension build
+```
+
+Without `CLIPPINGS_ORIGIN` it talks to `http://localhost:3100`. CI zips a build for the
+`CLIPPINGS_ORIGIN` repository variable as the `clippings-extension` artifact. A key in the
+manifest pins the extension's id, which the web app trusts for sign-in; a Chrome Web Store
+listing gets its own id, which goes in the web app's `EXTENSION_IDS`.
 
 ## Environments and releases
 

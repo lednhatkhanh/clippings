@@ -46,10 +46,25 @@
     {
       "files": ["apps/web/**"],
       "rules": { "import/no-relative-parent-imports": "error" }
+    },
+    {
+      // A missing `await` on an assertion or a page action passes silently, so it is an error
+      // here whether or not the `correctness` category already includes it.
+      "files": ["apps/e2e/**"],
+      "rules": {
+        "typescript/no-floating-promises": "error",
+        // Playwright fixtures: `use` is its callback, not a hook, and a fixture that needs none
+        // of the others still destructures an empty pattern, which Playwright requires.
+        "react/rules-of-hooks": "off",
+        "no-empty-pattern": "off"
+      }
     }
   ],
   "ignorePatterns": [
+    "playwright-report",
+    "test-results",
     ".next",
+    ".next-e2e",
     ".wxt",
     ".output",
     ".turbo",

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      // The web app the build is for is baked into the bundle and the manifest, so a build for
+      // another origin (the end-to-end run's) is its own cache entry.
+      "env": ["$TURBO_EXTENDS$", "CLIPPINGS_ORIGIN"]
+    }
+  }
+}

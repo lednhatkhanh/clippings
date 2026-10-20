@@ -1,3 +1,4 @@
+import { constructNow } from "date-fns";
 import type { Metadata } from "next";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
@@ -6,8 +7,15 @@ import { LoadError } from "@/components/load-error.tsx";
 import { PageTransition, RevealTransition } from "@/components/page-transition.tsx";
 import { AccountSettings } from "@/components/settings/account-settings.tsx";
 import { AppearanceSettings } from "@/components/settings/appearance-settings.tsx";
-import { getSession } from "@/lib/auth/session.ts";
+import {
+  ConnectionsSettings,
+  type ConnectionRow,
+} from "@/components/settings/connections-settings.tsx";
+import { clientDisplayName, getConnections } from "@/lib/auth/connections.ts";
+import { getSession, signInRedirect } from "@/lib/auth/session.ts";
+import { formatLastUsed } from "@/lib/format-date.ts";
 import { getAppearance } from "@/lib/settings/service.ts";
+import { formatIsoUtc } from "@clippings/shared";
 import type { Appearance } from "@clippings/shared";
 import { Tab, TabList, TabPanel, TabPanels, Tabs } from "@clippings/ui";
 
@@ -15,11 +23,22 @@ export const metadata: Metadata = { title: "Settings · Clippings" };
 
 async function SettingsTabs() {
   const session = await getSession();
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInRedirect());
 
   let appearance: Appearance;
+  let connections: ConnectionRow[];
   try {
-    appearance = await getAppearance(session.user.id);
+    const [settings, connected] = await Promise.all([
+      getAppearance(session.user.id),
+      getConnections().listConnections(session.user.id),
+    ]);
+    appearance = settings;
+    const now = constructNow(undefined);
+    connections = connected.map((connection) => ({
+      clientId: connection.clientId,
+      name: clientDisplayName(connection),
+      lastUsed: formatLastUsed(connection.lastUsedAt && formatIsoUtc(connection.lastUsedAt), now),
+    }));
   } catch (error) {
     unstable_rethrow(error);
     return <LoadError message="Couldn't load your settings." />;
@@ -29,11 +48,15 @@ async function SettingsTabs() {
     <Tabs>
       <TabList aria-label="Settings">
         <Tab id="appearance">Appearance</Tab>
+        <Tab id="connections">Connections</Tab>
         <Tab id="account">Account</Tab>
       </TabList>
       <TabPanels>
         <TabPanel id="appearance">
           <AppearanceSettings initial={appearance} />
+        </TabPanel>
+        <TabPanel id="connections">
+          <ConnectionsSettings connections={connections} />
         </TabPanel>
         <TabPanel id="account">
           <AccountSettings email={session.user.email} />

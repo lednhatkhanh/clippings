@@ -1,8 +1,11 @@
 node_modules
 .next
+.next-e2e
 .turbo
 .output
 .wxt
+playwright-report
+test-results
 *.tsbuildinfo
 next-env.d.ts
 .env*

@@ -10,7 +10,10 @@
   },
   "ignorePatterns": [
     "pnpm-lock.yaml",
+    "playwright-report",
+    "test-results",
     ".next",
+    ".next-e2e",
     ".wxt",
     ".output",
     ".turbo",
