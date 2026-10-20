@@ -6,7 +6,6 @@ import { redirect } from "next/navigation";
 
 import { getAuth, OAUTH_LOGIN_PAGE } from "@/lib/auth/auth.ts";
 import { closedPage, INVALID_SIGNATURE } from "@/lib/auth/connection.ts";
-import { requireUserId } from "@/lib/auth/session.ts";
 import { extensionErrorRedirect, parseExtensionIds } from "@/lib/extension/origins.ts";
 
 const readOAuthQuery = (formData: FormData) => {
@@ -16,7 +15,8 @@ const readOAuthQuery = (formData: FormData) => {
 
 /**
  * Allow: records the consent and sends the browser back to the client with its authorization
- * code. The consent endpoint checks the signed request, the session and the allowlist.
+ * code. The consent endpoint checks the signed request, the session and the allowlist, so this
+ * action needs no session check of its own.
  */
 // ast-grep-ignore: server-action-checks-session
 export async function allowConnectionAction(formData: FormData): Promise<void> {
@@ -61,9 +61,13 @@ export async function allowConnectionAction(formData: FormData): Promise<void> {
 /**
  * Deny: no code for the client, and the closing page for the user. The extension's sign-in
  * window is closed by its redirect instead, so it gets the refusal and the popup says so.
+ *
+ * It needs no session: it reads and writes no user data, and only redirects to the extension's
+ * own address or the static closing page. A user whose session ended while the page was open
+ * (after "Not you?" and Back) can still refuse, and the client still hears it.
  */
+// ast-grep-ignore: server-action-checks-session
 export async function denyConnectionAction(formData: FormData): Promise<void> {
-  await requireUserId();
   const toExtension = extensionErrorRedirect(
     new URLSearchParams(readOAuthQuery(formData)),
     parseExtensionIds(process.env.EXTENSION_IDS),
@@ -73,7 +77,10 @@ export async function denyConnectionAction(formData: FormData): Promise<void> {
   redirect((toExtension ?? closedPage("denied")) as Route);
 }
 
-/** "Not you?": signs out and starts sign-in again, keeping the authorization request. */
+/**
+ * "Not you?": signs out and starts sign-in again, keeping the authorization request. Signing out
+ * is for whoever holds the cookie, so there is no user data to guard.
+ */
 // ast-grep-ignore: server-action-checks-session
 export async function switchAccountAction(formData: FormData): Promise<void> {
   await getAuth().api.signOut({ headers: await headers() });

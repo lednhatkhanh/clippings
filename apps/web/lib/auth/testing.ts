@@ -3,12 +3,13 @@
  * client, authorize, allow on the consent page and trade the code. Used by the route tests only;
  * nothing in the app imports this file, so it isn't part of the app bundle.
  */
-import { createHash, createHmac, randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 import { expect, vi } from "vitest";
 
 import { createAuth } from "@/lib/auth/auth.ts";
 import { createDatabase, type createPool } from "@clippings/db";
+import { createTestSession, sessionCookieName } from "@clippings/db/testing";
 
 export const TEST_SECRET = "test-secret-test-secret-test-secret-0123";
 
@@ -49,23 +50,15 @@ export function serveAuth({
   return { auth, call };
 }
 
-/** A session token with the signature Better Auth puts in the cookie. */
-export function signedToken(token: string): string {
-  return `${token}.${createHmac("sha256", TEST_SECRET).update(token).digest("base64")}`;
-}
-
 /** A signed-in browser for this user: their session cookie, as Better Auth signs it. */
 export async function signIn(pool: Pool, id: string, email: string): Promise<string> {
-  await pool.query(
-    `insert into "user" (id, name, email, "emailVerified") values ($1, $1, $2, true)`,
-    [id, email],
-  );
-  const token = `session-${id}-${randomBytes(8).toString("hex")}`;
-  await pool.query(
-    `insert into session (id, "expiresAt", token, "updatedAt", "userId") values ($1, now() + interval '1 day', $2, now(), $3)`,
-    [`s-${id}`, token, id],
-  );
-  return `better-auth.session_token=${encodeURIComponent(signedToken(token))}`;
+  const { cookieValue } = await createTestSession({
+    db: pool,
+    secret: TEST_SECRET,
+    user: { id, name: id, email },
+    sessionId: `s-${id}`,
+  });
+  return `${sessionCookieName({ secure: false })}=${cookieValue}`;
 }
 
 /** Where a response sends the browser: its Location, or the provider's JSON redirect. */

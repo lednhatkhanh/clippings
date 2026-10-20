@@ -1,5 +1,7 @@
 import type { BrowserContext, Page, Worker } from "@playwright/test";
 
+import { sessionCookieName } from "@clippings/db/testing";
+
 import { BASE_URL } from "../../support/env.ts";
 import { expect, test } from "../../support/extension.ts";
 
@@ -108,5 +110,61 @@ test.describe("the extension", () => {
       name: new RegExp(ARTICLE),
     });
     await expect(row).toBeVisible();
+  });
+
+  test.describe("when the user denies the connection", () => {
+    /**
+     * Clicks Deny on the consent page the popup's sign-in opened, then opens a new popup: the
+     * real one has closed by then, and the next one says why signing in didn't finish.
+     */
+    async function denyAndReopen(
+      context: BrowserContext,
+      serviceWorker: Worker,
+      extensionId: string,
+      article: Page,
+      { beforeDeny }: { beforeDeny?: () => Promise<void> } = {},
+    ) {
+      const popup = await openPopup(context, serviceWorker, extensionId, article);
+      await popup.getByRole("button", { name: "Sign in" }).click();
+      const consent = await pageAt(context, (url) => url.startsWith(`${BASE_URL}/connect?`));
+      await expect(consent.getByRole("button", { name: "Deny" })).toBeVisible();
+      await beforeDeny?.();
+      await consent.getByRole("button", { name: "Deny" }).click();
+
+      // The sign-in window closes with the refusal, so the first popup is done.
+      await expect.poll(() => consent.isClosed()).toBe(true);
+      await popup.close();
+      return openPopup(context, serviceWorker, extensionId, article);
+    }
+
+    test("the popup says so, and not that sign-in was cancelled", async ({
+      context,
+      serviceWorker,
+      extensionId,
+      user: _user,
+    }) => {
+      const article = await openArticle(context);
+
+      const popup = await denyAndReopen(context, serviceWorker, extensionId, article);
+
+      await expect(popup.getByRole("alert")).toHaveText("You chose not to connect the extension.");
+      await expect(popup.getByRole("button", { name: "Sign in" })).toBeVisible();
+    });
+
+    test("the popup says so after the session has ended", async ({
+      context,
+      serviceWorker,
+      extensionId,
+      user: _user,
+    }) => {
+      const article = await openArticle(context);
+
+      // As after "Not you?" and Back: the page is still open, but its session is gone.
+      const popup = await denyAndReopen(context, serviceWorker, extensionId, article, {
+        beforeDeny: () => context.clearCookies({ name: sessionCookieName({ secure: true }) }),
+      });
+
+      await expect(popup.getByRole("alert")).toHaveText("You chose not to connect the extension.");
+    });
   });
 });

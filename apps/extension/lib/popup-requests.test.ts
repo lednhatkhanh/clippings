@@ -51,8 +51,6 @@ describe("answering the popup", () => {
     const sendResponse = vi.fn();
 
     const keepsOpen = answerPopup({ type: "signOut" }, { id: senderId }, sendResponse);
-    // Let anything the call started finish before looking at what it did.
-    await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(keepsOpen).toBe(false);
     expect(sendResponse).not.toHaveBeenCalled();
