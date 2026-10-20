@@ -33,7 +33,20 @@ export default defineConfig({
     trace: "on-first-retry",
     screenshot: "only-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    {
+      name: "chromium",
+      testIgnore: "**/extension/**",
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      // The built extension in its own persistent context (`support/extension.ts`), so its specs
+      // live apart in `specs/extension/` and the web specs never see its browser.
+      name: "extension",
+      testMatch: "**/extension/**/*.spec.ts",
+      use: { ...devices["Desktop Chrome"] },
+    },
+  ],
   webServer: [
     {
       // QStash (signed deliveries and retries), Anthropic and Voyage AI: no test calls a paid service.

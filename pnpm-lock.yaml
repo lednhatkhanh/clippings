@@ -331,6 +331,9 @@ importers:
       '@clippings/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@clippings/extension':
+        specifier: workspace:*
+        version: link:../extension
       '@clippings/shared':
         specifier: workspace:*
         version: link:../../packages/shared
