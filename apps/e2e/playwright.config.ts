@@ -44,6 +44,9 @@ export default defineConfig({
       // live apart in `specs/extension/` and the web specs never see its browser.
       name: "extension",
       testMatch: "**/extension/**/*.spec.ts",
+      // The consent page admits one allowlisted address, so these tests share a user: they run
+      // one after another, each starting by deleting the last one's.
+      fullyParallel: false,
       use: { ...devices["Desktop Chrome"] },
     },
   ],

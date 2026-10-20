@@ -16,6 +16,8 @@ import { RETURN_TO_PARAM, safeReturnPath, withReturnTo } from "@/lib/auth/return
  * During an OAuth authorization (Claude connecting), the sign-in page carries the signed request
  * in `oauth_query` instead. Passing it on lets the provider resume the authorization once the
  * session exists, and a refused account comes back to sign-in with the request still attached.
+ *
+ * It runs before there is a session, so it has none to check; it reads and writes no user data.
  */
 // ast-grep-ignore: server-action-checks-session
 export async function signInWithGoogle(formData: FormData) {
