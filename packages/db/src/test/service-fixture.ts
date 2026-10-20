@@ -73,6 +73,8 @@ export async function createServiceFixture() {
   };
 
   return {
+    /** The throwaway database's URL, for code that opens its own pool (Better Auth in web tests). */
+    databaseUrl: database.url,
     service: createClippingsService({ pool, jobs, clock, fetcher, summarizer, embedder }),
     settings: createSettingsService({ pool, clock }),
     web,

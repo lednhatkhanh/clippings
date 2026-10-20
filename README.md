@@ -79,6 +79,19 @@ docker run --rm -d -e POSTGRES_PASSWORD=postgres -p 55432:5432 pgvector/pgvector
 TEST_DATABASE_URL=postgres://postgres:postgres@localhost:55432/postgres pnpm test
 ```
 
+## Connecting Claude
+
+The MCP server is at `<BETTER_AUTH_URL>/mcp`. It has three tools: `save_clipping`,
+`search_clippings` and `list_recent`.
+
+- **claude.ai**: Settings → Connectors → Add custom connector, with that URL.
+- **Claude Code**: `claude mcp add --transport http clippings <BETTER_AUTH_URL>/mcp`, then `/mcp`
+  to sign in.
+
+Either one opens a browser window: sign in with an allowlisted Google account, then Allow.
+Clippings is the OAuth authorization server (Better Auth's MCP plugin), so there are no keys to
+copy.
+
 ## Environments and releases
 
 Work lands on `main`, which deploys to the development environment on every push. A release is a
