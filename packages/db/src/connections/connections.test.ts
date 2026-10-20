@@ -168,4 +168,36 @@ describe.skipIf(!TEST_DATABASE_URL)("connections service", () => {
     expect(await fixture.connections.revokeConnection(ana, "claude")).toBe(false);
     expect(await fixture.connections.revokeConnection(ana, "no-such-client")).toBe(false);
   });
+
+  it("drops the client's unexchanged authorization codes, and no one else's", async () => {
+    const ana = await fixture.createUser("ana");
+    const bo = await fixture.createUser("bo");
+    const claude = await registerClient("claude", "Claude");
+    const code = (userId: string, clientId: string) =>
+      JSON.stringify({ type: "authorization_code", userId, query: { client_id: clientId } });
+    for (const [id, value] of [
+      ["ana-claude", code(ana, claude)],
+      ["bo-claude", code(bo, claude)],
+      ["ana-other", code(ana, "other")],
+      ["not-json", "a plain value"],
+    ]) {
+      await fixture.pool.query(
+        `insert into verification (id, identifier, value, "expiresAt") values ($1, $1, $2, now() + interval '10 minutes')`,
+        [id, value],
+      );
+    }
+
+    expect(await fixture.connections.revokeConnection(ana, claude)).toBe(true);
+
+    const { rows } = await fixture.pool.query<{ id: string }>(
+      `select id from verification order by id`,
+    );
+    expect(rows.map((row) => row.id)).toEqual(["ana-other", "bo-claude", "not-json"]);
+  });
+
+  it("refuses a token whose client was deleted, rather than failing", async () => {
+    const ana = await fixture.createUser("ana");
+
+    expect(await fixture.connections.recordUse(ana, "deleted-client", now())).toBe(false);
+  });
 });

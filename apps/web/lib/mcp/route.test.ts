@@ -110,8 +110,8 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
     return { verifier, challenge: createHash("sha256").update(verifier).digest("base64url") };
   }
 
-  /** Authorizes as the signed-in user, allows on the consent page, and trades the code. */
-  async function connect(setup: ReturnType<typeof app>, cookie: string, clientId: string) {
+  /** Authorizes as the signed-in user and allows on the consent page; returns the code. */
+  async function authorize(setup: ReturnType<typeof app>, cookie: string, clientId: string) {
     const { verifier, challenge } = pkce();
     const consentPage = await target(
       await setup.call(authorizePath(clientId, challenge), { headers: { cookie, ...browser } }),
@@ -125,19 +125,30 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
     });
     const callback = new URL(await target(consent));
     expect(callback.origin).toBe("http://127.0.0.1:51234");
+    return { code: callback.searchParams.get("code") ?? "", verifier, clientId };
+  }
 
-    const token = await setup.call("/api/auth/oauth2/token", {
+  function exchange(
+    setup: ReturnType<typeof app>,
+    { code, verifier, clientId }: Awaited<ReturnType<typeof authorize>>,
+  ) {
+    return setup.call("/api/auth/oauth2/token", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         grant_type: "authorization_code",
-        code: callback.searchParams.get("code") ?? "",
+        code,
         redirect_uri: "http://127.0.0.1:51234/callback",
         client_id: clientId,
         code_verifier: verifier,
         resource: RESOURCE,
       }),
     });
+  }
+
+  /** Authorizes as the signed-in user, allows on the consent page, and trades the code. */
+  async function connect(setup: ReturnType<typeof app>, cookie: string, clientId: string) {
+    const token = await exchange(setup, await authorize(setup, cookie, clientId));
     expect(token.status).toBe(200);
     const issued = (await token.json()) as { access_token: string; refresh_token: string };
     return { ...issued, clientId };
@@ -336,5 +347,17 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
     expect((await listTools(setup.mcp, adas.access_token)).status).toBe(401);
     expect((await listTools(setup.mcp, bobs.access_token)).status).toBe(200);
     expect(await setup.connections.listConnections("bob")).toHaveLength(1);
+  });
+
+  it("refuses a code issued before the client was revoked", async () => {
+    const setup = app(ALLOWED);
+    const cookie = await signIn("ada", ALLOWED);
+    const clientId = await register(setup.call);
+    await connect(setup, cookie, clientId);
+    const pending = await authorize(setup, cookie, clientId);
+
+    await setup.connections.revokeConnection("ada", clientId);
+
+    expect((await exchange(setup, pending)).status).toBe(400);
   });
 });

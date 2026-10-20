@@ -10,6 +10,7 @@ import {
   oauthConnections,
   oauthConsent,
   oauthRefreshToken,
+  verification,
 } from "../schema.ts";
 
 export interface ConnectionsServiceDeps {
@@ -111,9 +112,12 @@ export function createConnectionsService({ pool, clock }: ConnectionsServiceDeps
   }
 
   /**
-   * Ends a client's access for the user at once: its consent and stored tokens go, and access
-   * tokens issued until now stop working (see `recordUse`). Other clients are untouched. Returns
-   * false when the client held nothing for the user.
+   * Ends a client's access for the user at once: its consent, stored tokens and unexchanged
+   * authorization codes go, and access tokens issued until now stop working (see `recordUse`).
+   * Other clients are untouched. Returns false when the client held nothing for the user.
+   *
+   * A refresh racing the revocation can leave a new refresh token behind: Better Auth rotates in
+   * two writes, and the transaction can commit between them. The window is milliseconds.
    */
   async function revokeConnection(userId: string, clientId: string): Promise<boolean> {
     const revokedAt = clock.now();
@@ -131,17 +135,38 @@ export function createConnectionsService({ pool, clock }: ConnectionsServiceDeps
         .delete(oauthAccessToken)
         .where(and(eq(oauthAccessToken.userId, userId), eq(oauthAccessToken.clientId, clientId)))
         .returning({ id: oauthAccessToken.id });
+      // A code issued before now could still be traded for tokens. Better Auth keeps it as JSON
+      // in `verification`, beside other flows' values; Postgres may evaluate conditions in any
+      // order, so the cast sits behind a CASE that only reaches rows shaped like a code.
+      const code = sql`case when ${verification.value} like '{"type":"authorization_code"%' then ${verification.value}::jsonb end`;
+      const codes = await tx
+        .delete(verification)
+        .where(
+          and(
+            sql`${code} ->> 'userId' = ${userId}`,
+            sql`${code} -> 'query' ->> 'client_id' = ${clientId}`,
+          ),
+        )
+        .returning({ id: verification.id });
+
+      const held = consents.length + refreshTokens.length + accessTokens.length + codes.length > 0;
+      if (held) {
+        // An upsert, so a first call landing mid-revocation can't fail it on the key.
+        await tx
+          .insert(oauthConnections)
+          .values({ userId, clientId, revokedAt })
+          .onConflictDoUpdate({
+            target: [oauthConnections.userId, oauthConnections.clientId],
+            set: { revokedAt, lastUsedAt: null },
+          });
+        return true;
+      }
       const known = await tx
         .update(oauthConnections)
         .set({ revokedAt, lastUsedAt: null })
         .where(and(eq(oauthConnections.userId, userId), eq(oauthConnections.clientId, clientId)))
         .returning({ userId: oauthConnections.userId });
-
-      const held = consents.length + refreshTokens.length + accessTokens.length > 0;
-      if (held && known.length === 0) {
-        await tx.insert(oauthConnections).values({ userId, clientId, revokedAt });
-      }
-      return held || known.length > 0;
+      return known.length > 0;
     });
   }
 
@@ -149,23 +174,39 @@ export function createConnectionsService({ pool, clock }: ConnectionsServiceDeps
    * Records that the client called for the user with an access token issued at `issuedAt`.
    * Returns false, recording nothing, when the user revoked the client since: the token must be
    * refused. `issuedAt` is the token's `iat`, in whole seconds, so a token issued in the second
-   * of a revocation is refused too.
+   * of a revocation is refused too. Also false when the client or user no longer exists: the
+   * token outlived them.
    */
   async function recordUse(userId: string, clientId: string, issuedAt: Date): Promise<boolean> {
     const lastUsedAt = clock.now();
-    const recorded = await db
-      .insert(oauthConnections)
-      .values({ userId, clientId, lastUsedAt })
-      .onConflictDoUpdate({
-        target: [oauthConnections.userId, oauthConnections.clientId],
-        set: { lastUsedAt },
-        setWhere: or(isNull(oauthConnections.revokedAt), lt(oauthConnections.revokedAt, issuedAt)),
-      })
-      .returning({ userId: oauthConnections.userId });
-    return recorded.length > 0;
+    try {
+      const recorded = await db
+        .insert(oauthConnections)
+        .values({ userId, clientId, lastUsedAt })
+        .onConflictDoUpdate({
+          target: [oauthConnections.userId, oauthConnections.clientId],
+          set: { lastUsedAt },
+          setWhere: or(
+            isNull(oauthConnections.revokedAt),
+            lt(oauthConnections.revokedAt, issuedAt),
+          ),
+        })
+        .returning({ userId: oauthConnections.userId });
+      return recorded.length > 0;
+    } catch (error) {
+      if (isForeignKeyViolation(error)) return false;
+      throw error;
+    }
   }
 
   return { listConnections, revokeConnection, recordUse };
+}
+
+/** Postgres' foreign_key_violation, as pg raises it or Drizzle wraps it. */
+function isForeignKeyViolation(error: unknown): boolean {
+  const code = (value: unknown) =>
+    typeof value === "object" && value !== null && "code" in value ? value.code : undefined;
+  return code(error) === "23503" || (error instanceof Error && code(error.cause) === "23503");
 }
 
 export type ConnectionsService = ReturnType<typeof createConnectionsService>;
