@@ -2,6 +2,7 @@ import type { BetterAuthPlugin } from "better-auth";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 
 import { extensionErrorRedirect } from "@/lib/extension/origins.ts";
+import { UNKNOWN_CLIENT } from "@clippings/shared";
 
 import { isAllowlisted, parseAllowlist } from "./allowlist.ts";
 import { closedPage } from "./connection.ts";
@@ -10,6 +11,15 @@ import { NOT_ALLOWLISTED } from "./validate-user.ts";
 const AUTHORIZE_PATH = "/oauth2/authorize";
 const CONSENT_PATH = "/oauth2/consent";
 const GATED_PATHS = new Set([AUTHORIZE_PATH, CONSENT_PATH]);
+
+/** The authorization request's query, keeping the values that are strings. */
+function stringQuery(query: unknown): URLSearchParams {
+  return new URLSearchParams(
+    Object.entries(query ?? {}).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
+  );
+}
 
 /** The request's `prompt` values with `consent` in place of `none`. */
 function promptWithConsent(prompt: unknown): string {
@@ -25,6 +35,13 @@ function promptWithConsent(prompt: unknown): string {
  * authorization endpoint (including the authorization resumed after sign-in or consent) and the
  * consent endpoint check the signed-in account again. Refresh tokens are checked where they're
  * used: `/mcp` checks the token's user on every request.
+ *
+ * An authorization the extension starts for a client this server doesn't know (after a database
+ * restore or a branch reset, the extension still holds the old id) would end on the error page
+ * in the sign-in window, which the extension can't tell from the user closing it. So it goes back
+ * to the extension with `unknown_client`, signed in or not, and the extension registers a new
+ * client. Only a trusted extension's redirect is answered this way, so the redirect never leaves
+ * for another site and this can't be used to ask which client ids exist.
  *
  * It also makes every authorization ask: claude.ai's client id is one URL shared by every
  * claude.ai user, so a stored consent would let a link someone else started finish for this
@@ -46,6 +63,26 @@ export function consentGate({
         {
           matcher: (context) => GATED_PATHS.has(context.path ?? ""),
           handler: createAuthMiddleware(async (ctx) => {
+            if (ctx.path === AUTHORIZE_PATH) {
+              const query = stringQuery(ctx.query);
+              const clientId = query.get("client_id") ?? "";
+              // A client id that is a URL names a metadata document (CIMD), resolved on demand,
+              // not a registration; the extension registers.
+              const registered = clientId !== "" && !URL.canParse(clientId);
+              const back = registered
+                ? extensionErrorRedirect(query, extensionIds, "invalid_client", UNKNOWN_CLIENT)
+                : undefined;
+              if (
+                back &&
+                !(await ctx.context.adapter.findOne({
+                  model: "oauthClient",
+                  where: [{ field: "clientId", value: clientId }],
+                }))
+              ) {
+                throw ctx.redirect(back);
+              }
+            }
+
             const session = await getSessionFromCtx(ctx);
             // No session: the authorization endpoint sends the user to sign-in, where the
             // allowlist applies, and the consent endpoint refuses on its own.
@@ -54,14 +91,13 @@ export function consentGate({
             if (!isAllowlisted(allowlist, session.user.email)) {
               if (ctx.path === AUTHORIZE_PATH) {
                 // The extension's sign-in window closes on its redirect, and the popup says why.
-                const query = new URLSearchParams(
-                  Object.entries(ctx.query ?? {}).filter(
-                    (entry): entry is [string, string] => typeof entry[1] === "string",
-                  ),
-                );
                 throw ctx.redirect(
-                  extensionErrorRedirect(query, extensionIds, "access_denied", NOT_ALLOWLISTED) ??
-                    closedPage("private"),
+                  extensionErrorRedirect(
+                    stringQuery(ctx.query),
+                    extensionIds,
+                    "access_denied",
+                    NOT_ALLOWLISTED,
+                  ) ?? closedPage("private"),
                 );
               }
               throw new APIError("FORBIDDEN", {

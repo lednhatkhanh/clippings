@@ -2,6 +2,7 @@ import {
   CLIPPINGS_EXTENSION_ID,
   EXTENSION_API_PATH,
   type ExtensionSignInError,
+  type UNKNOWN_CLIENT,
 } from "@clippings/shared";
 
 /** A Chrome extension id: 32 letters from a to p. */
@@ -44,8 +45,8 @@ export function extensionResourceUrl(origin = process.env.BETTER_AUTH_URL): stri
 export function extensionErrorRedirect(
   oauthQuery: URLSearchParams,
   extensionIds: readonly string[],
-  error: "access_denied",
-  description: ExtensionSignInError,
+  error: "access_denied" | "invalid_client",
+  description: ExtensionSignInError | typeof UNKNOWN_CLIENT,
 ): string | undefined {
   const redirectUri = oauthQuery.get("redirect_uri") ?? "";
   if (!isExtensionRedirectUri(redirectUri, extensionIds)) return undefined;

@@ -16,7 +16,9 @@ interface Seen {
 
 /**
  * A stand-in for the authorization server: it registers clients, issues tokens, and refuses a
- * refresh token it has already seen (they rotate), as the real one does.
+ * refresh token it has already seen (they rotate), as the real one does. Its authorization
+ * endpoint sends the extension's own redirect an `invalid_client` error for a client it doesn't
+ * know, and approves a client it does; it never answers the sign-in window any other way.
  */
 function authServer() {
   const requests: Seen[] = [];
@@ -28,6 +30,15 @@ function authServer() {
     tokenFailure: undefined as { status: number; error?: string } | "network" | undefined,
     revokeFails: false,
     clientIds: new Set<string>(),
+    /** The address the sign-in window ends on for this authorization request. */
+    authorize(url: string, state: string) {
+      requests.push({ path: "/authorize", body: new URL(url).searchParams });
+      const clientId = new URL(url).searchParams.get("client_id") ?? "";
+      if (!server.clientIds.has(clientId)) {
+        return callback({ error: "invalid_client", error_description: "unknown_client", state });
+      }
+      return callback({ code: "the-code", state });
+    },
     count: (path: string) => requests.filter((request) => request.path === path).length,
   };
 
@@ -83,20 +94,21 @@ function callback(params: Record<string, string>) {
   return `${REDIRECT}?${new URLSearchParams(params)}`;
 }
 
-/** Makes the sign-in window end with `answer`, given the state the request carried. */
-function windowEnds(answer: (state: string) => string | Error) {
+/** Makes the sign-in window end with `answer`, given the state the request carried and its URL. */
+function windowEnds(answer: (state: string, url: string) => string | Error) {
   vi.spyOn(browser.identity, "getRedirectURL").mockReturnValue(REDIRECT);
   vi.spyOn(browser.identity, "launchWebAuthFlow").mockImplementation((async (details: {
     url: string;
   }) => {
-    const result = answer(new URL(details.url).searchParams.get("state") ?? "");
+    const result = answer(new URL(details.url).searchParams.get("state") ?? "", details.url);
     if (result instanceof Error) throw result;
     return result;
   }) as never);
 }
 
-const approve = (extra: Record<string, string> = {}) =>
-  windowEnds((state) => callback({ code: "the-code", state, ...extra }));
+/** The window ends as the server's authorization endpoint decides. */
+const authorizedBy = (server: ReturnType<typeof authServer>) =>
+  windowEnds((state, url) => server.authorize(url, state));
 
 const stored = async () =>
   (await browser.storage.local.get(["clientId", "tokens"])) as {
@@ -127,8 +139,8 @@ afterEach(() => {
 
 describe("signing in", () => {
   it("registers the install, trades the code for tokens and keeps them", async () => {
-    authServer();
-    approve();
+    const server = authServer();
+    authorizedBy(server);
 
     expect(await signIn()).toBe(true);
 
@@ -192,29 +204,72 @@ describe("signing in", () => {
     expect(server.count("/register")).toBe(1);
     expect((await stored()).clientId).toBe("client-1");
 
-    approve();
+    authorizedBy(server);
     expect(await signIn()).toBe(true);
     expect(server.count("/register")).toBe(1);
     expect((await stored()).tokens?.accessToken).toBe("access-1");
   });
 
-  it("forgets the client when the token endpoint says it doesn't know it, and registers a new one next time", async () => {
+  // After a database restore or a reset of the database branch, or with a build pointed at another
+  // origin, the stored client is one the server never heard of. Its authorization endpoint then
+  // never lets the window reach the token endpoint: it sends the extension an error instead.
+  it("registers a new client and signs in when the server doesn't know the stored one", async () => {
     const server = authServer();
-    approve();
+    authorizedBy(server);
+    await browser.storage.local.set({ clientId: "client-forgotten" });
+
+    expect(await signIn()).toBe(true);
+
+    expect(server.count("/register")).toBe(1);
+    expect(await stored()).toMatchObject({
+      clientId: "client-1",
+      tokens: { accessToken: "access-1" },
+    });
+    expect(await takeSignInProblem()).toBeNull();
+    const asked = server.requests
+      .filter((request) => request.path === "/authorize")
+      .map((request) => (request.body as URLSearchParams).get("client_id"));
+    expect(asked).toEqual(["client-forgotten", "client-1"]);
+  });
+
+  it("doesn't register another client when the server knows the stored one", async () => {
+    const server = authServer();
+    server.clientIds.add("client-known");
+    authorizedBy(server);
+    await browser.storage.local.set({ clientId: "client-known" });
+
+    expect(await signIn()).toBe(true);
+
+    expect(server.count("/register")).toBe(0);
+    expect((await stored()).clientId).toBe("client-known");
+  });
+
+  it("registers once, even if the server doesn't know the client it just registered", async () => {
+    const server = authServer();
+    windowEnds((state) =>
+      callback({ error: "invalid_client", error_description: "unknown_client", state }),
+    );
+
+    expect(await signIn()).toBe(false);
+
+    expect(server.count("/register")).toBe(1);
+    expect(await takeSignInProblem()).toBe("failed");
+  });
+
+  it("forgets the client when the token endpoint says it doesn't know it", async () => {
+    const server = authServer();
+    authorizedBy(server);
     server.tokenFailure = { status: 400, error: "invalid_client" };
 
     expect(await signIn()).toBe(false);
+
     expect((await stored()).clientId).toBeUndefined();
     expect(await takeSignInProblem()).toBe("failed");
-
-    server.tokenFailure = undefined;
-    expect(await signIn()).toBe(true);
-    expect(server.count("/register")).toBe(2);
   });
 
   it("keeps the client when the code itself is refused", async () => {
     const server = authServer();
-    approve();
+    authorizedBy(server);
     server.tokenFailure = { status: 400, error: "invalid_grant" };
 
     expect(await signIn()).toBe(false);

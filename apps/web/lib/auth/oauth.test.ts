@@ -90,6 +90,60 @@ describe.skipIf(!TEST_DATABASE_URL)("OAuth authorization on the real auth and da
     });
   });
 
+  describe("a client the server doesn't know", () => {
+    const TRUSTED_EXTENSION = extensionRedirectUri(CLIPPINGS_EXTENSION_ID);
+
+    function authorizeAs(clientId: string, redirectUri: string, headers: { cookie?: string }) {
+      return call(
+        authorizePath({ clientId, challenge: pkce().challenge, redirectUri, state: "s-1" }),
+        { headers: { ...headers, ...browserHeaders } },
+      );
+    }
+
+    // After a database restore or a branch reset the extension still holds its old client id, and
+    // its sign-in window never reaches the extension unless the server sends it back.
+    it.each([
+      ["signed out", false],
+      ["signed in", true],
+    ])("sends the trusted extension back to itself when %s", async (_state, signedIn) => {
+      const response = await authorizeAs(
+        "client-from-before-the-restore",
+        TRUSTED_EXTENSION,
+        signedIn ? { cookie } : {},
+      );
+
+      const back = new URL(await target(response));
+      expect(`${back.origin}${back.pathname}`).toBe(TRUSTED_EXTENSION);
+      expect(Object.fromEntries(back.searchParams)).toEqual({
+        error: "invalid_client",
+        error_description: "unknown_client",
+        state: "s-1",
+      });
+    });
+
+    it("keeps sending a client it knows through sign-in", async () => {
+      const registration = await registerClient(call, { redirect_uris: [TRUSTED_EXTENSION] });
+      const clientId = await registeredClientId(registration);
+
+      const response = await authorizeAs(clientId, TRUSTED_EXTENSION, {});
+
+      expect(await target(response)).toMatch(/^\/sign-in\?/);
+    });
+
+    it.each([
+      ["a loopback client", LOOPBACK],
+      [
+        "an extension that isn't trusted",
+        "https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.chromiumapp.org/",
+      ],
+      ["any other site", "https://evil.example/callback"],
+    ])("never sends %s a redirect", async (_name, redirectUri) => {
+      const response = await authorizeAs("client-from-before-the-restore", redirectUri, { cookie });
+
+      expect(await target(response)).toMatch(/^\/sign-in\?error=invalid_client/);
+    });
+  });
+
   describe("the extension API's resource", () => {
     const EXTENSION_API = extensionResourceUrl(ORIGIN);
     const TRUSTED_EXTENSION = extensionRedirectUri(CLIPPINGS_EXTENSION_ID);

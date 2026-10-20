@@ -36,6 +36,7 @@ export {
   extensionTagsResponseSchema,
   extensionUpdateRequestSchema,
   isSaveablePage,
+  UNKNOWN_CLIENT,
   type ExtensionApiError,
   type ExtensionClipping,
   type ExtensionLookupRequest,
