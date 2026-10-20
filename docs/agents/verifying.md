@@ -12,7 +12,7 @@ taste. Run the app and the database for real, report what you saw, and don't han
 | UI the user should see                | The Browser pane: `preview_start`, click, read, screenshot                 |
 | QStash, Anthropic and Voyage AI calls | The fakes in `scripts/local/fakes.mjs` (below)                             |
 | Route auth (signatures, cron secret)  | `curl` the route without and with the credential                           |
-| Flows across browser, app and database | `pnpm e2e` (Playwright on a production build, port 3300 or `E2E_PORT`, the built extension in its own project, database `clippings_e2e` and the fakes; the Postgres container below must be up, and `pnpm --filter @clippings/e2e browsers` installs Chromium once) |
+| Flows across browser, app and database | `pnpm e2e` (Playwright on a production build, port 3300 (`E2E_PORT` moves it, for two runs side by side), the built extension in its own project, database `clippings_e2e` and the fakes; the Postgres container below must be up, and `pnpm --filter @clippings/e2e browsers` installs Chromium once) |
 
 What stays with the user: real Google sign-in, real QStash delivery and Haiku output quality,
 Vercel deploys and crons. Say that you couldn't check those, and why.
