@@ -1,9 +1,23 @@
-import { createHash, createHmac, randomBytes } from "node:crypto";
-
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
+import { addDays, constructNow } from "date-fns";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createAuth } from "@/lib/auth/auth.ts";
-import { createConnectionsService, createDatabase, createPool, systemClock } from "@clippings/db";
+import {
+  authorize as authorizeWith,
+  authorizePath as authorizePathFor,
+  browserHeaders as browser,
+  consent as consentWith,
+  connect as connectWith,
+  exchange as exchangeWith,
+  pkce,
+  refreshTokens,
+  registeredClientId,
+  registerClient,
+  serveAuth,
+  signIn as signInUser,
+  target,
+} from "@/lib/auth/testing.ts";
+import { createConnectionsService, createPool, systemClock } from "@clippings/db";
 import {
   createServiceFixture,
   TEST_DATABASE_URL,
@@ -13,9 +27,16 @@ import {
 import { createMcpRoute } from "./handler.ts";
 import { mcpResourceUrl } from "./resource.ts";
 
-const SECRET = "test-secret-test-secret-test-secret-0123";
 const REDIRECT_URI = "http://127.0.0.1:43210/callback";
+// Another loopback port than the registered one, as Claude Code picks a free port.
+const CALLBACK_URI = "http://127.0.0.1:51234/callback";
 const ALLOWED = "ada@example.com";
+
+/** The text of a tool result's first content block. */
+function toolText(result: { content?: unknown }): string {
+  const [block] = (result.content ?? []) as { type: string; text?: string }[];
+  return block?.text ?? "";
+}
 
 describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () => {
   let fixture: ServiceFixture;
@@ -28,14 +49,7 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
 
   /** The app's auth and `/mcp` route with this allowlist, on the test database. */
   function app(allowedEmails: string) {
-    const auth = createAuth({
-      database: createDatabase(pool),
-      baseURL: ORIGIN,
-      secret: SECRET,
-      allowedEmails,
-      google: { clientId: "test", clientSecret: "test" },
-      extensionIds: [],
-    });
+    const { auth, call } = serveAuth({ pool, origin: ORIGIN, allowedEmails });
     const connections = createConnectionsService({ pool, clock: systemClock });
     const mcp = createMcpRoute({
       auth,
@@ -44,115 +58,46 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
       resource: RESOURCE,
       allowedEmails,
     });
-    // `/mcp` fetches the signing keys from the app's own URL.
-    vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
-      auth.handler(new Request(input, init)),
-    );
-    const call = (path: string, init?: RequestInit) =>
-      auth.handler(new Request(`${ORIGIN}${path}`, init));
     return { auth, mcp, call, connections };
   }
 
-  /** A signed-in browser for this user: their session cookie, as Better Auth signs it. */
-  async function signIn(id: string, email: string) {
-    await pool.query(
-      `insert into "user" (id, name, email, "emailVerified") values ($1, $1, $2, true)`,
-      [id, email],
-    );
-    const token = `session-${id}-${randomBytes(8).toString("hex")}`;
-    await pool.query(
-      `insert into session (id, "expiresAt", token, "updatedAt", "userId") values ($1, now() + interval '1 day', $2, now(), $3)`,
-      [`s-${id}`, token, id],
-    );
-    const signature = createHmac("sha256", SECRET).update(token).digest("base64");
-    return `better-auth.session_token=${encodeURIComponent(`${token}.${signature}`)}`;
-  }
-
-  const browser = { accept: "text/html", "sec-fetch-mode": "navigate" };
-
-  /** Where a response sends the browser: its Location, or the provider's JSON redirect. */
-  async function target(response: Response): Promise<string> {
-    const location = response.headers.get("location");
-    if (location) return location;
-    const body = (await response.json()) as { url?: string };
-    return body.url ?? "";
-  }
+  const signIn = (id: string, email: string) => signInUser(pool, id, email);
 
   async function register(call: ReturnType<typeof app>["call"], name = "Claude Code") {
-    const response = await call("/api/auth/oauth2/register", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        client_name: name,
-        redirect_uris: [REDIRECT_URI],
-        token_endpoint_auth_method: "none",
-      }),
-    });
-    return ((await response.json()) as { client_id: string }).client_id;
+    return registeredClientId(
+      await registerClient(call, { client_name: name, redirect_uris: [REDIRECT_URI] }),
+    );
   }
 
   function authorizePath(clientId: string, challenge: string, prompt?: string) {
-    const params = new URLSearchParams({
-      response_type: "code",
-      client_id: clientId,
-      // Another loopback port than the registered one, as Claude Code picks a free port.
-      redirect_uri: "http://127.0.0.1:51234/callback",
-      state: "state-1",
-      code_challenge: challenge,
-      code_challenge_method: "S256",
-      resource: RESOURCE,
+    return authorizePathFor({
+      clientId,
+      challenge,
+      redirectUri: CALLBACK_URI,
+      resources: [RESOURCE],
+      prompt,
     });
-    if (prompt) params.set("prompt", prompt);
-    return `/api/auth/oauth2/authorize?${params}`;
   }
 
-  function pkce() {
-    const verifier = randomBytes(32).toString("base64url");
-    return { verifier, challenge: createHash("sha256").update(verifier).digest("base64url") };
-  }
+  const flow = (clientId: string) => ({
+    clientId,
+    redirectUri: CALLBACK_URI,
+    resources: [RESOURCE],
+  });
 
   /** Authorizes as the signed-in user and allows on the consent page; returns the code. */
-  async function authorize(setup: ReturnType<typeof app>, cookie: string, clientId: string) {
-    const { verifier, challenge } = pkce();
-    const consentPage = await target(
-      await setup.call(authorizePath(clientId, challenge), { headers: { cookie, ...browser } }),
-    );
-    expect(consentPage).toMatch(/^\/connect\?/);
+  const authorize = (setup: ReturnType<typeof app>, cookie: string, clientId: string) =>
+    authorizeWith(setup.call, cookie, ORIGIN, flow(clientId));
 
-    const consent = await setup.call("/api/auth/oauth2/consent", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie, origin: ORIGIN },
-      body: JSON.stringify({ accept: true, oauth_query: consentPage.slice("/connect?".length) }),
-    });
-    const callback = new URL(await target(consent));
-    expect(callback.origin).toBe("http://127.0.0.1:51234");
-    return { code: callback.searchParams.get("code") ?? "", verifier, clientId };
-  }
-
-  function exchange(
+  const exchange = (
     setup: ReturnType<typeof app>,
-    { code, verifier, clientId }: Awaited<ReturnType<typeof authorize>>,
-  ) {
-    return setup.call("/api/auth/oauth2/token", {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: "http://127.0.0.1:51234/callback",
-        client_id: clientId,
-        code_verifier: verifier,
-        resource: RESOURCE,
-      }),
-    });
-  }
+    authorization: Awaited<ReturnType<typeof authorize>>,
+  ) => exchangeWith(setup.call, authorization);
 
   /** Authorizes as the signed-in user, allows on the consent page, and trades the code. */
   async function connect(setup: ReturnType<typeof app>, cookie: string, clientId: string) {
-    const token = await exchange(setup, await authorize(setup, cookie, clientId));
-    expect(token.status).toBe(200);
-    const issued = (await token.json()) as { access_token: string; refresh_token: string };
-    return { ...issued, clientId };
+    const tokens = await connectWith(setup.call, cookie, ORIGIN, flow(clientId));
+    return { ...tokens, refresh_token: tokens.refresh_token ?? "" };
   }
 
   function listTools(mcp: ReturnType<typeof app>["mcp"], accessToken?: string) {
@@ -177,6 +122,7 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
   });
 
   afterEach(async () => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     await pool.end();
     await fixture.close();
@@ -206,20 +152,11 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
     expect(response.status).toBe(200);
 
     // The refresh token rotates: a refresh returns a new pair, and the new access token works.
-    const refresh = await setup.call("/api/auth/oauth2/token", {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: tokens.refresh_token,
-        client_id: tokens.clientId,
-        resource: RESOURCE,
-      }),
-    });
-    expect(refresh.status).toBe(200);
-    const refreshed = (await refresh.json()) as { access_token: string; refresh_token: string };
-    expect(refreshed.refresh_token).not.toBe(tokens.refresh_token);
-    expect((await listTools(setup.mcp, refreshed.access_token)).status).toBe(200);
+    const refreshed = await refresh(setup.call, tokens);
+    expect(refreshed.status).toBe(200);
+    const rotated = (await refreshed.json()) as { access_token: string; refresh_token: string };
+    expect(rotated.refresh_token).not.toBe(tokens.refresh_token);
+    expect((await listTools(setup.mcp, rotated.access_token)).status).toBe(200);
   });
 
   it("asks for consent every time, even after the user allowed the client", async () => {
@@ -257,13 +194,10 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
         headers: { cookie: ada, ...browser },
       }),
     );
-    const consent = await later.call("/api/auth/oauth2/consent", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: bob, origin: ORIGIN },
-      body: JSON.stringify({
-        accept: true,
-        oauth_query: adasConsentPage.slice("/connect?".length),
-      }),
+    const consent = await consentWith(later.call, {
+      cookie: bob,
+      origin: ORIGIN,
+      query: adasConsentPage.slice("/connect?".length),
     });
     expect(consent.status).toBe(403);
 
@@ -271,21 +205,15 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
     expect(call.status).toBe(403);
   });
 
-  function refresh(
+  const refresh = (
     call: ReturnType<typeof app>["call"],
     tokens: { refresh_token: string; clientId: string },
-  ) {
-    return call("/api/auth/oauth2/token", {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: tokens.refresh_token,
-        client_id: tokens.clientId,
-        resource: RESOURCE,
-      }),
+  ) =>
+    refreshTokens(call, {
+      refreshToken: tokens.refresh_token,
+      clientId: tokens.clientId,
+      resources: [RESOURCE],
     });
-  }
 
   it("lists the connected clients with their last use", async () => {
     const setup = app(ALLOWED);
@@ -360,5 +288,166 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
     await setup.connections.revokeConnection("ada", clientId);
 
     expect((await exchange(setup, pending)).status).toBe(400);
+  });
+
+  /** A POST to `/mcp` with this raw body and (unless `null`) this token. */
+  function post(mcp: ReturnType<typeof app>["mcp"], body: string, accessToken: string | null) {
+    return mcp(
+      new Request(RESOURCE, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body,
+      }),
+    );
+  }
+
+  it("refuses an expired access token, with the challenge that makes the client sign in again", async () => {
+    const setup = app(ALLOWED);
+    const tokens = await connect(setup, await signIn("ada", ALLOWED), await register(setup.call));
+    expect((await listTools(setup.mcp, tokens.access_token)).status).toBe(200);
+
+    // Access tokens live an hour and nothing stores them: only the clock ages one.
+    vi.useFakeTimers({ toFake: ["Date"], now: addDays(constructNow(undefined), 1) });
+    const refused = await listTools(setup.mcp, tokens.access_token);
+
+    expect(refused.status).toBe(401);
+    expect(refused.headers.get("www-authenticate")).toContain(
+      `resource_metadata="${ORIGIN}/.well-known/oauth-protected-resource/mcp"`,
+    );
+  });
+
+  it("refuses an access token whose claims were changed after it was signed", async () => {
+    const setup = app(`${ALLOWED} bob@example.com`);
+    await signIn("bob", "bob@example.com");
+    const tokens = await connect(setup, await signIn("ada", ALLOWED), await register(setup.call));
+
+    // Ada's token, now naming Bob as the user, with Ada's signature.
+    const [header, payload, signature] = tokens.access_token.split(".") as [string, string, string];
+    const claims = JSON.parse(Buffer.from(payload, "base64url").toString()) as { sub: string };
+    expect(claims.sub).toBe("ada");
+    const forged = [
+      header,
+      Buffer.from(JSON.stringify({ ...claims, sub: "bob" })).toString("base64url"),
+      signature,
+    ].join(".");
+
+    const refused = await listTools(setup.mcp, forged);
+    expect(refused.status).toBe(401);
+    expect(refused.headers.get("www-authenticate")).toContain("resource_metadata=");
+  });
+
+  it("answers GET and DELETE with 405 once authenticated, and challenges before that", async () => {
+    const setup = app(ALLOWED);
+    const tokens = await connect(setup, await signIn("ada", ALLOWED), await register(setup.call));
+    const send = (method: string, accessToken?: string) =>
+      setup.mcp(
+        new Request(RESOURCE, {
+          method,
+          headers: {
+            accept: "application/json, text/event-stream",
+            ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
+          },
+        }),
+      );
+
+    // Stateless: there is no stream to open and no session to end.
+    for (const method of ["GET", "DELETE"]) {
+      const answered = await send(method, tokens.access_token);
+      expect(answered.status).toBe(405);
+      expect(await answered.json()).toMatchObject({ error: { message: "Method not allowed." } });
+
+      expect((await send(method)).status).toBe(401);
+    }
+  });
+
+  it("answers malformed JSON-RPC with a JSON-RPC error, not a server error", async () => {
+    const setup = app(ALLOWED);
+    const tokens = await connect(setup, await signIn("ada", ALLOWED), await register(setup.call));
+
+    const parse = await post(setup.mcp, "{not json", tokens.access_token);
+    expect(parse.status).toBe(400);
+    expect(await parse.json()).toMatchObject({ jsonrpc: "2.0", error: { code: -32_700 } });
+
+    // Valid JSON that isn't a request, and an empty batch.
+    for (const body of ['{"foo":1}', "[]"]) {
+      const invalid = await post(setup.mcp, body, tokens.access_token);
+      expect(invalid.status).toBe(400);
+      expect(await invalid.json()).toMatchObject({ jsonrpc: "2.0", error: { code: -32_600 } });
+    }
+
+    // An unknown method is a JSON-RPC error inside a 200 reply.
+    const unknown = await post(
+      setup.mcp,
+      JSON.stringify({ jsonrpc: "2.0", id: 1, method: "nope" }),
+      tokens.access_token,
+    );
+    expect(unknown.status).toBe(200);
+    expect(await unknown.text()).toContain('"code":-32601');
+  });
+
+  it("serves the official MCP client over Streamable HTTP: connects, lists tools, saves and searches", async () => {
+    const setup = app(`${ALLOWED} bob@example.com`);
+    const ada = await signIn("ada", ALLOWED);
+    await signIn("bob", "bob@example.com");
+    const tokens = await connect(setup, ada, await register(setup.call));
+    // Bob already saved a page that Ada's search would match.
+    await fixture.service.saveClipping("bob", {
+      url: "https://example.com/bobs-otters",
+      note: "otter facts",
+      source: "web",
+    });
+
+    // The client's requests go straight to the route handler, with Ada's token.
+    const client = new Client({ name: "conformance-test", version: "1.0.0" });
+    const transport = new StreamableHTTPClientTransport(new URL(RESOURCE), {
+      fetch: (input, init) => {
+        const request = new Request(input, init);
+        request.headers.set("authorization", `Bearer ${tokens.access_token}`);
+        return setup.mcp(request);
+      },
+    });
+    await client.connect(transport);
+    try {
+      const { tools } = await client.listTools();
+      expect(tools.map((tool) => tool.name).sort()).toEqual([
+        "list_recent",
+        "save_clipping",
+        "search_clippings",
+      ]);
+
+      const saved = await client.callTool({
+        name: "save_clipping",
+        arguments: { url: "https://example.com/otters", note: "otter research" },
+      });
+      expect(saved.isError).toBeFalsy();
+      const created = JSON.parse(toolText(saved)) as {
+        status: string;
+        clipping: { id: string; url: string; source: string };
+      };
+      expect(created).toMatchObject({
+        status: "created",
+        clipping: { url: "https://example.com/otters", source: "mcp" },
+      });
+
+      const found = await client.callTool({
+        name: "search_clippings",
+        arguments: { query: "otter" },
+      });
+      const { clippings } = JSON.parse(toolText(found)) as { clippings: { id: string }[] };
+      expect(clippings.map((clipping) => clipping.id)).toEqual([created.clipping.id]);
+
+      // The clipping is Ada's and was saved by the client that connected.
+      expect(await fixture.service.getClipping("ada", created.clipping.id)).toMatchObject({
+        source: "mcp",
+        clientId: tokens.clientId,
+      });
+      expect(await fixture.service.getClipping("bob", created.clipping.id)).toBeNull();
+    } finally {
+      await client.close();
+    }
   });
 });

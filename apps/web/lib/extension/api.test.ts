@@ -1,13 +1,20 @@
-import { createHash, createHmac, randomBytes } from "node:crypto";
-
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createAuth } from "@/lib/auth/auth.ts";
+import {
+  authorizePath as authorizePathFor,
+  browserHeaders as browser,
+  connect as connectWith,
+  pkce,
+  registeredClientId,
+  registerClient,
+  serveAuth,
+  signIn as signInUser,
+  target,
+} from "@/lib/auth/testing.ts";
 import { createMcpRoute } from "@/lib/mcp/handler.ts";
 import { mcpResourceUrl } from "@/lib/mcp/resource.ts";
 import {
   createConnectionsService,
-  createDatabase,
   createPool,
   createSettingsService,
   systemClock,
@@ -23,7 +30,6 @@ import { CLIPPINGS_EXTENSION_ID, type ExtensionSaveResponse } from "@clippings/s
 import { createExtensionApi } from "./api.ts";
 import { extensionOrigin, extensionRedirectUri, extensionResourceUrl } from "./origins.ts";
 
-const SECRET = "test-secret-test-secret-test-secret-0123";
 const EXTENSION_ORIGIN = extensionOrigin(CLIPPINGS_EXTENSION_ID);
 const REDIRECT_URI = extensionRedirectUri(CLIPPINGS_EXTENSION_ID);
 const ALLOWED = "ada@example.com";
@@ -42,12 +48,10 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
 
   /** The app's auth and extension API with this allowlist, on the test database. */
   function app(allowedEmails: string) {
-    const auth = createAuth({
-      database: createDatabase(pool),
-      baseURL: appOrigin,
-      secret: SECRET,
+    const { auth, call } = serveAuth({
+      pool,
+      origin: appOrigin,
       allowedEmails,
-      google: { clientId: "test", clientSecret: "test" },
       extensionIds: [CLIPPINGS_EXTENSION_ID],
     });
     const api = createExtensionApi({
@@ -59,60 +63,26 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
       allowedEmails,
       extensionIds: [CLIPPINGS_EXTENSION_ID],
     });
-    // The API fetches the signing keys from the app's own URL.
-    vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
-      auth.handler(new Request(input, init)),
-    );
-    const call = (path: string, init?: RequestInit) =>
-      auth.handler(new Request(`${appOrigin}${path}`, init));
     return { auth, api, call };
   }
 
-  /** A signed-in browser for this user: their session cookie, as Better Auth signs it. */
-  async function signIn(id: string, email: string) {
-    await pool.query(
-      `insert into "user" (id, name, email, "emailVerified") values ($1, $1, $2, true)`,
-      [id, email],
-    );
-    const token = `session-${id}-${randomBytes(8).toString("hex")}`;
-    await pool.query(
-      `insert into session (id, "expiresAt", token, "updatedAt", "userId") values ($1, now() + interval '1 day', $2, now(), $3)`,
-      [`s-${id}`, token, id],
-    );
-    const signature = createHmac("sha256", SECRET).update(token).digest("base64");
-    return `better-auth.session_token=${encodeURIComponent(`${token}.${signature}`)}`;
-  }
-
-  const browser = { accept: "text/html", "sec-fetch-mode": "navigate" };
-
-  async function target(response: Response): Promise<string> {
-    const location = response.headers.get("location");
-    if (location) return location;
-    const body = (await response.json()) as { url?: string };
-    return body.url ?? "";
-  }
+  const signIn = (id: string, email: string) => signInUser(pool, id, email);
 
   /** Registers as the extension's service worker does, for its API's resource. */
   async function register(call: ReturnType<typeof app>["call"]) {
-    const response = await call("/api/auth/oauth2/register", {
-      method: "POST",
-      headers: { "content-type": "application/json", origin: EXTENSION_ORIGIN },
-      body: JSON.stringify({
+    const response = await registerClient(
+      call,
+      {
         client_name: "Clippings for Chrome",
         redirect_uris: [REDIRECT_URI],
-        token_endpoint_auth_method: "none",
         grant_types: ["authorization_code", "refresh_token"],
         response_types: ["code"],
         resources: [apiResource],
-      }),
-    });
+      },
+      { origin: EXTENSION_ORIGIN },
+    );
     expect(response.status).toBe(201);
-    return ((await response.json()) as { client_id: string }).client_id;
-  }
-
-  function pkce() {
-    const verifier = randomBytes(32).toString("base64url");
-    return { verifier, challenge: createHash("sha256").update(verifier).digest("base64url") };
+    return registeredClientId(response);
   }
 
   function authorizePath(
@@ -121,17 +91,13 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
     resources: readonly string[] = [apiResource],
     redirectUri = REDIRECT_URI,
   ) {
-    const params = new URLSearchParams({
-      response_type: "code",
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      state: "state-1",
-      code_challenge: challenge,
-      code_challenge_method: "S256",
+    return authorizePathFor({
+      clientId,
+      challenge,
+      redirectUri,
+      resources,
       scope: "offline_access",
     });
-    for (const resource of resources) params.append("resource", resource);
-    return `/api/auth/oauth2/authorize?${params}`;
   }
 
   /** Signs in as the extension does: authorize, allow on the consent page, trade the code. */
@@ -141,40 +107,13 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
     resources: readonly string[] = [apiResource],
   ) {
     const clientId = await register(setup.call);
-    const { verifier, challenge } = pkce();
-    const consentPage = await target(
-      await setup.call(authorizePath(clientId, challenge, resources), {
-        headers: { cookie, ...browser },
-      }),
+    return connectWith(
+      setup.call,
+      cookie,
+      appOrigin,
+      { clientId, redirectUri: REDIRECT_URI, resources, scope: "offline_access" },
+      { origin: EXTENSION_ORIGIN },
     );
-    expect(consentPage).toMatch(/^\/connect\?/);
-
-    const consent = await setup.call("/api/auth/oauth2/consent", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie, origin: appOrigin },
-      body: JSON.stringify({ accept: true, oauth_query: consentPage.slice("/connect?".length) }),
-    });
-    const callback = new URL(await target(consent));
-    expect(`${callback.origin}/`).toBe(REDIRECT_URI);
-
-    const token = await setup.call("/api/auth/oauth2/token", {
-      method: "POST",
-      headers: {
-        "content-type": "application/x-www-form-urlencoded",
-        origin: EXTENSION_ORIGIN,
-      },
-      body: new URLSearchParams([
-        ["grant_type", "authorization_code"],
-        ["code", callback.searchParams.get("code") ?? ""],
-        ["redirect_uri", REDIRECT_URI],
-        ["client_id", clientId],
-        ["code_verifier", verifier],
-        ...resources.map((resource) => ["resource", resource]),
-      ]),
-    });
-    expect(token.status).toBe(200);
-    const issued = (await token.json()) as { access_token: string; refresh_token?: string };
-    return { ...issued, clientId };
   }
 
   function save(api: ReturnType<typeof app>["api"], url: string, accessToken?: string) {
