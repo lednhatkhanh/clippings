@@ -1,4 +1,11 @@
-import type { ExtensionSaveResponse, ExtensionSignInError } from "@clippings/shared";
+import { browser } from "wxt/browser";
+
+import type {
+  ExtensionSaveResponse,
+  ExtensionSignInError,
+  PaletteName,
+  Tag,
+} from "@clippings/shared";
 
 /**
  * What the popup asks the service worker. The popup makes no network calls: the service worker
@@ -8,10 +15,21 @@ export type PopupRequest =
   | { type: "status" }
   | { type: "signIn" }
   | { type: "signOut" }
-  | { type: "save"; url: string };
+  | { type: "save"; url: string }
+  | { type: "tags" }
+  | { type: "setTags"; clippingId: string; tags: string[] }
+  | { type: "refreshPalette" };
 
 /** Why the last sign-in didn't finish, for the popup to say. */
 export type SignInProblem = ExtensionSignInError | "cancelled" | "failed";
+
+/** What the extension's pages say about each sign-in problem. */
+export const SIGN_IN_PROBLEMS: Record<SignInProblem, string> = {
+  not_allowlisted: "That Google account isn't on this Clippings' list. Sign in with another one.",
+  denied: "You chose not to connect the extension.",
+  cancelled: "Sign-in didn't finish. Try again.",
+  failed: "Couldn't sign in. Try again.",
+};
 
 export interface StatusResponse {
   signedIn: boolean;
@@ -29,6 +47,21 @@ export interface PopupResponses {
   signIn: { signedIn: boolean };
   signOut: { signedIn: false };
   save: SaveResult;
+  /** Null when the tags couldn't be read: a new tag can still be typed. */
+  tags: { tags: Tag[] | null };
+  setTags: TagsReply;
+  /** Null when the palette couldn't be read; the stored one stays. */
+  refreshPalette: { palette: PaletteName | null };
+}
+
+/** How saving the clipping's tags went: "gone" when it was deleted in the meantime. */
+export type TagsReply = { type: "saved"; tags: Tag[] } | { type: "gone" } | { type: "failed" };
+
+/** Asks the service worker, from one of the extension's pages. */
+export function ask<Request extends PopupRequest>(
+  request: Request,
+): Promise<PopupResponses[Request["type"]]> {
+  return browser.runtime.sendMessage(request);
 }
 
 /** The port the popup holds open while it's showing, named so the service worker knows it. */

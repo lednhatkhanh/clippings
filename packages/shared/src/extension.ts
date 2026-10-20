@@ -1,6 +1,8 @@
 import * as z from "zod";
 
+import { PALETTE_NAMES } from "./appearance.ts";
 import { MAX_NOTE_LENGTH } from "./clipping.ts";
+import { MAX_TAG_LENGTH, MAX_TAGS_PER_CLIPPING, TAG_COLORS } from "./tag.ts";
 import { parseWebUrl } from "./url.ts";
 
 /**
@@ -21,11 +23,45 @@ export const extensionSaveRequestSchema = z.object({
 });
 export type ExtensionSaveRequest = z.infer<typeof extensionSaveRequestSchema>;
 
-/** `PATCH /api/extension/clippings/:id`: replace the clipping's note. */
-export const extensionNoteRequestSchema = z.object({
-  note: z.string().max(MAX_NOTE_LENGTH),
+/**
+ * `PATCH /api/extension/clippings/:id`: replace the clipping's note, its tags (by name, creating
+ * new ones) or both.
+ */
+export const extensionUpdateRequestSchema = z
+  .object({
+    note: z.string().max(MAX_NOTE_LENGTH).optional(),
+    tags: z.array(z.string().max(MAX_TAG_LENGTH)).max(MAX_TAGS_PER_CLIPPING).optional(),
+  })
+  .refine(({ note, tags }) => note !== undefined || tags !== undefined);
+export type ExtensionUpdateRequest = z.infer<typeof extensionUpdateRequestSchema>;
+
+/** One of the user's tags, as the popup's tag picker offers it. */
+export const extensionTagSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  color: z.enum(TAG_COLORS),
 });
-export type ExtensionNoteRequest = z.infer<typeof extensionNoteRequestSchema>;
+
+/** `GET /api/extension/tags`: every tag the user has, by name. */
+export const extensionTagsResponseSchema = z.array(extensionTagSchema);
+
+/**
+ * `GET /api/extension/settings`: what the popup takes from the user's settings. Only the palette:
+ * the popup follows the OS for light and dark.
+ */
+export const extensionSettingsSchema = z.object({ palette: z.enum(PALETTE_NAMES) });
+export type ExtensionSettings = z.infer<typeof extensionSettingsSchema>;
+
+/**
+ * What the web app sends the extension (`chrome.runtime.sendMessage` from a Clippings page, which
+ * the extension's `externally_connectable` lets through) when the user picks a palette, so the
+ * popup opens in it next time without waiting for its own refresh.
+ */
+export const extensionPaletteMessageSchema = z.object({
+  type: z.literal("palette"),
+  palette: z.enum(PALETTE_NAMES),
+});
+export type ExtensionPaletteMessage = z.infer<typeof extensionPaletteMessageSchema>;
 
 /** A clipping as the popup shows it. */
 export const extensionClippingSchema = z.object({
@@ -33,6 +69,8 @@ export const extensionClippingSchema = z.object({
   url: z.string(),
   title: z.string(),
   note: z.string(),
+  /** Defaults to none, for a server from before tags reached the extension. */
+  tags: z.array(extensionTagSchema).default([]),
   /** ISO 8601. */
   createdAt: z.string(),
   /** The clipping's detail page in the web app. */
