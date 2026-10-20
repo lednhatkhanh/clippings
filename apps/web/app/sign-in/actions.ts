@@ -5,7 +5,7 @@ import type { Route } from "next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { getAuth } from "@/lib/auth/auth.ts";
+import { getAuth, OAUTH_LOGIN_PAGE } from "@/lib/auth/auth.ts";
 import { closedPage, INVALID_SIGNATURE } from "@/lib/auth/connection.ts";
 
 /**
@@ -25,7 +25,7 @@ export async function signInWithGoogle(formData: FormData) {
       body: {
         provider: "google",
         callbackURL: "/sign-in/complete",
-        errorCallbackURL: oauthQuery ? `/sign-in?${oauthQuery}` : "/sign-in",
+        errorCallbackURL: oauthQuery ? `${OAUTH_LOGIN_PAGE}?${oauthQuery}` : OAUTH_LOGIN_PAGE,
         ...(oauthQuery ? { oauth_query: oauthQuery } : {}),
       },
       headers: await headers(),

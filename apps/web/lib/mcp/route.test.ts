@@ -134,7 +134,8 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
       }),
     });
     expect(token.status).toBe(200);
-    return (await token.json()) as { access_token: string; refresh_token: string };
+    const issued = (await token.json()) as { access_token: string; refresh_token: string };
+    return { ...issued, clientId };
   }
 
   function listTools(mcp: ReturnType<typeof app>["mcp"], accessToken?: string) {
@@ -182,9 +183,24 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
     const cookie = await signIn("ada", ALLOWED);
     const tokens = await connect(setup, cookie, await register(setup.call));
 
-    expect(tokens.refresh_token).toBeTruthy();
     const response = await listTools(setup.mcp, tokens.access_token);
     expect(response.status).toBe(200);
+
+    // The refresh token rotates: a refresh returns a new pair, and the new access token works.
+    const refresh = await setup.call("/api/auth/oauth2/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: tokens.refresh_token,
+        client_id: tokens.clientId,
+        resource: RESOURCE,
+      }),
+    });
+    expect(refresh.status).toBe(200);
+    const refreshed = (await refresh.json()) as { access_token: string; refresh_token: string };
+    expect(refreshed.refresh_token).not.toBe(tokens.refresh_token);
+    expect((await listTools(setup.mcp, refreshed.access_token)).status).toBe(200);
   });
 
   it("asks for consent every time, even after the user allowed the client", async () => {
