@@ -9,7 +9,8 @@
     "build": "wxt build",
     "lint": "oxlint -c ../../.oxlintrc.json .",
     "format:check": "oxfmt --check -c ../../.oxfmtrc.json .",
-    "typecheck": "wxt prepare && tsc --noEmit",
+    "typegen": "wxt prepare",
+    "typecheck": "tsc --noEmit",
     "zip": "wxt zip",
     "test": "vitest run"
   },
