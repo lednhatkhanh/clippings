@@ -39,9 +39,11 @@
  * A row that is deleted fades out, then collapses so its neighbours close the gap; one that comes
  * back (Undo) opens its gap first, then fades in. `components/clippings/clipping-list.tsx` sets
  * `data-presence` and drops the row when `row-collapse` ends. The row is a one-track grid, so the
- * track's `fr` animates its height without measuring it.
+ * track's `fr` animates its height without measuring it. Its column is `minmax(0, 1fr)`: an
+ * implicit `auto` one grows to the content's min-content width, a truncated title's full length.
  */
 @utility row-presence {
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: 1fr;
 
   & > * {
