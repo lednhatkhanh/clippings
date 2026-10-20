@@ -1,7 +1,7 @@
 import { addSeconds, constructNow, isBefore, parseISO, subSeconds } from "date-fns";
 import { browser } from "wxt/browser";
 
-import { EXTENSION_API_PATH, formatIsoUtc } from "@clippings/shared";
+import { EXTENSION_API_PATH, formatIsoUtc, UNKNOWN_CLIENT } from "@clippings/shared";
 
 import type { SignInProblem } from "./messages.ts";
 
@@ -136,6 +136,48 @@ function problemFrom(callback: URL): SignInProblem {
   return "failed";
 }
 
+/** How an authorization in the sign-in window ended. */
+type Authorization =
+  | { kind: "closed" }
+  | { kind: "answered"; callback: URL; verifier: string; redirectUri: string };
+
+/** Opens the sign-in window for this client, and waits for it to send the browser back. */
+async function authorize(clientId: string): Promise<Authorization> {
+  const { verifier, challenge } = await pkce();
+  const state = randomString(16);
+  const redirectUri = browser.identity.getRedirectURL();
+  const url = new URL(`${AUTH_URL}/oauth2/authorize`);
+  url.search = new URLSearchParams({
+    response_type: "code",
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    scope: "offline_access",
+    state,
+    code_challenge: challenge,
+    code_challenge_method: "S256",
+    resource: API_RESOURCE,
+  }).toString();
+
+  let responseUrl: string | undefined;
+  try {
+    responseUrl = await browser.identity.launchWebAuthFlow({
+      url: url.toString(),
+      interactive: true,
+    });
+  } catch {
+    // The window was closed, or its page didn't load, before the authorization came back.
+    return { kind: "closed" };
+  }
+  const callback = new URL(responseUrl ?? "");
+  if (callback.searchParams.get("state") !== state) throw new Error("The state didn't match");
+  return { kind: "answered", callback, verifier, redirectUri };
+}
+
+/** Whether the authorization server said it doesn't know this install's OAuth client. */
+const isUnknownClient = (callback: URL) =>
+  callback.searchParams.get("error") === "invalid_client" &&
+  callback.searchParams.get("error_description") === UNKNOWN_CLIENT;
+
 /**
  * Signs in through the Clippings authorization server, in a browser window: Google sign-in with
  * the allowlist, then the consent page. The authorization code comes back to the extension's
@@ -145,38 +187,31 @@ function problemFrom(callback: URL): SignInProblem {
 export async function signIn(): Promise<boolean> {
   await setSignInProblem(null);
   try {
-    const clientId = (await readStored()).clientId ?? (await registerClient());
-    const { verifier, challenge } = await pkce();
-    const state = randomString(16);
-    const redirectUri = browser.identity.getRedirectURL();
-    const authorize = new URL(`${AUTH_URL}/oauth2/authorize`);
-    authorize.search = new URLSearchParams({
-      response_type: "code",
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      scope: "offline_access",
-      state,
-      code_challenge: challenge,
-      code_challenge_method: "S256",
-      resource: API_RESOURCE,
-    }).toString();
-
-    let responseUrl: string | undefined;
-    try {
-      responseUrl = await browser.identity.launchWebAuthFlow({
-        url: authorize.toString(),
-        interactive: true,
-      });
-    } catch {
-      // The window was closed before the authorization came back. The client stays: registration
-      // is open to anyone, so a new client for every cancelled sign-in would pile up on the
-      // server. The token endpoint is what says a client is unknown (`requestTokens`).
+    const storedClientId = (await readStored()).clientId;
+    let clientId = storedClientId ?? (await registerClient());
+    let authorization = await authorize(clientId);
+    if (
+      storedClientId &&
+      authorization.kind === "answered" &&
+      isUnknownClient(authorization.callback)
+    ) {
+      // The server has lost the client this install registered (a restored database, a reset
+      // branch, a build pointed at another origin) and sends the window back with a say-so
+      // rather than an error page: ask again with a new one. Only a stored client is replaced,
+      // so a server that keeps saying so about a fresh one ends in "failed".
+      await browser.storage.local.remove("clientId");
+      clientId = await registerClient();
+      authorization = await authorize(clientId);
+    }
+    if (authorization.kind === "closed") {
+      // The client stays: registration is open to anyone, so a new client for every cancelled
+      // sign-in would pile up on the server. The server says a client is unknown when the window
+      // is sent back (above) and at the token endpoint (`requestTokens`), never by closing it.
       await setSignInProblem("cancelled");
       return false;
     }
 
-    const callback = new URL(responseUrl ?? "");
-    if (callback.searchParams.get("state") !== state) throw new Error("The state didn't match");
+    const { callback, verifier, redirectUri } = authorization;
     if (callback.searchParams.has("error")) {
       await setSignInProblem(problemFrom(callback));
       return false;

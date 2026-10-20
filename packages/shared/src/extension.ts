@@ -103,6 +103,13 @@ export type ExtensionSaveResponse = z.infer<typeof extensionSaveResponseSchema>;
  */
 export type ExtensionSignInError = "not_allowlisted" | "denied";
 
+/**
+ * The `error_description` of the `invalid_client` error the authorization server sends back to the
+ * extension when it doesn't know the extension's OAuth client (after a database restore, say):
+ * the extension registers a new one and starts again.
+ */
+export const UNKNOWN_CLIENT = "unknown_client";
+
 /** Why the API refused a request, in the body of a 4xx answer. */
 export const EXTENSION_API_ERRORS = [
   "invalid_token",
