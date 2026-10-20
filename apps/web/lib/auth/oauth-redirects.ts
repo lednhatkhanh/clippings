@@ -1,3 +1,5 @@
+import { isExtensionRedirectUri } from "@/lib/extension/origins.ts";
+
 /** Where claude.ai sends a custom connector's authorization back to. */
 export const CLAUDE_REDIRECT_URIS: readonly string[] = [
   "https://claude.ai/api/mcp/auth_callback",
@@ -7,13 +9,14 @@ export const CLAUDE_REDIRECT_URIS: readonly string[] = [
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
 /**
- * Whether an authorization may be sent to this redirect URI: claude.ai's callback, or a loopback
- * port on this machine, where Claude Code listens. The OAuth provider has already matched it
- * against the client's registered URIs; this narrows every client, however it registered, to
- * the places Clippings expects.
+ * Whether an authorization may be sent to this redirect URI: claude.ai's callback, a loopback
+ * port on this machine, where Claude Code listens, or a trusted extension's `chromiumapp.org`
+ * redirect. The OAuth provider has already matched it against the client's registered URIs; this
+ * narrows every client, however it registered, to the places Clippings expects.
  */
-export function isAllowedRedirectUri(uri: string): boolean {
+export function isAllowedRedirectUri(uri: string, extensionIds: readonly string[] = []): boolean {
   if (CLAUDE_REDIRECT_URIS.includes(uri)) return true;
+  if (isExtensionRedirectUri(uri, extensionIds)) return true;
 
   let url: URL;
   try {

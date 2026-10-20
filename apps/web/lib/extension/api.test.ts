@@ -1,0 +1,355 @@
+import { createHash, createHmac, randomBytes } from "node:crypto";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { createAuth } from "@/lib/auth/auth.ts";
+import { mcpResourceUrl } from "@/lib/mcp/resource.ts";
+import { createDatabase, createPool } from "@clippings/db";
+import {
+  createServiceFixture,
+  TEST_DATABASE_URL,
+  type ServiceFixture,
+} from "@clippings/db/testing";
+import { CLIPPINGS_EXTENSION_ID, type ExtensionSaveResponse } from "@clippings/shared";
+
+import { createExtensionApi } from "./api.ts";
+import { extensionOrigin, extensionRedirectUri, extensionResourceUrl } from "./origins.ts";
+
+const SECRET = "test-secret-test-secret-test-secret-0123";
+const EXTENSION_ORIGIN = extensionOrigin(CLIPPINGS_EXTENSION_ID);
+const REDIRECT_URI = extensionRedirectUri(CLIPPINGS_EXTENSION_ID);
+const ALLOWED = "ada@example.com";
+
+describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its API", () => {
+  let fixture: ServiceFixture;
+  let pool: ReturnType<typeof createPool>;
+  // Each test's database signs with its own keys, and the verifier caches keys by their URL: a
+  // port per test keeps one test from verifying with another's.
+  let port = 4000;
+  let appOrigin: string;
+  let apiResource: string;
+
+  /** The app's auth and extension API with this allowlist, on the test database. */
+  function app(allowedEmails: string) {
+    const auth = createAuth({
+      database: createDatabase(pool),
+      baseURL: appOrigin,
+      secret: SECRET,
+      allowedEmails,
+      google: { clientId: "test", clientSecret: "test" },
+      extensionIds: [CLIPPINGS_EXTENSION_ID],
+    });
+    const api = createExtensionApi({
+      auth,
+      clippings: fixture.service,
+      resource: apiResource,
+      allowedEmails,
+      extensionIds: [CLIPPINGS_EXTENSION_ID],
+    });
+    // The API fetches the signing keys from the app's own URL.
+    vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
+      auth.handler(new Request(input, init)),
+    );
+    const call = (path: string, init?: RequestInit) =>
+      auth.handler(new Request(`${appOrigin}${path}`, init));
+    return { auth, api, call };
+  }
+
+  /** A signed-in browser for this user: their session cookie, as Better Auth signs it. */
+  async function signIn(id: string, email: string) {
+    await pool.query(
+      `insert into "user" (id, name, email, "emailVerified") values ($1, $1, $2, true)`,
+      [id, email],
+    );
+    const token = `session-${id}-${randomBytes(8).toString("hex")}`;
+    await pool.query(
+      `insert into session (id, "expiresAt", token, "updatedAt", "userId") values ($1, now() + interval '1 day', $2, now(), $3)`,
+      [`s-${id}`, token, id],
+    );
+    const signature = createHmac("sha256", SECRET).update(token).digest("base64");
+    return `better-auth.session_token=${encodeURIComponent(`${token}.${signature}`)}`;
+  }
+
+  const browser = { accept: "text/html", "sec-fetch-mode": "navigate" };
+
+  async function target(response: Response): Promise<string> {
+    const location = response.headers.get("location");
+    if (location) return location;
+    const body = (await response.json()) as { url?: string };
+    return body.url ?? "";
+  }
+
+  /** Registers as the extension's service worker does, for its API's resource. */
+  async function register(call: ReturnType<typeof app>["call"]) {
+    const response = await call("/api/auth/oauth2/register", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: EXTENSION_ORIGIN },
+      body: JSON.stringify({
+        client_name: "Clippings for Chrome",
+        redirect_uris: [REDIRECT_URI],
+        token_endpoint_auth_method: "none",
+        grant_types: ["authorization_code", "refresh_token"],
+        response_types: ["code"],
+        resources: [apiResource],
+      }),
+    });
+    expect(response.status).toBe(201);
+    return ((await response.json()) as { client_id: string }).client_id;
+  }
+
+  function pkce() {
+    const verifier = randomBytes(32).toString("base64url");
+    return { verifier, challenge: createHash("sha256").update(verifier).digest("base64url") };
+  }
+
+  function authorizePath(clientId: string, challenge: string, resource: string = apiResource) {
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: clientId,
+      redirect_uri: REDIRECT_URI,
+      state: "state-1",
+      code_challenge: challenge,
+      code_challenge_method: "S256",
+      scope: "offline_access",
+      resource,
+    });
+    return `/api/auth/oauth2/authorize?${params}`;
+  }
+
+  /** Signs in as the extension does: authorize, allow on the consent page, trade the code. */
+  async function connect(
+    setup: ReturnType<typeof app>,
+    cookie: string,
+    resource: string = apiResource,
+  ) {
+    const clientId = await register(setup.call);
+    const { verifier, challenge } = pkce();
+    const consentPage = await target(
+      await setup.call(authorizePath(clientId, challenge, resource), {
+        headers: { cookie, ...browser },
+      }),
+    );
+    expect(consentPage).toMatch(/^\/connect\?/);
+
+    const consent = await setup.call("/api/auth/oauth2/consent", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie, origin: appOrigin },
+      body: JSON.stringify({ accept: true, oauth_query: consentPage.slice("/connect?".length) }),
+    });
+    const callback = new URL(await target(consent));
+    expect(`${callback.origin}/`).toBe(REDIRECT_URI);
+
+    const token = await setup.call("/api/auth/oauth2/token", {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        origin: EXTENSION_ORIGIN,
+      },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code: callback.searchParams.get("code") ?? "",
+        redirect_uri: REDIRECT_URI,
+        client_id: clientId,
+        code_verifier: verifier,
+        resource,
+      }),
+    });
+    expect(token.status).toBe(200);
+    const issued = (await token.json()) as { access_token: string; refresh_token?: string };
+    return { ...issued, clientId };
+  }
+
+  function save(api: ReturnType<typeof app>["api"], url: string, accessToken?: string) {
+    return api.save(
+      new Request(`${apiResource}/clippings`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: EXTENSION_ORIGIN,
+          ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({ url }),
+      }),
+    );
+  }
+
+  function updateNote(
+    api: ReturnType<typeof app>["api"],
+    id: string,
+    note: string,
+    accessToken: string,
+  ) {
+    return api.updateNote(
+      new Request(`${apiResource}/clippings/${id}`, {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+          origin: EXTENSION_ORIGIN,
+          authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ note }),
+      }),
+      id,
+    );
+  }
+
+  beforeEach(async () => {
+    port += 1;
+    appOrigin = `http://localhost:${port}`;
+    apiResource = extensionResourceUrl(appOrigin);
+    fixture = await createServiceFixture();
+    pool = createPool(fixture.databaseUrl);
+  });
+
+  afterEach(async () => {
+    vi.unstubAllGlobals();
+    await pool.end();
+    await fixture.close();
+  });
+
+  it("answers the extension's CORS preflight, and no one else's", () => {
+    const { api } = app(ALLOWED);
+    const preflight = (origin: string) =>
+      api.preflight(
+        new Request(`${apiResource}/clippings`, {
+          method: "OPTIONS",
+          headers: {
+            origin,
+            "access-control-request-method": "POST",
+            "access-control-request-headers": "authorization, content-type",
+          },
+        }),
+      );
+
+    const ours = preflight(EXTENSION_ORIGIN);
+    expect(ours.status).toBe(204);
+    expect(ours.headers.get("access-control-allow-origin")).toBe(EXTENSION_ORIGIN);
+    expect(ours.headers.get("access-control-allow-methods")).toBe("POST, PATCH");
+    expect(ours.headers.get("access-control-allow-headers")).toBe("authorization, content-type");
+    // A bearer token, never cookies.
+    expect(ours.headers.get("access-control-allow-credentials")).toBeNull();
+
+    for (const origin of ["https://evil.example", extensionOrigin("a".repeat(32)), appOrigin]) {
+      const theirs = preflight(origin);
+      expect(theirs.status).toBe(403);
+      expect(theirs.headers.get("access-control-allow-origin")).toBeNull();
+    }
+  });
+
+  it("challenges a call without a token, and ignores a session cookie", async () => {
+    const setup = app(ALLOWED);
+    const cookie = await signIn("ada", ALLOWED);
+
+    const response = await setup.api.save(
+      new Request(`${apiResource}/clippings`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: EXTENSION_ORIGIN, cookie },
+        body: JSON.stringify({ url: "https://example.com/a" }),
+      }),
+    );
+    expect(response.status).toBe(401);
+    expect(response.headers.get("www-authenticate")).toBe("Bearer");
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(response.headers.get("access-control-allow-origin")).toBe(EXTENSION_ORIGIN);
+  });
+
+  it("signs in with PKCE, saves with source extension, then finds the same page", async () => {
+    const setup = app(ALLOWED);
+    const tokens = await connect(setup, await signIn("ada", ALLOWED));
+    expect(tokens.refresh_token).toBeTruthy();
+
+    const first = await save(setup.api, "https://example.com/a?utm_source=x", tokens.access_token);
+    expect(first.status).toBe(201);
+    expect(first.headers.get("set-cookie")).toBeNull();
+    const created = (await first.json()) as ExtensionSaveResponse;
+    expect(created.status).toBe("created");
+    expect(created.clipping.link).toBe(`${appOrigin}/c/${created.clipping.id}`);
+
+    const stored = await fixture.service.getClipping("ada", created.clipping.id);
+    expect(stored).toMatchObject({ source: "extension", clientId: tokens.clientId });
+
+    const noted = await updateNote(setup.api, created.clipping.id, "Worth it", tokens.access_token);
+    expect(noted.status).toBe(200);
+
+    const again = await save(setup.api, "https://example.com/a", tokens.access_token);
+    expect(again.status).toBe(200);
+    expect(await again.json()).toMatchObject({
+      status: "existing",
+      clipping: {
+        id: created.clipping.id,
+        note: "Worth it",
+        createdAt: created.clipping.createdAt,
+      },
+    });
+  });
+
+  it("keeps each user to their own clippings", async () => {
+    const setup = app(`${ALLOWED} bob@example.com`);
+    const ada = await connect(setup, await signIn("ada", ALLOWED));
+    const bob = await connect(setup, await signIn("bob", "bob@example.com"));
+
+    const adas = (await (
+      await save(setup.api, "https://example.com/a", ada.access_token)
+    ).json()) as ExtensionSaveResponse;
+    const response = await updateNote(setup.api, adas.clipping.id, "Mine now", bob.access_token);
+
+    expect(response.status).toBe(404);
+    expect((await fixture.service.getClipping("ada", adas.clipping.id))?.note).toBe("");
+  });
+
+  it("refuses bad input", async () => {
+    const setup = app(ALLOWED);
+    const tokens = await connect(setup, await signIn("ada", ALLOWED));
+
+    const notAPage = await save(setup.api, "chrome://extensions", tokens.access_token);
+    expect(notAPage.status).toBe(400);
+    expect(await notAPage.json()).toEqual({ error: "invalid_url" });
+
+    const saved = (await (
+      await save(setup.api, "https://example.com/a", tokens.access_token)
+    ).json()) as ExtensionSaveResponse;
+    const long = await updateNote(
+      setup.api,
+      saved.clipping.id,
+      "x".repeat(10_001),
+      tokens.access_token,
+    );
+    expect(long.status).toBe(400);
+  });
+
+  it("refuses a token issued for /mcp", async () => {
+    const setup = app(ALLOWED);
+    const mcpTokens = await connect(setup, await signIn("ada", ALLOWED), mcpResourceUrl(appOrigin));
+
+    const response = await save(setup.api, "https://example.com/a", mcpTokens.access_token);
+    expect(response.status).toBe(401);
+    expect(response.headers.get("www-authenticate")).toBe('Bearer error="invalid_token"');
+  });
+
+  it("refuses an account taken off the allowlist, and sends its sign-in back to the extension", async () => {
+    const setup = app(`${ALLOWED} bob@example.com`);
+    const bob = await signIn("bob", "bob@example.com");
+    const tokens = await connect(setup, bob);
+
+    // Bob is taken off the list; his session and tokens are still around.
+    const later = app(ALLOWED);
+    const response = await save(later.api, "https://example.com/a", tokens.access_token);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "not_allowlisted" });
+
+    const clientId = await register(later.call);
+    const authorize = new URL(
+      await target(
+        await later.call(authorizePath(clientId, pkce().challenge), {
+          headers: { cookie: bob, ...browser },
+        }),
+      ),
+    );
+    expect(`${authorize.origin}/`).toBe(REDIRECT_URI);
+    expect(Object.fromEntries(authorize.searchParams)).toEqual({
+      error: "access_denied",
+      error_description: "not_allowlisted",
+      state: "state-1",
+    });
+  });
+});

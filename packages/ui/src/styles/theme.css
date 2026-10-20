@@ -317,6 +317,19 @@
 }
 
 /*
+ * The extension's "Saved" check pops in: scale on the expressive default spatial spring, the
+ * other place the expressive scheme is used, and opacity on default effects. Reduced motion zeroes
+ * the spatial duration, so it only fades.
+ */
+@utility saved-pop {
+  animation:
+    tag-pop-scale var(--md-sys-motion-expressive-spring-default-spatial-duration)
+      var(--md-sys-motion-expressive-spring-default-spatial),
+    tag-pop-fade var(--md-sys-motion-spring-default-effects-duration)
+      var(--md-sys-motion-spring-default-effects);
+}
+
+/*
  * A menu grows from where it meets its trigger (React Aria's `--trigger-anchor-point`): scale
  * 0.8 → 1 on the fast spatial spring and opacity on fast effects, as Compose's dropdown menu does,
  * and leaves the same way. Reduced motion zeroes the spatial duration, so it only fades.

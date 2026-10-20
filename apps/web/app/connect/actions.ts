@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 
 import { getAuth, OAUTH_LOGIN_PAGE } from "@/lib/auth/auth.ts";
 import { closedPage, INVALID_SIGNATURE } from "@/lib/auth/connection.ts";
+import { extensionErrorRedirect, parseExtensionIds } from "@/lib/extension/origins.ts";
 
 const readOAuthQuery = (formData: FormData) => {
   const value = formData.get("oauth_query");
@@ -51,13 +52,22 @@ export async function allowConnectionAction(formData: FormData): Promise<void> {
     console.error("Couldn't complete the OAuth consent", error);
     redirect(closedPage("failed"));
   }
-  // The client's redirect URI: claude.ai's callback or Claude Code's loopback port.
+  // The client's redirect URI: claude.ai's callback, Claude Code's loopback port or the extension.
   redirect(url as Route);
 }
 
-/** Deny: no code for the client, and the closing page for the user. */
-export async function denyConnectionAction(): Promise<void> {
-  redirect(closedPage("denied"));
+/**
+ * Deny: no code for the client, and the closing page for the user. The extension's sign-in
+ * window is closed by its redirect instead, so it gets the refusal and the popup says so.
+ */
+export async function denyConnectionAction(formData: FormData): Promise<void> {
+  const toExtension = extensionErrorRedirect(
+    new URLSearchParams(readOAuthQuery(formData)),
+    parseExtensionIds(process.env.EXTENSION_IDS),
+    "access_denied",
+    "denied",
+  );
+  redirect((toExtension ?? closedPage("denied")) as Route);
 }
 
 /** "Not you?": signs out and starts sign-in again, keeping the authorization request. */

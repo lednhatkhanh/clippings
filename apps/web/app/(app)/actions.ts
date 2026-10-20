@@ -7,9 +7,8 @@ import { requireUserId } from "@/lib/auth/session.ts";
 import { loadBrowseParams } from "@/lib/clippings/browse-params.ts";
 import { loadRows, toRow, type ClippingRowData, type RowsPage } from "@/lib/clippings/rows.ts";
 import { getClippings } from "@/lib/clippings/service.ts";
-import { formatAbsoluteDate } from "@/lib/format-date.ts";
 import { InvalidTagsError, InvalidUrlError, NoteTooLongError } from "@clippings/db";
-import type { Tag } from "@clippings/shared";
+import { formatAbsoluteDate, type Tag } from "@clippings/shared";
 
 export type SaveOutcome =
   | { status: "created"; clippingId: string }

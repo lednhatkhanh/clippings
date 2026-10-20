@@ -19,8 +19,7 @@ import { getSession, signInRedirect } from "@/lib/auth/session.ts";
 import { domainOf } from "@/lib/clippings/rows.ts";
 import { getClippings } from "@/lib/clippings/service.ts";
 import { SOURCE_LABELS } from "@/lib/clippings/source-labels.ts";
-import { formatAbsoluteDate } from "@/lib/format-date.ts";
-import type { Clipping, ClippingStatus } from "@clippings/shared";
+import { formatAbsoluteDate, type Clipping, type ClippingStatus } from "@clippings/shared";
 import { Disclosure, Icon, LinkButton } from "@clippings/ui";
 
 const STATUS_LABELS: Record<ClippingStatus, string> = {
