@@ -1,4 +1,5 @@
 import { getAuth } from "@/lib/auth/auth.ts";
+import { getConnections } from "@/lib/auth/connections.ts";
 import { getClippings } from "@/lib/clippings/service.ts";
 
 import { createExtensionApi, type ExtensionApi } from "./api.ts";
@@ -11,6 +12,7 @@ export function getExtensionApi(): ExtensionApi {
   return (api ??= createExtensionApi({
     auth: getAuth(),
     clippings: getClippings(),
+    connections: getConnections(),
     resource: extensionResourceUrl(),
     allowedEmails: process.env.ALLOWED_EMAILS,
     extensionIds: parseExtensionIds(process.env.EXTENSION_IDS),

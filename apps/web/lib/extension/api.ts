@@ -4,11 +4,17 @@ import {
   requestToResourceInput,
   verifyAccessTokenRequest,
 } from "better-auth/oauth2";
+import { fromUnixTime } from "date-fns";
 import type * as z from "zod";
 
 import { isAllowlisted, parseAllowlist } from "@/lib/auth/allowlist.ts";
 import type { createAuth } from "@/lib/auth/auth.ts";
-import { InvalidUrlError, NoteTooLongError, type ClippingsService } from "@clippings/db";
+import {
+  InvalidUrlError,
+  NoteTooLongError,
+  type ClippingsService,
+  type ConnectionsService,
+} from "@clippings/db";
 import {
   extensionNoteRequestSchema,
   extensionSaveRequestSchema,
@@ -42,12 +48,14 @@ const ALLOWED_HEADERS = "authorization, content-type";
 export function createExtensionApi({
   auth,
   clippings,
+  connections,
   resource,
   allowedEmails,
   extensionIds,
 }: {
   auth: ReturnType<typeof createAuth>;
   clippings: ExtensionClippings;
+  connections: Pick<ConnectionsService, "recordUse">;
   /** The resource identifier the extension's tokens are issued for. */
   resource: string;
   allowedEmails: string | undefined;
@@ -122,6 +130,15 @@ export function createExtensionApi({
     }
     const user = await context.internalAdapter.findUserById(claims.sub);
     if (!isAllowlisted(allowlist, user?.email)) return refuse(request, 403, "not_allowlisted");
+
+    // Access tokens are JWTs nothing stores: one issued before the user revoked the extension in
+    // Settings is refused here, as at `/mcp`. Every other call is recorded as its last use.
+    const issuedAt = typeof claims.iat === "number" ? fromUnixTime(claims.iat) : undefined;
+    if (!issuedAt || !(await connections.recordUse(claims.sub, clientId, issuedAt))) {
+      return refuse(request, 401, "invalid_token", {
+        "www-authenticate": 'Bearer error="invalid_token"',
+      });
+    }
     return { userId: claims.sub, clientId };
   }
 

@@ -10,6 +10,7 @@ export {
   oauthClient,
   oauthClientAssertion,
   oauthClientResource,
+  oauthConnections,
   oauthConsent,
   oauthRefreshToken,
   oauthResource,
@@ -53,3 +54,8 @@ export {
   InvalidSettingsError,
   type SettingsService,
 } from "./settings/service.ts";
+export {
+  createConnectionsService,
+  type Connection,
+  type ConnectionsService,
+} from "./connections/service.ts";

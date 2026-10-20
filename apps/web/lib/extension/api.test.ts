@@ -5,7 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAuth } from "@/lib/auth/auth.ts";
 import { createMcpRoute } from "@/lib/mcp/handler.ts";
 import { mcpResourceUrl } from "@/lib/mcp/resource.ts";
-import { createDatabase, createPool } from "@clippings/db";
+import {
+  createConnectionsService,
+  createDatabase,
+  createPool,
+  systemClock,
+  type ConnectionsService,
+} from "@clippings/db";
 import {
   createServiceFixture,
   TEST_DATABASE_URL,
@@ -29,6 +35,9 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
   let port = 4000;
   let appOrigin: string;
   let apiResource: string;
+  // On the real clock: a revocation must land after the tokens' `iat`, which the fixture's
+  // fixed clock doesn't.
+  let connections: ConnectionsService;
 
   /** The app's auth and extension API with this allowlist, on the test database. */
   function app(allowedEmails: string) {
@@ -43,6 +52,7 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
     const api = createExtensionApi({
       auth,
       clippings: fixture.service,
+      connections,
       resource: apiResource,
       allowedEmails,
       extensionIds: [CLIPPINGS_EXTENSION_ID],
@@ -205,6 +215,7 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
     apiResource = extensionResourceUrl(appOrigin);
     fixture = await createServiceFixture();
     pool = createPool(fixture.databaseUrl);
+    connections = createConnectionsService({ pool, clock: systemClock });
   });
 
   afterEach(async () => {
@@ -289,6 +300,19 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
     });
   });
 
+  it("refuses the extension's tokens once the user revokes it in Settings", async () => {
+    const setup = app(ALLOWED);
+    const tokens = await connect(setup, await signIn("ada", ALLOWED));
+    expect((await save(setup.api, "https://example.com/a", tokens.access_token)).status).toBe(201);
+
+    // `iat` is whole seconds: revoke in a later second than the token was issued.
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    expect(await connections.revokeConnection("ada", tokens.clientId)).toBe(true);
+
+    const refused = await save(setup.api, "https://example.com/b", tokens.access_token);
+    expect(refused.status).toBe(401);
+  });
+
   it("keeps each user to their own clippings", async () => {
     const setup = app(`${ALLOWED} bob@example.com`);
     const ada = await connect(setup, await signIn("ada", ALLOWED));
@@ -351,6 +375,7 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
     const mcp = createMcpRoute({
       auth: setup.auth,
       clippings: fixture.service,
+      connections,
       resource: mcpResourceUrl(appOrigin),
       allowedEmails: ALLOWED,
     });

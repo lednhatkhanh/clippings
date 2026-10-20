@@ -1,10 +1,12 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { getAuth } from "@/lib/auth/auth.ts";
-import { getSession } from "@/lib/auth/session.ts";
+import { getConnections } from "@/lib/auth/connections.ts";
+import { getSession, requireUserId } from "@/lib/auth/session.ts";
 import { getSettings } from "@/lib/settings/service.ts";
 import { pickAppearance, type Appearance } from "@clippings/shared";
 
@@ -19,4 +21,16 @@ export async function saveAppearanceAction(changes: Partial<Appearance>): Promis
 export async function signOutAction(): Promise<void> {
   await getAuth().api.signOut({ headers: await headers() });
   redirect("/sign-in");
+}
+
+/**
+ * Revokes one of the user's connected clients: its tokens stop working at once, and it has to be
+ * connected again. False when the client isn't connected to this user.
+ */
+export async function revokeConnectionAction(clientId: string): Promise<boolean> {
+  const userId = await requireUserId();
+  if (typeof clientId !== "string") return false;
+  const revoked = await getConnections().revokeConnection(userId, clientId);
+  if (revoked) revalidatePath("/settings");
+  return revoked;
 }

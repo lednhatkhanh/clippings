@@ -18,3 +18,11 @@ export function formatClippingDate(iso: string, now: Date): string {
   if (days < 7) return relative.format(-days, "day");
   return formatAbsoluteDate(iso, now);
 }
+
+/** "Last used 3 hours ago", "Last used on 3 Oct", or "Not used yet" for a connected client. */
+export function formatLastUsed(iso: string | null, now: Date): string {
+  if (!iso) return "Not used yet";
+  if (differenceInMinutes(now, parseISO(iso)) < 1) return "Last used just now";
+  const label = formatClippingDate(iso, now);
+  return label === formatAbsoluteDate(iso, now) ? `Last used on ${label}` : `Last used ${label}`;
+}
