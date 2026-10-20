@@ -18,11 +18,13 @@ import {
   type SettingsService,
 } from "@clippings/db";
 import {
+  extensionLookupRequestSchema,
   extensionSaveRequestSchema,
   extensionUpdateRequestSchema,
   type Clipping,
   type ExtensionApiError,
   type ExtensionClipping,
+  type ExtensionLookupResponse,
   type ExtensionSaveResponse,
   type ExtensionSettings,
   type Tag,
@@ -33,7 +35,7 @@ import { extensionOrigin } from "./origins.ts";
 /** What the API needs from the Clippings service. */
 export type ExtensionClippings = Pick<
   ClippingsService,
-  "saveClipping" | "updateClipping" | "listTags"
+  "saveClipping" | "updateClipping" | "listTags" | "hasClippingOfUrl"
 >;
 
 /** Who is calling: the token's user and the OAuth client (the extension install) it went to. */
@@ -46,10 +48,10 @@ const ALLOWED_METHODS = "GET, POST, PATCH";
 const ALLOWED_HEADERS = "authorization, content-type";
 
 /**
- * The extension's REST API: it saves the current page and edits its note and tags, and reads the
- * user's tags and palette, for the user its bearer
- * token acts for. Only the token counts: cookies are never read, so a page the user visits can't
- * act through their web session, and no answer sets one. CORS lets the trusted extensions' origins
+ * The extension's REST API: it saves the current page and edits its note and tags, reads the
+ * user's tags and palette, and says whether a page is saved, for the user its bearer token acts
+ * for. Only the token counts: cookies are never read, so a page the user visits can't act through
+ * their web session, and no answer sets one. CORS lets the trusted extensions' origins
  * in; the service worker could call without it, since it holds a host permission, but the API
  * doesn't rely on that.
  */
@@ -218,6 +220,19 @@ export function createExtensionApi({
         if (error instanceof InvalidUrlError) return refuse(request, 400, "invalid_url");
         throw error;
       }
+    },
+
+    /** Whether the caller has saved the page: only that, so the answer carries nothing else. */
+    async lookup(request: Request): Promise<Response> {
+      const caller = await authenticate(request);
+      if (caller instanceof Response) return caller;
+      const body = await readBody(request, extensionLookupRequestSchema);
+      if (!body) return refuse(request, 400, "invalid_request");
+
+      const answer: ExtensionLookupResponse = {
+        saved: await clippings.hasClippingOfUrl(caller.userId, body.url),
+      };
+      return reply(request, answer, 200);
     },
 
     /**

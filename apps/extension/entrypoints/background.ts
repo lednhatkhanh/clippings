@@ -1,6 +1,6 @@
 import { browser, type Browser } from "wxt/browser";
 
-import { listTags, refreshPalette, saveClipping, saveNote, saveTags } from "@/lib/api.ts";
+import { listTags, refreshPalette, saveNote, saveTags } from "@/lib/api.ts";
 import { isSignedIn, signIn, signOut, takeSignInProblem } from "@/lib/auth.ts";
 import {
   NOTE_PORT,
@@ -12,6 +12,9 @@ import {
 } from "@/lib/messages.ts";
 import { openOnboarding } from "@/lib/onboarding.ts";
 import { acceptSharedPalette } from "@/lib/palette.ts";
+import { clearQueue, ensureRetrying } from "@/lib/queue.ts";
+import { saveFromPopup, sendOfflineSaves } from "@/lib/quick-save.ts";
+import { registerQuickSave } from "@/lib/save-triggers.ts";
 
 /**
  * Tag saves, one after another, so an older choice never lands after a newer one. It only lives
@@ -25,10 +28,22 @@ function queueTags(clippingId: string, tags: string[]): Promise<TagsReply> {
   return saved;
 }
 
-/** Signs in, then seeds the palette from the user's settings for the extension's pages. */
+/** After a sign-in, the saves that waited for one go out, and retrying starts again. */
+async function resumeOfflineSaves() {
+  await ensureRetrying();
+  await sendOfflineSaves();
+}
+
+/**
+ * Signs in, then seeds the palette from the user's settings for the extension's pages, and sends
+ * the saves that waited for a sign-in.
+ */
 async function signInAndSeed(): Promise<boolean> {
   const signedIn = await signIn();
-  if (signedIn) await refreshPalette();
+  if (signedIn) {
+    await refreshPalette();
+    void resumeOfflineSaves();
+  }
   return signedIn;
 }
 
@@ -40,9 +55,11 @@ async function answer(request: PopupRequest): Promise<PopupResponses[PopupReques
       return { signedIn: await signInAndSeed() };
     case "signOut":
       await signOut();
+      // Saves made offline are this account's: they must not go to the next one.
+      await clearQueue();
       return { signedIn: false };
     case "save":
-      return saveClipping(request.url);
+      return saveFromPopup(request.url);
     case "tags":
       return { tags: await listTags() };
     case "setTags":
@@ -105,4 +122,6 @@ export default defineBackground(() => {
   browser.runtime.onConnect.addListener((port) => {
     if (port.name === NOTE_PORT) keepNote(port);
   });
+
+  registerQuickSave();
 });
