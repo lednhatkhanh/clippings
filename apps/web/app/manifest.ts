@@ -54,6 +54,13 @@ export default function manifest(): MetadataRoute.Manifest {
         label: "Your clippings on a computer",
       },
     ],
+    // Android's share sheet. A GET needs no service worker; `/share` opens "New clipping" filled
+    // in and saves nothing until Save, since any site can link there too.
+    share_target: {
+      action: "/share",
+      method: "GET",
+      params: { title: "title", text: "text", url: "url" },
+    },
     // Both open the list; the page reads the parameter, acts on it and drops it.
     shortcuts: [
       {

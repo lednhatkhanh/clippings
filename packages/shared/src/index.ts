@@ -1,4 +1,5 @@
-// Shared by web and extension: DTO types, appearance settings, tag names and the URL normalizer.
+// Shared by web and extension: DTO types, appearance settings, tag names, the URL normalizer and
+// the share-sheet link reader.
 export {
   APPEARANCE_DEFAULTS,
   APPEARANCE_KEYS,
@@ -41,4 +42,5 @@ export {
   type TagColor,
   type TagSummary,
 } from "./tag.ts";
+export { extractSharedUrl, type SharedData, type SharedLink } from "./share.ts";
 export { parseWebUrl, type WebUrl } from "./url.ts";
