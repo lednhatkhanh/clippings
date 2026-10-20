@@ -301,6 +301,29 @@ export const oauthClientAssertion = pgTable("oauthClientAssertion", {
   expiresAt: timestamptz("expiresAt").notNull(),
 });
 
+/**
+ * What the app tracks about a client acting for a user, beside Better Auth's tokens: when it last
+ * called, and when the user revoked it. Access tokens are JWTs nobody stores, so `/mcp` refuses
+ * one issued at or before `revoked_at`. One row per user and client, created on first use.
+ */
+export const oauthConnections = pgTable(
+  "oauth_connections",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    clientId: text("client_id")
+      .notNull()
+      .references(() => oauthClient.clientId, { onDelete: "cascade" }),
+    lastUsedAt: timestamptz("last_used_at"),
+    revokedAt: timestamptz("revoked_at"),
+  },
+  (table) => [
+    primaryKey({ name: "oauth_connections_pkey", columns: [table.userId, table.clientId] }),
+    index("oauth_connections_client_id_idx").on(table.clientId),
+  ],
+);
+
 /** Length of every embedding: the stored column's dimension (ADR 0001). */
 export const EMBEDDING_DIMENSIONS = 1024;
 
