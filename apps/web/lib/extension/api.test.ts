@@ -3,6 +3,7 @@ import { createHash, createHmac, randomBytes } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createAuth } from "@/lib/auth/auth.ts";
+import { createMcpRoute } from "@/lib/mcp/handler.ts";
 import { mcpResourceUrl } from "@/lib/mcp/resource.ts";
 import { createDatabase, createPool } from "@clippings/db";
 import {
@@ -102,17 +103,22 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
     return { verifier, challenge: createHash("sha256").update(verifier).digest("base64url") };
   }
 
-  function authorizePath(clientId: string, challenge: string, resource: string = apiResource) {
+  function authorizePath(
+    clientId: string,
+    challenge: string,
+    resources: readonly string[] = [apiResource],
+    redirectUri = REDIRECT_URI,
+  ) {
     const params = new URLSearchParams({
       response_type: "code",
       client_id: clientId,
-      redirect_uri: REDIRECT_URI,
+      redirect_uri: redirectUri,
       state: "state-1",
       code_challenge: challenge,
       code_challenge_method: "S256",
       scope: "offline_access",
-      resource,
     });
+    for (const resource of resources) params.append("resource", resource);
     return `/api/auth/oauth2/authorize?${params}`;
   }
 
@@ -120,12 +126,12 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
   async function connect(
     setup: ReturnType<typeof app>,
     cookie: string,
-    resource: string = apiResource,
+    resources: readonly string[] = [apiResource],
   ) {
     const clientId = await register(setup.call);
     const { verifier, challenge } = pkce();
     const consentPage = await target(
-      await setup.call(authorizePath(clientId, challenge, resource), {
+      await setup.call(authorizePath(clientId, challenge, resources), {
         headers: { cookie, ...browser },
       }),
     );
@@ -145,14 +151,14 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
         "content-type": "application/x-www-form-urlencoded",
         origin: EXTENSION_ORIGIN,
       },
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        code: callback.searchParams.get("code") ?? "",
-        redirect_uri: REDIRECT_URI,
-        client_id: clientId,
-        code_verifier: verifier,
-        resource,
-      }),
+      body: new URLSearchParams([
+        ["grant_type", "authorization_code"],
+        ["code", callback.searchParams.get("code") ?? ""],
+        ["redirect_uri", REDIRECT_URI],
+        ["client_id", clientId],
+        ["code_verifier", verifier],
+        ...resources.map((resource) => ["resource", resource]),
+      ]),
     });
     expect(token.status).toBe(200);
     const issued = (await token.json()) as { access_token: string; refresh_token?: string };
@@ -319,11 +325,80 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
 
   it("refuses a token issued for /mcp", async () => {
     const setup = app(ALLOWED);
-    const mcpTokens = await connect(setup, await signIn("ada", ALLOWED), mcpResourceUrl(appOrigin));
+    const mcpTokens = await connect(setup, await signIn("ada", ALLOWED), [
+      mcpResourceUrl(appOrigin),
+    ]);
 
     const response = await save(setup.api, "https://example.com/a", mcpTokens.access_token);
     expect(response.status).toBe(401);
     expect(response.headers.get("www-authenticate")).toBe('Bearer error="invalid_token"');
+  });
+
+  it("refuses a token issued for both /mcp and the extension API", async () => {
+    const setup = app(ALLOWED);
+    const both = await connect(setup, await signIn("ada", ALLOWED), [
+      apiResource,
+      mcpResourceUrl(appOrigin),
+    ]);
+
+    const response = await save(setup.api, "https://example.com/a", both.access_token);
+    expect(response.status).toBe(401);
+  });
+
+  it("is refused at /mcp with an extension token", async () => {
+    const setup = app(ALLOWED);
+    const tokens = await connect(setup, await signIn("ada", ALLOWED));
+    const mcp = createMcpRoute({
+      auth: setup.auth,
+      clippings: fixture.service,
+      resource: mcpResourceUrl(appOrigin),
+      allowedEmails: ALLOWED,
+    });
+
+    const response = await mcp(
+      new Request(mcpResourceUrl(appOrigin), {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          authorization: `Bearer ${tokens.access_token}`,
+        },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+      }),
+    );
+    expect(response.status).toBe(401);
+  });
+
+  it("keeps the extension API's resource to the extension", async () => {
+    const setup = app(ALLOWED);
+    const loopback = "http://127.0.0.1:43210/callback";
+    const registerFor = (redirectUris: string[], resources?: string[]) =>
+      setup.call("/api/auth/oauth2/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          client_name: "Claude Code",
+          redirect_uris: redirectUris,
+          token_endpoint_auth_method: "none",
+          ...(resources ? { resources } : {}),
+        }),
+      });
+
+    // A client that returns elsewhere can't register for the resource...
+    const refused = await registerFor([loopback], [apiResource]);
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({ error: "invalid_target" });
+    expect((await registerFor([REDIRECT_URI, loopback], [apiResource])).status).toBe(400);
+
+    // ...nor ask for it when it authorizes.
+    const registered = await registerFor([loopback]);
+    const { client_id: clientId } = (await registered.json()) as { client_id: string };
+    const cookie = await signIn("ada", ALLOWED);
+    const authorize = await setup.call(
+      authorizePath(clientId, pkce().challenge, [apiResource], loopback),
+      { headers: { cookie, ...browser } },
+    );
+    expect(authorize.status).toBe(400);
   });
 
   it("refuses an account taken off the allowlist, and sends its sign-in back to the extension", async () => {

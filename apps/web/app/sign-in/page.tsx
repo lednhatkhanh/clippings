@@ -9,6 +9,7 @@ import { signedOAuthQuery } from "@/lib/auth/oauth-query.ts";
 import { RETURN_TO_PARAM, safeReturnPath } from "@/lib/auth/return-path.ts";
 import { getSession } from "@/lib/auth/session.ts";
 import { REJECTED_EMAIL_COOKIE, NOT_ALLOWLISTED } from "@/lib/auth/validate-user.ts";
+import { extensionErrorRedirect, parseExtensionIds } from "@/lib/extension/origins.ts";
 import { ClippingsStackIllustration, LetterboxIllustration } from "@clippings/ui";
 
 import { signInWithGoogle } from "./actions.ts";
@@ -108,6 +109,17 @@ async function SignInContent({ searchParams }: { searchParams: Promise<SearchPar
   if (error && AUTHORIZATION_ERRORS.has(error)) redirect(closedPage("failed"));
 
   if (error === NOT_ALLOWLISTED) {
+    // The extension's sign-in window closes on its redirect, and the popup says so and offers
+    // another sign-in, where Google shows its account chooser.
+    const toExtension = oauthQuery
+      ? extensionErrorRedirect(
+          new URLSearchParams(oauthQuery),
+          parseExtensionIds(process.env.EXTENSION_IDS),
+          "access_denied",
+          NOT_ALLOWLISTED,
+        )
+      : undefined;
+    if (toExtension) redirect(toExtension as Route);
     return (
       <PrivateCard
         email={(await cookies()).get(REJECTED_EMAIL_COOKIE)?.value}

@@ -1,4 +1,4 @@
-import type { ExtensionSaveResponse } from "@clippings/shared";
+import type { ExtensionSaveResponse, ExtensionSignInError } from "@clippings/shared";
 
 /**
  * What the popup asks the service worker. The popup makes no network calls: the service worker
@@ -11,7 +11,7 @@ export type PopupRequest =
   | { type: "save"; url: string };
 
 /** Why the last sign-in didn't finish, for the popup to say. */
-export type SignInProblem = "not_allowlisted" | "denied" | "cancelled" | "failed";
+export type SignInProblem = ExtensionSignInError | "cancelled" | "failed";
 
 export interface StatusResponse {
   signedIn: boolean;
@@ -43,5 +43,5 @@ export type NotePortMessage =
   | { type: "draft"; clippingId: string; note: string }
   | { type: "save" };
 
-/** The service worker's answer on the note port after each save. */
-export type NotePortReply = { type: "saved"; note: string } | { type: "failed" };
+/** The service worker's answer on the note port after each save, with the text it was for. */
+export type NotePortReply = { type: "saved" | "gone" | "failed"; note: string };

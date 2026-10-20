@@ -36,7 +36,7 @@ export const extensionClippingSchema = z.object({
   /** ISO 8601. */
   createdAt: z.string(),
   /** The clipping's detail page in the web app. */
-  link: z.string(),
+  link: z.url(),
 });
 export type ExtensionClipping = z.infer<typeof extensionClippingSchema>;
 
@@ -57,7 +57,6 @@ export const EXTENSION_API_ERRORS = [
   "invalid_token",
   "invalid_request",
   "invalid_url",
-  "note_too_long",
   "not_found",
   "not_allowlisted",
 ] as const;

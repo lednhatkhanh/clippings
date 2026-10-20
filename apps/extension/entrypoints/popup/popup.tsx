@@ -111,12 +111,13 @@ function SignedOut({
   );
 }
 
-type NoteState = "idle" | "saving" | "saved" | "failed";
+type NoteState = "idle" | "saving" | NotePortReply["type"];
 
 const NOTE_STATES: Record<NoteState, string> = {
   idle: "",
   saving: "Saving…",
   saved: "Note saved",
+  gone: "This clipping was deleted in Clippings, so the note wasn't saved.",
   failed: "Couldn't save the note. It will save when you type again.",
 };
 
@@ -129,11 +130,15 @@ function NoteField({ clippingId, initialNote }: { clippingId: string; initialNot
   const [state, setState] = useState<NoteState>("idle");
   const port = useRef<Browser.runtime.Port | null>(null);
   const timer = useRef<number | undefined>(undefined);
+  /** The text as last typed, to tell a save of older text from one of what's in the field. */
+  const latest = useRef(initialNote);
 
   useEffect(() => {
     const connection = browser.runtime.connect({ name: NOTE_PORT });
     connection.onMessage.addListener((reply: NotePortReply) => {
-      setState(reply.type === "saved" ? "saved" : "failed");
+      // A save of older text while newer text waits: still saving.
+      if (reply.type === "saved" && reply.note !== latest.current) return;
+      setState(reply.type);
     });
     port.current = connection;
     return () => {
@@ -150,6 +155,7 @@ function NoteField({ clippingId, initialNote }: { clippingId: string; initialNot
   }
 
   function change(value: string) {
+    latest.current = value;
     setNote(value);
     setState("saving");
     send({ type: "draft", clippingId, note: value });

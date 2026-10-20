@@ -1,3 +1,4 @@
+import { isAPIError } from "better-auth/api";
 import {
   createDpopReplayStore,
   requestToResourceInput,
@@ -93,7 +94,11 @@ export function createExtensionApi({
         jwksUrl: `${context.baseURL}/jwks`,
         dpop: { replayStore: createDpopReplayStore(context.internalAdapter) },
       });
-    } catch {
+    } catch (error) {
+      // A refused token (or DPoP proof) is a 4xx API error. Anything else, such as the signing
+      // keys being unreachable, is the server's problem: a 401 would make the extension spend
+      // its refresh token and then sign the user out.
+      if (!isAPIError(error) || error.statusCode >= 500) throw error;
       const challenge = request.headers.has("authorization")
         ? 'Bearer error="invalid_token"'
         : "Bearer";
@@ -101,8 +106,16 @@ export function createExtensionApi({
     }
 
     const clientId = claims.azp ?? claims.client_id;
-    // A token without a user names the client as its subject.
-    if (typeof clientId !== "string" || typeof claims.sub !== "string" || claims.sub === clientId) {
+    // Bound to this API alone: a token for several resources (`aud` as a list) is refused even
+    // when this API is one of them. A token without a user names the client as its subject.
+    const audience =
+      Array.isArray(claims.aud) && claims.aud.length === 1 ? claims.aud[0] : claims.aud;
+    if (
+      audience !== resource ||
+      typeof clientId !== "string" ||
+      typeof claims.sub !== "string" ||
+      claims.sub === clientId
+    ) {
       return refuse(request, 401, "invalid_token", {
         "www-authenticate": 'Bearer error="invalid_token"',
       });
@@ -190,7 +203,8 @@ export function createExtensionApi({
         });
         return updated ? reply(request, present(updated), 200) : refuse(request, 404, "not_found");
       } catch (error) {
-        if (error instanceof NoteTooLongError) return refuse(request, 400, "note_too_long");
+        // The schema caps the note already; this is the service's own check agreeing.
+        if (error instanceof NoteTooLongError) return refuse(request, 400, "invalid_request");
         throw error;
       }
     },

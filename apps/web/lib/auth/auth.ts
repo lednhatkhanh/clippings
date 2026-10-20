@@ -7,11 +7,8 @@ import { nextCookies } from "better-auth/next-js";
 import { jwt } from "better-auth/plugins/jwt";
 
 import { getDatabase } from "@/lib/db.ts";
-import {
-  extensionOrigin,
-  extensionResourceUrl,
-  parseExtensionIds,
-} from "@/lib/extension/origins.ts";
+import { extensionResourceUrl, parseExtensionIds } from "@/lib/extension/origins.ts";
+import { extensionResourceGate } from "@/lib/extension/resource-gate.ts";
 import { mcpResourceUrl } from "@/lib/mcp/resource.ts";
 import {
   account,
@@ -67,9 +64,6 @@ export function createAuth({
   return betterAuth({
     baseURL,
     secret,
-    // `BETTER_AUTH_URL` is trusted on its own; the extension's service worker calls the token
-    // endpoint from its own origin.
-    trustedOrigins: extensionIds.map(extensionOrigin),
     database: drizzleAdapter(database, {
       provider: "pg",
       schema: {
@@ -103,8 +97,9 @@ export function createAuth({
     },
     onAPIError: { errorURL: "/sign-in" },
     // Deliberately left at Better Auth's defaults, for a Google-only, allowlisted app:
-    // - trustedOrigins: `BETTER_AUTH_URL` and the extension; previews don't sign in (spec,
-    //   "Hosting").
+    // - trustedOrigins: `BETTER_AUTH_URL` is trusted; previews don't sign in (spec, "Hosting").
+    //   The extension needs no entry: it sends no cookies, and only requests with cookies have
+    //   their origin checked.
     // - rateLimit: on in production by default; the surface is one OAuth start and callback.
     // - accountLinking: one provider, and `validateUserInfo` also gates linking.
     // - email verification, passwords, 2FA: not enabled; there is no email/password sign-in.
@@ -140,6 +135,7 @@ export function createAuth({
       // its metadata, fetched with a transport that refuses private addresses and redirects.
       cimd({ fetchClientMetadataResource, metadataProfile: "mcp-2026-07-28" }),
       consentGate({ allowedEmails, extensionIds }),
+      extensionResourceGate({ resource: extensionResource, extensionIds }),
       nextCookies(),
     ],
   });

@@ -38,9 +38,9 @@ function keepNote(port: Browser.runtime.Port) {
     queue = queue.then(async () => {
       if (!draft || draft.note === savedNote) return;
       const { clippingId, note } = draft;
-      const saved = await saveNote(clippingId, note);
-      if (saved) savedNote = note;
-      const reply: NotePortReply = saved ? { type: "saved", note } : { type: "failed" };
+      const outcome = await saveNote(clippingId, note);
+      if (outcome === "saved") savedNote = note;
+      const reply: NotePortReply = { type: outcome, note };
       try {
         port.postMessage(reply);
       } catch {
