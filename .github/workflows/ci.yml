@@ -111,7 +111,9 @@ jobs:
 
       # `pnpm e2e` builds the web app with EXPOSE_TESTING_API=1 through Turborepo (a variable the
       # build task declares, so a normal build is never replayed for it), then runs Playwright,
-      # whose global setup creates and migrates the end-to-end database.
+      # whose global setup creates and migrates the end-to-end database. The same run builds the
+      # extension for the app's end-to-end address (`pnpm e2e` sets CLIPPINGS_ORIGIN from the
+      # port), which the `extension` Playwright project loads into Chromium.
       - name: End-to-end tests
         run: pnpm e2e
         env:

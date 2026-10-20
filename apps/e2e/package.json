@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@clippings/db": "workspace:*",
+    "@clippings/extension": "workspace:*",
     "@clippings/shared": "workspace:*",
     "@clippings/web": "workspace:*"
   },

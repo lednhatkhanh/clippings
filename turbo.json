@@ -31,7 +31,7 @@
     "e2e": {
       "dependsOn": ["^build"],
       "cache": false,
-      "env": ["E2E_DATABASE_URL", "PLAYWRIGHT_*"],
+      "env": ["E2E_DATABASE_URL", "E2E_PORT", "PLAYWRIGHT_*"],
       "passThroughEnv": ["CI"]
     }
   }
