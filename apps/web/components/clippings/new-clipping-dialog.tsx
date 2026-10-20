@@ -95,7 +95,7 @@ function AlreadySaved({ existing, onDone }: { existing: Existing; onDone: () => 
   );
 }
 
-function SaveForm({ initialUrl, onSaved }: { initialUrl: string; onSaved: () => void }) {
+function SaveForm({ initial, onSaved }: { initial: Prefill; onSaved: () => void }) {
   const [outcome, setOutcome] = useState<SaveOutcome | null>(null);
   const [tagNames, setTagNames] = useState<string[]>([]);
   const { tags, refresh } = useTags();
@@ -124,7 +124,7 @@ function SaveForm({ initialUrl, onSaved }: { initialUrl: string; onSaved: () => 
       <TextField
         name="url"
         label="Address"
-        defaultValue={initialUrl}
+        defaultValue={initial.url}
         // oxlint-disable-next-line jsx-a11y/no-autofocus -- ready to paste, or to check a dropped link
         autoFocus
         placeholder="https://"
@@ -139,6 +139,7 @@ function SaveForm({ initialUrl, onSaved }: { initialUrl: string; onSaved: () => 
         multiline
         rows={3}
         maxLength={MAX_NOTE_LENGTH}
+        defaultValue={initial.note}
         errorMessage={invalid?.field === "note" ? invalid.message : undefined}
       />
       <TagPicker
@@ -160,8 +161,14 @@ function SaveForm({ initialUrl, onSaved }: { initialUrl: string; onSaved: () => 
   );
 }
 
-/** Opens "New clipping", with the address filled in when there is one, such as a dropped link. */
-type OpenNewClipping = (url?: string) => void;
+/** What "New clipping" opens with: a dropped link's address, or a share's address and quote. */
+interface Prefill {
+  url?: string;
+  note?: string;
+}
+
+/** Opens "New clipping", filled in with what there is. */
+type OpenNewClipping = (prefill?: Prefill) => void;
 
 const NewClippingContext = createContext<OpenNewClipping | null>(null);
 
@@ -172,17 +179,17 @@ export function useOpenNewClipping(): OpenNewClipping {
 }
 
 /**
- * The "New clipping" dialog, one for the whole app, so the button, the command palette and a
- * dropped link all open the same one. `/?new` (an app shortcut) opens it too.
+ * The "New clipping" dialog, one for the whole app, so the button, the command palette, a
+ * dropped link and a share all open the same one. `/?new` (an app shortcut) opens it too.
  */
 export function NewClippingProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [initialUrl, setInitialUrl] = useState("");
+  const [initial, setInitial] = useState<Prefill>({});
 
-  const open: OpenNewClipping = (url = "") => {
+  const open: OpenNewClipping = (prefill = {}) => {
     // Already open: keep what has been typed rather than start over.
     if (isOpen) return;
-    setInitialUrl(url);
+    setInitial(prefill);
     setIsOpen(true);
   };
   // `/?new`, the New clipping app shortcut.
@@ -195,7 +202,7 @@ export function NewClippingProvider({ children }: { children: ReactNode }) {
         <Dialog>
           <Heading>New clipping</Heading>
           {/* The modal unmounts its children once it has closed, so every open starts a fresh form. */}
-          <SaveForm initialUrl={initialUrl} onSaved={() => setIsOpen(false)} />
+          <SaveForm initial={initial} onSaved={() => setIsOpen(false)} />
         </Dialog>
       </Modal>
     </NewClippingContext>

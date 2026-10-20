@@ -7,15 +7,18 @@ import { redirect } from "next/navigation";
 
 import { getAuth, OAUTH_LOGIN_PAGE } from "@/lib/auth/auth.ts";
 import { closedPage, INVALID_SIGNATURE } from "@/lib/auth/connection.ts";
+import { RETURN_TO_PARAM, safeReturnPath, withReturnTo } from "@/lib/auth/return-path.ts";
 
 /**
- * Starts Google sign-in. Also behind "Use another account": Google shows its chooser.
+ * Starts Google sign-in. Also behind "Use another account": Google shows its chooser. The form's
+ * return path rides along to `/sign-in/complete`, and back to `/sign-in` if it fails.
  *
  * During an OAuth authorization (Claude connecting), the sign-in page carries the signed request
- * in `oauth_query`. Passing it on lets the provider resume the authorization once the session
- * exists, and a refused account comes back to sign-in with the request still attached.
+ * in `oauth_query` instead. Passing it on lets the provider resume the authorization once the
+ * session exists, and a refused account comes back to sign-in with the request still attached.
  */
 export async function signInWithGoogle(formData: FormData) {
+  const returnTo = safeReturnPath(formData.get(RETURN_TO_PARAM));
   const value = formData.get("oauth_query");
   const oauthQuery = typeof value === "string" && value ? value : undefined;
 
@@ -24,8 +27,10 @@ export async function signInWithGoogle(formData: FormData) {
     ({ url } = await getAuth().api.signInSocial({
       body: {
         provider: "google",
-        callbackURL: "/sign-in/complete",
-        errorCallbackURL: oauthQuery ? `${OAUTH_LOGIN_PAGE}?${oauthQuery}` : OAUTH_LOGIN_PAGE,
+        callbackURL: withReturnTo("/sign-in/complete", returnTo),
+        errorCallbackURL: oauthQuery
+          ? `${OAUTH_LOGIN_PAGE}?${oauthQuery}`
+          : withReturnTo(OAUTH_LOGIN_PAGE, returnTo),
         ...(oauthQuery ? { oauth_query: oauthQuery } : {}),
       },
       headers: await headers(),

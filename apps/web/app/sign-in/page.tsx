@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Route } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { Suspense, type ReactNode } from "react";
@@ -6,6 +6,7 @@ import { Suspense, type ReactNode } from "react";
 import { AuthCard } from "@/components/auth-card.tsx";
 import { AUTHORIZATION_ERRORS, closedPage } from "@/lib/auth/connection.ts";
 import { signedOAuthQuery } from "@/lib/auth/oauth-query.ts";
+import { RETURN_TO_PARAM, safeReturnPath } from "@/lib/auth/return-path.ts";
 import { getSession } from "@/lib/auth/session.ts";
 import { REJECTED_EMAIL_COOKIE, NOT_ALLOWLISTED } from "@/lib/auth/validate-user.ts";
 import { ClippingsStackIllustration, LetterboxIllustration } from "@clippings/ui";
@@ -20,9 +21,18 @@ type SearchParams = Record<string, string | string[] | undefined>;
  * Posts to the sign-in action. Google shows its account chooser either way. `oauthQuery` is the
  * signed authorization request when Claude is connecting, so sign-in resumes it.
  */
-function GoogleButton({ children, oauthQuery }: { children: ReactNode; oauthQuery?: string }) {
+function GoogleButton({
+  returnTo,
+  oauthQuery,
+  children,
+}: {
+  returnTo: string | null;
+  oauthQuery?: string;
+  children: ReactNode;
+}) {
   return (
     <form action={signInWithGoogle}>
+      {returnTo ? <input type="hidden" name={RETURN_TO_PARAM} value={returnTo} /> : null}
       {oauthQuery ? <input type="hidden" name="oauth_query" value={oauthQuery} /> : null}
       <button
         type="submit"
@@ -34,7 +44,15 @@ function GoogleButton({ children, oauthQuery }: { children: ReactNode; oauthQuer
   );
 }
 
-function SignInCard({ failed = false, oauthQuery }: { failed?: boolean; oauthQuery?: string }) {
+function SignInCard({
+  returnTo = null,
+  failed = false,
+  oauthQuery,
+}: {
+  returnTo?: string | null;
+  failed?: boolean;
+  oauthQuery?: string;
+}) {
   return (
     <AuthCard>
       <ClippingsStackIllustration className="h-auto w-60" />
@@ -44,12 +62,22 @@ function SignInCard({ failed = false, oauthQuery }: { failed?: boolean; oauthQue
           Couldn&apos;t sign you in. Try again.
         </p>
       ) : null}
-      <GoogleButton oauthQuery={oauthQuery}>Continue with Google</GoogleButton>
+      <GoogleButton returnTo={returnTo} oauthQuery={oauthQuery}>
+        Continue with Google
+      </GoogleButton>
     </AuthCard>
   );
 }
 
-function PrivateCard({ email, oauthQuery }: { email: string | undefined; oauthQuery?: string }) {
+function PrivateCard({
+  email,
+  returnTo,
+  oauthQuery,
+}: {
+  email: string | undefined;
+  returnTo: string | null;
+  oauthQuery?: string;
+}) {
   return (
     <AuthCard>
       <LetterboxIllustration className="h-auto w-50" />
@@ -63,7 +91,9 @@ function PrivateCard({ email, oauthQuery }: { email: string | undefined; oauthQu
           "That account isn't on the list."
         )}
       </p>
-      <GoogleButton oauthQuery={oauthQuery}>Use another account</GoogleButton>
+      <GoogleButton returnTo={returnTo} oauthQuery={oauthQuery}>
+        Use another account
+      </GoogleButton>
     </AuthCard>
   );
 }
@@ -71,6 +101,7 @@ function PrivateCard({ email, oauthQuery }: { email: string | undefined; oauthQu
 async function SignInContent({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
   const error = typeof params.error === "string" ? params.error : undefined;
+  const returnTo = safeReturnPath(params[RETURN_TO_PARAM]);
   const oauthQuery = signedOAuthQuery(params);
 
   // The OAuth provider couldn't trust the client or its redirect URI enough to tell it.
@@ -80,19 +111,21 @@ async function SignInContent({ searchParams }: { searchParams: Promise<SearchPar
     return (
       <PrivateCard
         email={(await cookies()).get(REJECTED_EMAIL_COOKIE)?.value}
+        returnTo={returnTo}
         oauthQuery={oauthQuery}
       />
     );
   }
-  // A connecting client can ask for a fresh sign-in (`prompt=login`), so a session doesn't
-  // skip the card then.
-  if (!oauthQuery && (await getSession())) redirect("/");
+  // Checked by `safeReturnPath`: a path on this site, outside the typed routes. A connecting
+  // client can ask for a fresh sign-in (`prompt=login`), so a session doesn't skip the card then.
+  if (!oauthQuery && (await getSession())) redirect((returnTo ?? "/") as Route);
 
-  return <SignInCard failed={Boolean(error)} oauthQuery={oauthQuery} />;
+  return <SignInCard returnTo={returnTo} failed={Boolean(error)} oauthQuery={oauthQuery} />;
 }
 
 export default function SignInPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   return (
+    // The fallback form has no return path; the content replaces it once the request is read.
     <Suspense fallback={<SignInCard />}>
       <SignInContent searchParams={searchParams} />
     </Suspense>

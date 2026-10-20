@@ -10,13 +10,13 @@ import {
 } from "@/components/page-transition.tsx";
 import { TagsEmptyState } from "@/components/tags/empty-state.tsx";
 import { TagList } from "@/components/tags/tag-list.tsx";
-import { getSession } from "@/lib/auth/session.ts";
+import { getSession, signInRedirect } from "@/lib/auth/session.ts";
 import { getClippings } from "@/lib/clippings/service.ts";
 import type { TagSummary } from "@clippings/shared";
 
 async function Tags() {
   const session = await getSession();
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInRedirect());
 
   let tags: TagSummary[];
   try {

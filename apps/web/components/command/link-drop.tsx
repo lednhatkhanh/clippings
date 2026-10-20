@@ -52,7 +52,7 @@ export function LinkDrop() {
         uriList: event.dataTransfer.getData("text/uri-list"),
         text: event.dataTransfer.getData("text/plain"),
       });
-      if (url) open(url);
+      if (url) open({ url });
     };
 
     document.addEventListener("dragstart", onDragStart);

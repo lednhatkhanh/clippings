@@ -1,18 +1,22 @@
 import { NextResponse } from "next/server";
 
+import { RETURN_TO_PARAM, safeReturnPath, signInPath } from "@/lib/auth/return-path.ts";
 import { getSession } from "@/lib/auth/session.ts";
 import { getSettings } from "@/lib/settings/service.ts";
 import { APPEARANCE_COOKIE, encodeAppearanceCookie } from "@clippings/ui";
 
 /**
  * Where Google sign-in lands. Hands the user's saved appearance to the no-flash script in a
- * short-lived cookie, so a new device paints the first page in their theme, then goes home.
+ * short-lived cookie, so a new device paints the first page in their theme, then goes home, or
+ * back to the page that sent them to sign in.
  */
 export async function GET(request: Request) {
+  const requestedReturn = new URL(request.url).searchParams.get(RETURN_TO_PARAM);
   const session = await getSession();
-  if (!session) return NextResponse.redirect(new URL("/sign-in", request.url));
+  if (!session) return NextResponse.redirect(new URL(signInPath(requestedReturn), request.url));
 
-  const response = NextResponse.redirect(new URL("/", request.url));
+  const returnTo = safeReturnPath(requestedReturn);
+  const response = NextResponse.redirect(new URL(returnTo ?? "/", request.url));
   try {
     const value = encodeAppearanceCookie(await getSettings().getSettings(session.user.id));
     // Written by hand: `cookies().set` would encode the already encoded value a second time.

@@ -6,7 +6,7 @@ import { LoadError } from "@/components/load-error.tsx";
 import { PageTransition, RevealTransition } from "@/components/page-transition.tsx";
 import { AccountSettings } from "@/components/settings/account-settings.tsx";
 import { AppearanceSettings } from "@/components/settings/appearance-settings.tsx";
-import { getSession } from "@/lib/auth/session.ts";
+import { getSession, signInRedirect } from "@/lib/auth/session.ts";
 import { getAppearance } from "@/lib/settings/service.ts";
 import type { Appearance } from "@clippings/shared";
 import { Tab, TabList, TabPanel, TabPanels, Tabs } from "@clippings/ui";
@@ -15,7 +15,7 @@ export const metadata: Metadata = { title: "Settings · Clippings" };
 
 async function SettingsTabs() {
   const session = await getSession();
-  if (!session) redirect("/sign-in");
+  if (!session) redirect(await signInRedirect());
 
   let appearance: Appearance;
   try {
