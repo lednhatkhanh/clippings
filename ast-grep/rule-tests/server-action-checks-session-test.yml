@@ -1,0 +1,85 @@
+id: server-action-checks-session
+valid:
+  - |
+    "use server";
+    export async function save() {
+      const userId = await requireUserId();
+      return userId;
+    }
+  - |
+    "use server";
+    export async function save() {
+      const session = await getSession();
+      if (!session) throw new Error("Not signed in");
+    }
+  - |
+    "use server";
+    export async function remove(id: string) {
+      const deleted = await service().remove(await requireUserId(), id);
+      return deleted;
+    }
+  - |
+    "use server";
+    export const save = async () => {
+      await requireUserId();
+    };
+  - |
+    'use server'
+    export async function save() {
+      await requireUserId();
+    }
+  - |
+    "use server";
+    // A helper that isn't exported is not an action.
+    async function helper() {
+      return 1;
+    }
+    export async function save() {
+      await requireUserId();
+    }
+  - |
+    // Not a "use server" file: ordinary code is not checked.
+    export async function load() {
+      return 1;
+    }
+invalid:
+  - |
+    "use server";
+    export async function save() {
+      return 1;
+    }
+  - |
+    "use server";
+    export async function save() {
+      const value = compute();
+      await requireUserId();
+      return value;
+    }
+  - |
+    "use server";
+    export async function save() {
+      // The check is not the first statement.
+      doWork();
+      const userId = await requireUserId();
+    }
+  - |
+    "use server";
+    export async function save() {
+      await somethingElse();
+    }
+  - |
+    "use server";
+    export const save = async () => {
+      return 1;
+    };
+  - |
+    "use server";
+    export const save = async () => 1;
+  - |
+    "use server";
+    export async function ok() {
+      await requireUserId();
+    }
+    export async function forgotten() {
+      return 1;
+    }

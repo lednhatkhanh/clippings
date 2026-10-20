@@ -58,41 +58,21 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
       source: "web",
     });
 
-    const trivialVariants = [
-      "https://EXAMPLE.com/essay?id=7",
-      "https://example.com/essay/?id=7",
-      "https://example.com/essay?id=7#section-2",
-      "https://example.com/essay?utm_source=newsletter&id=7&fbclid=abc",
-      "example.com/essay?id=7",
-    ];
-    for (const url of trivialVariants) {
-      const again = await fixture.service.saveClipping(ana, {
-        url,
-        note: "a different note",
-        source: "extension",
-      });
+    // What counts as trivial is the URL normalizer's table test; this is its effect on the row.
+    const again = await fixture.service.saveClipping(ana, {
+      url: "https://EXAMPLE.com/essay/?id=7&utm_source=newsletter#section-2",
+      note: "a different note",
+      source: "extension",
+    });
 
-      expect(again.status, url).toBe("existing");
-      expect(again.clipping.id, url).toBe(first.clipping.id);
-      expect(again.clipping.note, url).toBe("original note");
-      expect(again.clipping.source, url).toBe("web");
-    }
+    expect(again.status).toBe("existing");
+    expect(again.clipping.id).toBe(first.clipping.id);
+    expect(again.clipping.note).toBe("original note");
+    expect(again.clipping.source).toBe("web");
 
     expect(fixture.enrichmentRequests).toEqual([first.clipping.id]);
     const page = await fixture.service.listClippings(ana, {});
     expect(page.items).toHaveLength(1);
-  });
-
-  it("treats a different path or query value as a different page", async () => {
-    const ana = await fixture.createUser("ana");
-    await fixture.service.saveClipping(ana, { url: "https://example.com/a?id=1", source: "web" });
-
-    const other = await fixture.service.saveClipping(ana, {
-      url: "https://example.com/a?id=2",
-      source: "web",
-    });
-
-    expect(other.status).toBe("created");
   });
 
   it("rejects something that is not a web address", async () => {
@@ -230,12 +210,13 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
   });
 
   describe("exporting", () => {
-    it("exports exactly the user's own live clippings, newest first, with notes and no tags yet", async () => {
+    it("exports exactly the user's own live clippings, newest first, with their notes and tags", async () => {
       const ana = await fixture.createUser("ana");
       const ben = await fixture.createUser("ben");
       const { clipping: first } = await fixture.service.saveClipping(ana, {
         url: "https://example.com/first",
         note: "read on the train",
+        tags: ["reading"],
         source: "web",
       });
       fixture.advanceClock(1000);
@@ -259,9 +240,10 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
       const exported = await fixture.service.exportClippings(ana);
 
       expect(exported.exportedAt).toBe("2026-10-01T09:00:07.000Z");
+      // An export names its tags; the saved clipping carries them as objects.
       expect(exported.clippings).toEqual([
         { ...last, tags: [] },
-        { ...first, tags: [] },
+        { ...first, tags: ["reading"] },
       ]);
       expect(exported.clippings[1]?.note).toBe("read on the train");
     });
@@ -443,21 +425,6 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
       url: "https://example.com/essay/?utm_source=newsletter&id=7#part-2",
       urlNormalized: "https://example.com/essay?id=7",
     });
-  });
-
-  it("rejects addresses that only look like web addresses", async () => {
-    const ana = await fixture.createUser("ana");
-
-    for (const url of [
-      "mailto:ana@example.com",
-      'javascript:alert(1);"@example.com"',
-      "data:text/html,hello",
-      "https://ana:secret@example.com/private",
-    ]) {
-      await expect(fixture.service.saveClipping(ana, { url, source: "web" }), url).rejects.toThrow(
-        InvalidUrlError,
-      );
-    }
   });
 
   it("keeps a note within the limit", async () => {

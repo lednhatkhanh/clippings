@@ -35,6 +35,19 @@ function field(input: Record<string, unknown>, name: keyof typeof MAX): string {
   return value.trim().slice(0, MAX[name]);
 }
 
+/**
+ * The reading the model returned through `save_reading`: each field trimmed and cut to its cap.
+ * Throws when a field is missing, not a string or blank, so the clipping ends up failed and
+ * retryable instead of saved with an empty summary.
+ */
+export function parseReading(input: Record<string, unknown>): PageSummary {
+  return {
+    title: field(input, "title"),
+    summary: field(input, "summary"),
+    excerpt: field(input, "excerpt"),
+  };
+}
+
 /** Claude Haiku, asked for a structured reading of the page. Reads `ANTHROPIC_API_KEY`. */
 export function createSummarizer(): Summarizer {
   // Built on first use, so a missing key breaks enrichment and not every page that loads.
@@ -59,12 +72,7 @@ export function createSummarizer(): Summarizer {
       });
       const call = response.content.find((block) => block.type === "tool_use");
       if (!call) throw new Error("The model didn't return a reading");
-      const input = call.input as Record<string, unknown>;
-      return {
-        title: field(input, "title"),
-        summary: field(input, "summary"),
-        excerpt: field(input, "excerpt"),
-      };
+      return parseReading(call.input as Record<string, unknown>);
     },
   };
 }
