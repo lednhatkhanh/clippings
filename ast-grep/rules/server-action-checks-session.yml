@@ -1,0 +1,85 @@
+id: server-action-checks-session
+language: tsx
+severity: error
+message: A server action must be `export async function` with a session check as its first statement, because anyone can POST to it directly.
+note: |
+  Every export of a "use server" file is an endpoint. Write it as `export async function name(…)`
+  (or `export default async function`) whose first statement is one of:
+    - `await requireUserId();`
+    - `const userId = await requireUserId();`
+    - `const session = await getSession();` followed at once by `if (!session …)`
+  Other export forms (`export { x }`, `export … from`, `export const x = …`, a wrapped or
+  non-async function) hide the check from this rule. Type exports are fine.
+  An action that reads or writes no user data (sign-in, sign-out, consent redirects) opts out with
+  a `// ast-grep-ignore: server-action-checks-session` comment above it and a reason.
+files:
+  - apps/web/**/*.ts
+  - apps/web/**/*.tsx
+utils:
+  # The test after `getSession()`: `!session`, `!session.user`, `!session?.user`, or either one
+  # as the first operand of `||`.
+  signed-out-test:
+    any:
+      - pattern: "!$S"
+      - pattern: "!$S.$P"
+      - pattern: "!$S?.$P"
+      - kind: binary_expression
+        has:
+          field: left
+          any:
+            - pattern: "!$S"
+            - pattern: "!$S.$P"
+            - pattern: "!$S?.$P"
+  session-checked-function:
+    any:
+      - kind: function_declaration
+      - kind: function_expression
+    regex: ^async\b
+    has:
+      field: body
+      kind: statement_block
+      has:
+        nthChild:
+          position: 1
+          ofRule:
+            not:
+              kind: comment
+        any:
+          - pattern: await requireUserId();
+          - pattern: const $V = await requireUserId();
+          - all:
+              - pattern: const $S = await getSession();
+              - precedes:
+                  kind: if_statement
+                  has:
+                    field: condition
+                    has:
+                      matches: signed-out-test
+rule:
+  all:
+    - kind: export_statement
+    - inside:
+        kind: program
+        has:
+          kind: expression_statement
+          regex: ^["']use server["']
+    # Types are erased, so exporting them exposes nothing.
+    - not:
+        any:
+          - has:
+              field: declaration
+              kind: type_alias_declaration
+          - has:
+              field: declaration
+              kind: interface_declaration
+          - regex: ^export\s+type\s*[{*]
+    # An async function declaration (`export default async function () {}` parses as an
+    # expression) whose first statement, comments aside, is a session check.
+    - not:
+        any:
+          - has:
+              field: declaration
+              matches: session-checked-function
+          - has:
+              field: value
+              matches: session-checked-function

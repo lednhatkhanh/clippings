@@ -7,7 +7,7 @@
     "dev": "next dev",
     "start": "next start",
     "build": "next build",
-    "lint": "oxlint -c ../../.oxlintrc.json .",
+    "lint": "oxlint -c ../../.oxlintrc.json . && ast-grep scan -c ../../sgconfig.yml . && ast-grep test -c ../../sgconfig.yml --skip-snapshot-tests",
     "format:check": "oxfmt --check -c ../../.oxfmtrc.json .",
     "typegen": "next typegen",
     "typecheck": "tsc --noEmit",
@@ -38,6 +38,7 @@
   },
   "devDependencies": {
     "@clippings/config": "workspace:*",
+    "@modelcontextprotocol/client": "catalog:",
     "@tailwindcss/postcss": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",

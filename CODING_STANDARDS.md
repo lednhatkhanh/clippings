@@ -61,9 +61,42 @@ type-aware) and types (`tsc`); this file holds what none of them says.
 `apps/web/proxy.ts` only checks that a session cookie exists. Server code that reads or writes user
 data validates the session itself, as the `(app)` layout does.
 
+An ast-grep rule (`ast-grep/rules/server-action-checks-session.yml`, run by `apps/web`'s `lint`)
+requires every export of a `"use server"` file, types aside, to be `export async function` whose
+first statement is `await requireUserId();`, `const userId = await requireUserId();` or
+`const session = await getSession();` followed by an `if (!session …)`. `export { x }`,
+`export … from` and `export const x = …` hide the check, so they fail too. An action that reads or
+writes no user data (sign-in, sign-out, the consent page's redirects) opts out with a
+`// ast-grep-ignore: server-action-checks-session` comment above it and a reason in the doc
+comment.
+
 ## Tests
 
 - Tests sit next to the code as `*.test.ts` and run with Vitest.
 - Database tests need `TEST_DATABASE_URL` and are skipped without it. Each test gets a fresh
   temporary database from `createTempDatabase()`, so tests never share migration state.
-- Test behavior through the module's public interface, not its internals.
+- Test behavior through the module's public interface, not its internals. A good test fails on a
+  real bug, not on a refactor. Don't test third parties (React Aria, Better Auth, Drizzle), only
+  our use of them, and don't test what types, lint or the generated-file checks prove.
+- Test each behavior once, at the lowest layer that can see it: data rules in the database
+  service tests on real Postgres, pure logic as a table, and only a flow that crosses server and
+  client end to end. An end-to-end test that finds a bug no lower test caught gets a lower test too.
+- A change needs a test when it adds or alters:
+  - a branch a user or attacker can reach: validation, error mapping, an auth check;
+  - data access (every new query gets a "keeps users apart" case with a second user);
+  - a state machine or time rule (use the injected clock);
+  - the parsing or normalising of external input;
+  - a flow that crosses server and client;
+  - a bug fix (the test fails before the fix).
+- No test for pure presentation (layout, class names, copy, motion, snapshots), a thin
+  pass-through to a library, a constant, or anything reachable only by mocking what it calls.
+  "Does it look right" is a manual check in the browser.
+- No component-test layer and no jsdom: pull pure logic out of a client component and unit-test
+  it. If an interaction can neither be reached end to end nor extracted, add a Vitest Browser Mode
+  project for it.
+- End-to-end specs live in `apps/e2e` and run with `pnpm e2e`, against a production build, local
+  Postgres and the local fakes. A new page, server action, API route or extension flow gets a spec
+  when its value is the path from browser to database: the sign-in gate, per-user access, a core
+  flow, an instant shell. Seed through the database service and use the UI only for the step
+  under test. Anything a service or unit test can show stays there.
+- No coverage target; coverage is an occasional map of untested files, not a gate.
