@@ -38,6 +38,7 @@
   },
   "devDependencies": {
     "@clippings/config": "workspace:*",
+    "@modelcontextprotocol/client": "catalog:",
     "@tailwindcss/postcss": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",

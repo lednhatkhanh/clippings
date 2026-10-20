@@ -12,6 +12,7 @@ catalog:
   "@better-auth/oauth-provider": 1.7.10
   "@date-fns/utc": 2.1.1
   "@material/material-color-utilities": 0.4.0
+  "@modelcontextprotocol/client": 2.3.1
   "@modelcontextprotocol/server": 2.3.1
   "@shadcn/lint": 0.2.1
   "@tailwindcss/postcss": 4.3.3
