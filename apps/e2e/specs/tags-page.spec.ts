@@ -1,21 +1,9 @@
 import type { Locator, Page } from "@playwright/test";
 
-import type { ClippingsService } from "@clippings/db";
-
 import { expect, test } from "../support/fixtures.ts";
 
 const READING = "https://example.com/reading";
 const RECIPE = "https://example.com/recipe";
-
-/** The user's two clippings: one tagged `reading`, one tagged `recipes` and `weekend`. */
-async function seed(clippings: ClippingsService, userId: string) {
-  await clippings.saveClipping(userId, { url: READING, tags: ["reading"], source: "web" });
-  await clippings.saveClipping(userId, {
-    url: RECIPE,
-    tags: ["recipes", "weekend"],
-    source: "web",
-  });
-}
 
 function tagRow(page: Page, name: string): Locator {
   return page
@@ -38,12 +26,17 @@ function listRow(page: Page, url: string): Locator {
 }
 
 test.describe("managing tags", () => {
-  test("renames a tag, and the list's chips and filter use the new name", async ({
-    page,
-    user,
-    clippings,
-  }) => {
-    await seed(clippings, user.id);
+  // The user's two clippings: one tagged `reading`, one tagged `recipes` and `weekend`.
+  test.beforeEach(async ({ user, clippings }) => {
+    await clippings.saveClipping(user.id, { url: READING, tags: ["reading"], source: "web" });
+    await clippings.saveClipping(user.id, {
+      url: RECIPE,
+      tags: ["recipes", "weekend"],
+      source: "web",
+    });
+  });
+
+  test("renames a tag, and the list's chips and filter use the new name", async ({ page }) => {
     await page.goto("/tags");
 
     await openActions(page, "reading");
@@ -71,8 +64,7 @@ test.describe("managing tags", () => {
     await expect(listRow(page, RECIPE)).toHaveCount(0);
   });
 
-  test("recolors a tag, and the list's chip shows the color", async ({ page, user, clippings }) => {
-    await seed(clippings, user.id);
+  test("recolors a tag, and the list's chip shows the color", async ({ page }) => {
     await page.goto("/tags");
 
     await openActions(page, "reading");
@@ -95,12 +87,7 @@ test.describe("managing tags", () => {
     ).toHaveCount(0);
   });
 
-  test("merges a tag into another, and the list's clippings carry the target", async ({
-    page,
-    user,
-    clippings,
-  }) => {
-    await seed(clippings, user.id);
+  test("merges a tag into another, and the list's clippings carry the target", async ({ page }) => {
     await page.goto("/tags");
 
     await openActions(page, "reading");
@@ -122,8 +109,7 @@ test.describe("managing tags", () => {
     await expect(listRow(page, RECIPE)).toBeVisible();
   });
 
-  test("deletes a tag, and the clippings stay without it", async ({ page, user, clippings }) => {
-    await seed(clippings, user.id);
+  test("deletes a tag, and the clippings stay without it", async ({ page }) => {
     await page.goto("/tags");
 
     await openActions(page, "weekend");
