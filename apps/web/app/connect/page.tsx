@@ -11,9 +11,15 @@ import { closedPage } from "@/lib/auth/connection.ts";
 import { signedOAuthQuery } from "@/lib/auth/oauth-query.ts";
 import { getSession } from "@/lib/auth/session.ts";
 import { isExtensionRedirectUri, parseExtensionIds } from "@/lib/extension/origins.ts";
+import { readOnlyScopes, WRITE_SCOPE } from "@/lib/mcp/scopes.ts";
 import { Button, ClippingsStackIllustration } from "@clippings/ui";
 
-import { allowConnectionAction, denyConnectionAction, switchAccountAction } from "./actions.ts";
+import {
+  allowConnectionAction,
+  allowReadOnlyConnectionAction,
+  denyConnectionAction,
+  switchAccountAction,
+} from "./actions.ts";
 
 export const metadata: Metadata = { title: "Connect · Clippings", robots: { index: false } };
 
@@ -63,12 +69,21 @@ async function ConsentContent({ searchParams }: { searchParams: SearchParams }) 
   const request = new URLSearchParams(oauthQuery);
   const name = await clientName(request.get("client_id") ?? "");
   const destination = returnsTo(request.get("redirect_uri") ?? "");
+  const canWrite = request.get("scope")?.split(" ").includes(WRITE_SCOPE) ?? false;
+  const canReadOnly = canWrite && readOnlyScopes(request.get("scope")).length > 0;
 
   return (
     <>
       <h1 className="typescale-headline-sm">
-        <span className="break-words">{name}</span> wants to save and search your clippings
+        <span className="break-words">{name}</span> wants to{" "}
+        {canWrite ? "save, search, change and delete" : "save and search"} your clippings
       </h1>
+      {canWrite ? (
+        <p className="typescale-body-md text-ink-muted">
+          It will be able to rename clippings, edit their notes and tags, and delete them. A deleted
+          clipping can be restored for 24 hours. Allow read-only lets it save and search only.
+        </p>
+      ) : null}
       <p className="typescale-body-md text-ink-muted">
         Allowing sends you back to <span className="text-ink">{destination}</span>.
       </p>
@@ -88,6 +103,14 @@ async function ConsentContent({ searchParams }: { searchParams: SearchParams }) 
             Allow
           </Button>
         </form>
+        {canReadOnly ? (
+          <form action={allowReadOnlyConnectionAction}>
+            <input type="hidden" name="oauth_query" value={oauthQuery} />
+            <Button type="submit" variant="paper" className="w-full">
+              Allow read-only
+            </Button>
+          </form>
+        ) : null}
         <form action={denyConnectionAction}>
           <input type="hidden" name="oauth_query" value={oauthQuery} />
           <Button type="submit" variant="paper" className="w-full">

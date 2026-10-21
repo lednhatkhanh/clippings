@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { getAuth, OAUTH_LOGIN_PAGE } from "@/lib/auth/auth.ts";
 import { closedPage, INVALID_SIGNATURE } from "@/lib/auth/connection.ts";
 import { extensionErrorRedirect, parseExtensionIds } from "@/lib/extension/origins.ts";
+import { readOnlyScopes } from "@/lib/mcp/scopes.ts";
 
 const readOAuthQuery = (formData: FormData) => {
   const value = formData.get("oauth_query");
@@ -14,12 +15,10 @@ const readOAuthQuery = (formData: FormData) => {
 };
 
 /**
- * Allow: records the consent and sends the browser back to the client with its authorization
- * code. The consent endpoint checks the signed request, the session and the allowlist, so this
- * action needs no session check of its own.
+ * Records the consent, for `scope` when given (space-separated, a subset of what the request
+ * asked for), and sends the browser back to the client with its authorization code.
  */
-// ast-grep-ignore: server-action-checks-session
-export async function allowConnectionAction(formData: FormData): Promise<void> {
+async function consentAndReturn(formData: FormData, scope?: string): Promise<void> {
   let url: unknown;
   let expired = false;
   try {
@@ -37,7 +36,11 @@ export async function allowConnectionAction(formData: FormData): Promise<void> {
           cookie: requestHeaders.get("cookie") ?? "",
           origin: requestHeaders.get("origin") ?? "",
         },
-        body: JSON.stringify({ accept: true, oauth_query: readOAuthQuery(formData) }),
+        body: JSON.stringify({
+          accept: true,
+          oauth_query: readOAuthQuery(formData),
+          ...(scope === undefined ? {} : { scope }),
+        }),
       }),
     );
     if (!response.ok) {
@@ -56,6 +59,27 @@ export async function allowConnectionAction(formData: FormData): Promise<void> {
   }
   // The client's redirect URI: claude.ai's callback, Claude Code's loopback port or the extension.
   redirect(url as Route);
+}
+
+/**
+ * Allow: grants everything the client asked for. The consent endpoint checks the signed request,
+ * the session and the allowlist, so this action needs no session check of its own.
+ */
+// ast-grep-ignore: server-action-checks-session
+export async function allowConnectionAction(formData: FormData): Promise<void> {
+  await consentAndReturn(formData);
+}
+
+/**
+ * Allow read-only: grants what the client asked for except `clippings:write`, so a client that
+ * asked to change and delete clippings gets a token that can only save and search. The scopes
+ * come from the signed request, never from the form; the consent endpoint checks the same
+ * session, allowlist and signature as for Allow, so this action needs no session check either.
+ */
+// ast-grep-ignore: server-action-checks-session
+export async function allowReadOnlyConnectionAction(formData: FormData): Promise<void> {
+  const requested = new URLSearchParams(readOAuthQuery(formData)).get("scope");
+  await consentAndReturn(formData, readOnlyScopes(requested).join(" "));
 }
 
 /**

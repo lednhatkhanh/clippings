@@ -2,6 +2,7 @@ import type { BetterAuthPlugin } from "better-auth";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 
 import { extensionErrorRedirect } from "@/lib/extension/origins.ts";
+import { DEFAULT_SCOPES } from "@/lib/mcp/scopes.ts";
 import { UNKNOWN_CLIENT } from "@clippings/shared";
 
 import { isAllowlisted, parseAllowlist } from "./allowlist.ts";
@@ -12,10 +13,10 @@ const AUTHORIZE_PATH = "/oauth2/authorize";
 const CONSENT_PATH = "/oauth2/consent";
 const GATED_PATHS = new Set([AUTHORIZE_PATH, CONSENT_PATH]);
 
-/** The authorization request's query, keeping the values that are strings. */
-function stringQuery(query: unknown): URLSearchParams {
+/** The authorization request's parameters, keeping the values that are strings. */
+function stringParams(params: unknown): URLSearchParams {
   return new URLSearchParams(
-    Object.entries(query ?? {}).filter(
+    Object.entries(params ?? {}).filter(
       (entry): entry is [string, string] => typeof entry[1] === "string",
     ),
   );
@@ -43,6 +44,12 @@ function promptWithConsent(prompt: unknown): string {
  * client. Only a trusted extension's redirect is answered this way, so the redirect never leaves
  * for another site and this can't be used to ask which client ids exist.
  *
+ * An authorization that names no scope gets the default scopes. Without this the provider would
+ * grant a client that asks for nothing every scope it knows, `clippings:write` included, and
+ * the extension and any client that predates the write scope would silently gain it. The
+ * provider reads an authorization's parameters from the query on GET and from the form body on
+ * POST, so the gate reads and rewrites whichever the request used.
+ *
  * It also makes every authorization ask: claude.ai's client id is one URL shared by every
  * claude.ai user, so a stored consent would let a link someone else started finish for this
  * user without a click. Claude connects rarely, so the page costs little.
@@ -63,8 +70,20 @@ export function consentGate({
         {
           matcher: (context) => GATED_PATHS.has(context.path ?? ""),
           handler: createAuthMiddleware(async (ctx) => {
+            // An authorization sent as a form (POST) carries its parameters in the body.
+            const inBody = ctx.method === "POST";
+            const sent: unknown = inBody ? ctx.body : ctx.query;
+            // What the authorization request is rewritten to, on the paths that carry on.
+            const defaults: Record<string, string> = {};
+            const carryOn = () => {
+              if (Object.keys(defaults).length === 0) return undefined;
+              const rewritten = { ...(sent as Record<string, unknown> | undefined), ...defaults };
+              return { context: inBody ? { body: rewritten } : { query: rewritten } };
+            };
+
             if (ctx.path === AUTHORIZE_PATH) {
-              const query = stringQuery(ctx.query);
+              const query = stringParams(sent);
+              if (!query.get("scope")?.trim()) defaults.scope = DEFAULT_SCOPES.join(" ");
               const clientId = query.get("client_id") ?? "";
               // A client id that is a URL names a metadata document (CIMD), resolved on demand,
               // not a registration; the extension registers.
@@ -86,14 +105,14 @@ export function consentGate({
             const session = await getSessionFromCtx(ctx);
             // No session: the authorization endpoint sends the user to sign-in, where the
             // allowlist applies, and the consent endpoint refuses on its own.
-            if (!session) return;
+            if (!session) return carryOn();
 
             if (!isAllowlisted(allowlist, session.user.email)) {
               if (ctx.path === AUTHORIZE_PATH) {
                 // The extension's sign-in window closes on its redirect, and the popup says why.
                 throw ctx.redirect(
                   extensionErrorRedirect(
-                    stringQuery(ctx.query),
+                    stringParams(sent),
                     extensionIds,
                     "access_denied",
                     NOT_ALLOWLISTED,
@@ -112,10 +131,11 @@ export function consentGate({
               ? new URL(ctx.request.url).pathname.endsWith(CONSENT_PATH)
               : false;
             if (ctx.path === AUTHORIZE_PATH && !answeringConsent) {
-              return {
-                context: { query: { ...ctx.query, prompt: promptWithConsent(ctx.query?.prompt) } },
-              };
+              defaults.prompt = promptWithConsent(
+                (sent as { prompt?: unknown } | undefined)?.prompt,
+              );
             }
+            return carryOn();
           }),
         },
       ],

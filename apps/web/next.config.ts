@@ -23,6 +23,10 @@ const config: NextConfig = {
     // Keeps a visited page's data for 30 s, so the in-app back link finds the list already rendered
     // and its row's sheet morphs back (React Aria's list renders a newly mounted row a commit late).
     staleTimes: { dynamic: 30 },
+    // A bookmarks import posts a file of up to 4 MB (MAX_BOOKMARKS_FILE_BYTES) to a server action,
+    // plus a little multipart overhead; the default is 1 MB. Applies to every server action.
+    // Vercel Functions refuse a request body over 4.5 MB before Next runs, so this stays under it.
+    serverActions: { bodySizeLimit: "4.2mb" },
     turbopackRustReactCompiler: true,
     // Dev only: records request, fetch and cache spans for /_next/mcp's get_request_insights.
     requestInsights: true,

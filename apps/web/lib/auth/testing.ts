@@ -130,7 +130,10 @@ export function authorizePath({
   return `/api/auth/oauth2/authorize?${params}`;
 }
 
-/** `POST /oauth2/consent`, as the consent page sends it with the signed `oauth_query`. */
+/**
+ * `POST /oauth2/consent`, as the consent page sends it with the signed `oauth_query`. `scope`
+ * narrows the grant, as "Allow read-only" does.
+ */
 export function consent(
   call: AuthCall,
   {
@@ -138,12 +141,13 @@ export function consent(
     origin,
     query,
     accept = true,
-  }: { cookie?: string; origin: string; query: string; accept?: boolean },
+    scope,
+  }: { cookie?: string; origin: string; query: string; accept?: boolean; scope?: string },
 ) {
   return call("/api/auth/oauth2/consent", {
     method: "POST",
     headers: { "content-type": "application/json", origin, ...(cookie ? { cookie } : {}) },
-    body: JSON.stringify({ accept, oauth_query: query }),
+    body: JSON.stringify({ accept, oauth_query: query, ...(scope === undefined ? {} : { scope }) }),
   });
 }
 
@@ -170,12 +174,16 @@ export interface Authorization {
   resources: readonly string[];
 }
 
-/** Authorizes as the signed-in user and allows on the consent page; returns the code. */
+/**
+ * Authorizes as the signed-in user and allows on the consent page, for `consentScope` when
+ * given; returns the code.
+ */
 export async function authorize(
   call: AuthCall,
   cookie: string,
   origin: string,
   request: Omit<AuthorizeRequest, "challenge">,
+  consentScope?: string,
 ): Promise<Authorization> {
   const { verifier, challenge } = pkce();
   const consentPage = await target(
@@ -189,6 +197,7 @@ export async function authorize(
     cookie,
     origin,
     query: consentPage.slice("/connect?".length),
+    scope: consentScope,
   });
   const callback = new URL(await target(answered));
   expect(callback.origin).toBe(new URL(request.redirectUri).origin);
@@ -221,15 +230,20 @@ export function exchange(
   });
 }
 
-/** Authorizes, allows and trades the code: the tokens a connected client holds. */
+/** Authorizes, allows (for `consentScope` when given) and trades the code: the tokens a connected client holds. */
 export async function connect(
   call: AuthCall,
   cookie: string,
   origin: string,
   request: Omit<AuthorizeRequest, "challenge">,
   headers: Record<string, string> = {},
+  consentScope?: string,
 ) {
-  const token = await exchange(call, await authorize(call, cookie, origin, request), headers);
+  const token = await exchange(
+    call,
+    await authorize(call, cookie, origin, request, consentScope),
+    headers,
+  );
   expect(token.status).toBe(200);
   const issued = (await token.json()) as { access_token: string; refresh_token?: string };
   return { ...issued, clientId: request.clientId };

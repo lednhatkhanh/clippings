@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { MAX_NOTE_LENGTH } from "./clipping.ts";
+import { MAX_NOTE_LENGTH, MAX_TITLE_LENGTH } from "./clipping.ts";
 import { extensionUpdateRequestSchema, isSaveablePage } from "./extension.ts";
 import { MAX_TAG_LENGTH, MAX_TAGS_PER_CLIPPING } from "./tag.ts";
 
@@ -41,6 +41,10 @@ describe("extensionUpdateRequestSchema", () => {
     ["tags", { tags: ["Reading", "ideas"] }],
     ["no tags, which clears them", { tags: [] }],
     ["both", { note: "Worth it", tags: ["Reading"] }],
+    ["a title", { title: "My name for it" }],
+    ["an empty title, which goes back to the page's", { title: "" }],
+    ["a null title, which goes back to the page's", { title: null }],
+    ["a title at the limit", { title: "x".repeat(MAX_TITLE_LENGTH) }],
     ["a note at the limit", { note: "x".repeat(MAX_NOTE_LENGTH) }],
     [
       "tags at the limits",
@@ -52,7 +56,8 @@ describe("extensionUpdateRequestSchema", () => {
 
   it.each([
     ["nothing to change", {}],
-    ["only unknown fields", { title: "New title" }],
+    ["only unknown fields", { summary: "New summary" }],
+    ["a title past the limit", { title: "x".repeat(MAX_TITLE_LENGTH + 1) }],
     ["a note that is undefined", { note: undefined }],
     ["a note past the limit", { note: "x".repeat(MAX_NOTE_LENGTH + 1) }],
     ["a tag past the limit", { tags: ["x".repeat(MAX_TAG_LENGTH + 1)] }],

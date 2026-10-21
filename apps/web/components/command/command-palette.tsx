@@ -1,8 +1,26 @@
 "use client";
 
-import { Monitor, Moon, Palette, Plus, Sun, Tag, type LucideIcon } from "lucide-react";
+import {
+  Copy,
+  Monitor,
+  Moon,
+  Palette,
+  Pin,
+  PinOff,
+  Plus,
+  Share2,
+  Sun,
+  Tag,
+  type LucideIcon,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { useCurrentClipping } from "@/components/clippings/current-clipping.ts";
+import {
+  copyLinkWithToast,
+  shareLinkWithToast,
+  useCanShare,
+} from "@/components/clippings/link-actions.ts";
 import { useOpenNewClipping } from "@/components/clippings/new-clipping-dialog.tsx";
 import { useTags } from "@/components/clippings/use-tags.ts";
 import {
@@ -55,7 +73,8 @@ export function openCommandPalette() {
 
 /**
  * ⌘K (Ctrl+K) from anywhere in the app opens a palette of commands: New clipping, go to a tag,
- * and switch mode or palette. Esc, or the shortcut again, closes it. `openCommandPalette()` opens
+ * and switch mode or palette. On a clipping's page it also pins, shares and copies the link of
+ * that clipping. Esc, or the shortcut again, closes it. `openCommandPalette()` opens
  * it from a button.
  */
 export function CommandPalette() {
@@ -121,6 +140,9 @@ function PaletteCommands({
 }) {
   // Only fetched once the palette is open.
   const { tags } = useTags();
+  // Set while a clipping's detail page is open.
+  const clipping = useCurrentClipping();
+  const canShare = useCanShare();
 
   return (
     <CommandMenu aria-label="Search commands" placeholder="Type a command or a tag">
@@ -129,6 +151,42 @@ function PaletteCommands({
           New clipping
         </Command>
       </CommandGroup>
+      {clipping ? (
+        <CommandGroup title="This clipping">
+          <Command
+            id="clipping:pin"
+            icon={clipping.pinned ? PinOff : Pin}
+            onAction={() => {
+              onNavigate();
+              clipping.togglePin();
+            }}
+          >
+            {clipping.pinned ? "Unpin clipping" : "Pin clipping"}
+          </Command>
+          {canShare ? (
+            <Command
+              id="clipping:share"
+              icon={Share2}
+              onAction={() => {
+                onNavigate();
+                void shareLinkWithToast({ title: clipping.title, url: clipping.url });
+              }}
+            >
+              Share clipping
+            </Command>
+          ) : null}
+          <Command
+            id="clipping:copy-link"
+            icon={Copy}
+            onAction={() => {
+              onNavigate();
+              void copyLinkWithToast(clipping.url);
+            }}
+          >
+            Copy link to the page
+          </Command>
+        </CommandGroup>
+      ) : null}
       {tags.length > 0 ? (
         <CommandGroup title="Go to tag">
           {tags.map((tag) => (

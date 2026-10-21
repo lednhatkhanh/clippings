@@ -1,4 +1,4 @@
-import { constructNow, isValid, parseISO, subHours } from "date-fns";
+import { constructNow, isAfter, isBefore, isValid, parseISO, subHours, subSeconds } from "date-fns";
 import {
   and,
   asc,
@@ -6,10 +6,12 @@ import {
   desc,
   eq,
   getColumns,
+  gte,
   inArray,
   isNotNull,
   isNull,
   lt,
+  ne,
   or,
   sql,
   type SQL,
@@ -21,11 +23,14 @@ import {
   formatIsoUtc,
   MAX_NOTE_LENGTH,
   MAX_QUERY_LENGTH,
+  MAX_TITLE_LENGTH,
   MAX_TAG_LENGTH,
   MAX_TAGS_PER_CLIPPING,
   isTagColor,
+  normalizeTagName,
   normalizeTagNames,
   parseWebUrl,
+  tagNameKey,
   SEARCH_RESULT_LIMIT,
   type Clipping,
   type ClippingSource,
@@ -37,7 +42,14 @@ import {
 } from "@clippings/shared";
 
 import { createDatabase, type Database } from "../database.ts";
-import { clippings, clippingTags, EMBEDDING_DIMENSIONS, tags } from "../schema.ts";
+import {
+  clippings,
+  clippingTags,
+  clippingTagSuggestions,
+  EMBEDDING_DIMENSIONS,
+  tags,
+  userSettings,
+} from "../schema.ts";
 import type {
   Clock,
   Embedder,
@@ -63,6 +75,11 @@ export type SaveClippingResult = { status: "created" | "existing"; clipping: Cli
 
 /** What the user can change on a clipping. A field left out stays as it is. */
 export interface UpdateClippingInput {
+  /**
+   * The user's own title. An empty or whitespace-only string, or null, goes back to the page's
+   * title.
+   */
+  title?: string | null;
   note?: string;
   /** Every tag the clipping should carry, by name: the ones left out are taken off. */
   tags?: readonly string[];
@@ -93,13 +110,43 @@ export interface SearchResults {
 }
 
 export interface ClippingsPage {
+  /**
+   * The user's pinned clippings that match the filters, most recently pinned first. Only the
+   * first page (no cursor) has them; later pages have none.
+   */
+  pinned: Clipping[];
+  /** The rest, newest first: pinned clippings are not repeated here. */
   items: Clipping[];
   /** Pass back as `cursor` for the next page; null on the last page. */
   nextCursor: string | null;
 }
 
 /** A clipping as it appears in the user's data export: its tags by name. */
-export type ExportedClipping = Omit<Clipping, "tags"> & { tags: string[] };
+export type ExportedClipping = Omit<Clipping, "tags" | "suggestedTags"> & { tags: string[] };
+
+/** One bookmark to import. A `ParsedBookmark` from `@clippings/shared` fits. */
+export interface ImportItem {
+  url: string;
+  /** When the user saved it elsewhere; null or implausible dates are replaced by now. */
+  addedAt: Date | null;
+  /** The folders it sat in, outermost first. */
+  folders: readonly string[];
+}
+
+export interface ImportOptions {
+  /** Tag each clipping with the names of its folders. */
+  foldersAsTags: boolean;
+}
+
+/** What an import did, or would do. */
+export interface ImportCounts {
+  /** Clippings made new, counting a deleted clipping of the same page that starts over. */
+  created: number;
+  /** Pages the user already has a live clipping of. */
+  existing: number;
+  /** Bookmarks that aren't web pages. */
+  skipped: number;
+}
 
 /** Everything the user has saved, for them to keep. */
 export interface ClippingsExport {
@@ -152,7 +199,9 @@ const toClipping = (row: ClippingRow, tagList: Tag[] = []): Clipping => ({
   id: row.id,
   url: row.url,
   urlNormalized: row.urlNormalized,
-  title: row.title,
+  title: row.userTitle ?? row.title,
+  pageTitle: row.title,
+  titleEdited: row.userTitle !== null,
   note: row.note,
   summary: row.summary,
   excerpt: row.excerpt,
@@ -160,8 +209,13 @@ const toClipping = (row: ClippingRow, tagList: Tag[] = []): Clipping => ({
   source: row.source,
   clientId: row.clientId,
   tags: tagList,
+  pinned: row.pinnedAt !== null,
+  suggestedTags: [],
   createdAt: formatIsoUtc(row.createdAt),
 });
+
+/** The title to show, in SQL: the user's own, else the page's. */
+const shownTitle = sql`coalesce(${clippings.userTitle}, ${clippings.title})`;
 
 const fromSources = (sources: readonly ClippingSource[] = []) =>
   sources.length > 0 ? inArray(clippings.source, [...sources]) : undefined;
@@ -219,7 +273,7 @@ function keywordQuery(text: string): SQL {
 }
 
 /**
- * A title close to every word of the query, a typo or so apart (`<%`, word similarity of at
+ * The shown title close to every word of the query, a typo or so apart (`<%`, word similarity of at
  * least 0.6). Undefined for a query with a phrase or an excluded word, whose meaning plain words
  * can't carry, and for one with no words.
  */
@@ -227,7 +281,7 @@ function typoInTitle(text: string): SQL | undefined {
   if (text.includes('"') || text.split(/\s+/).some((word) => word.startsWith("-")))
     return undefined;
   const words = text.match(/[\p{L}\p{N}]+/gu) ?? [];
-  return and(...words.map((word) => sql`${word} <% ${clippings.title}`));
+  return and(...words.map((word) => sql`${word} <% ${shownTitle}`));
 }
 
 // `ts_headline` marks each matched term with these; neither occurs in text people write.
@@ -296,6 +350,36 @@ const SWEEP_BATCH_SIZE = 100;
 const PURGE_AFTER_HOURS = 24;
 const PURGE_BATCH_SIZE = 1000;
 
+/**
+ * Most imported clippings the daily drain requests. QStash's free tier allows 1,000 messages a
+ * day, and every delivery counts, retries included (at most 4 per job, usually 1). 400 jobs cost
+ * about 440 messages, which leaves more than half the day for new saves, their retries and the
+ * stuck sweep (up to 100 jobs).
+ */
+export const IMPORT_DAILY_BUDGET = 400;
+/**
+ * The window the drain spreads its jobs over: 20 of the 24 hours until the next run. New saves
+ * are published immediately, so they are never queued behind the backlog.
+ */
+export const IMPORT_SPREAD_SECONDS = 20 * 60 * 60;
+/** Rows per insert, so a statement stays far below Postgres's 65,535 parameters. */
+const IMPORT_CHUNK_SIZE = 500;
+/** Bookmarks dated before this are taken for a bad ADD_DATE: the web had no bookmarks then. */
+const EARLIEST_BOOKMARK = parseISO("1990-01-01T00:00:00.000Z");
+
+/** Most tag names the model's call is given: the user's most-used ones. */
+const USER_TAGS_FOR_SUGGESTIONS = 50;
+/** Nearest clippings whose tags are counted, and how many of them must share a tag. */
+const NEIGHBOURS_VOTING = 5;
+const NEIGHBOUR_VOTES_NEEDED = 2;
+/** Most tags the neighbour vote suggests, most-voted first, so the row of chips stays short. */
+const NEIGHBOUR_SUGGESTION_LIMIT = 5;
+
+/** The items in runs of at most `size`. */
+function* chunks<T>(items: readonly T[], size: number): Generator<T[]> {
+  for (let start = 0; start < items.length; start += size) yield items.slice(start, start + size);
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** A page boundary: the clipping the previous page ended on. Opaque to callers. */
@@ -331,6 +415,13 @@ export class NoteTooLongError extends Error {
   constructor() {
     super(`A note can be at most ${MAX_NOTE_LENGTH} characters`);
     this.name = "NoteTooLongError";
+  }
+}
+
+export class TitleTooLongError extends Error {
+  constructor() {
+    super(`A title can be at most ${MAX_TITLE_LENGTH} characters`);
+    this.name = "TitleTooLongError";
   }
 }
 
@@ -613,6 +704,8 @@ export function createClippingsService({
     const fresh = {
       url,
       title: url,
+      userTitle: null,
+      pinnedAt: null,
       note,
       summary: null,
       excerpt: null,
@@ -627,14 +720,24 @@ export function createClippingsService({
         .insert(clippings)
         .values({ userId, urlNormalized: normalized, ...fresh })
         // A deleted clipping of the same page still holds its row: saving again starts it over,
-        // tags included.
+        // tags, suggestions, title and pin included.
         .onConflictDoUpdate({
           target: [clippings.userId, clippings.urlNormalized],
           set: fresh,
           setWhere: isNotNull(clippings.deletedAt),
         })
         .returning(clippingColumns);
-      if (row) await setTags(tx, userId, row.id, tagNames);
+      if (row) {
+        await setTags(tx, userId, row.id, tagNames);
+        await tx
+          .delete(clippingTagSuggestions)
+          .where(
+            and(
+              eq(clippingTagSuggestions.clippingId, row.id),
+              eq(clippingTagSuggestions.userId, userId),
+            ),
+          );
+      }
       return row;
     });
 
@@ -659,16 +762,28 @@ export function createClippingsService({
     { cursor, limit = 20, sources, tags: tagNames }: ListClippingsInput,
   ): Promise<ClippingsPage> {
     const after = cursor ? decodeCursor(cursor) : null;
+    const matching = and(
+      eq(clippings.userId, userId),
+      live,
+      fromSources(sources),
+      taggedWithAll(db, userId, tagNames),
+    );
+    // The pinned group heads the first page only. `nulls last` is how the partial index sorts.
+    const pinnedRows = after
+      ? []
+      : await db
+          .select(clippingColumns)
+          .from(clippings)
+          .where(and(matching, isNotNull(clippings.pinnedAt)))
+          .orderBy(sql`${clippings.pinnedAt} desc nulls last`, desc(clippings.id));
     // One extra row says whether another page follows without a second query.
     const rows = await db
       .select(clippingColumns)
       .from(clippings)
       .where(
         and(
-          eq(clippings.userId, userId),
-          live,
-          fromSources(sources),
-          taggedWithAll(db, userId, tagNames),
+          matching,
+          isNull(clippings.pinnedAt),
           after
             ? or(
                 lt(clippings.createdAt, after.at),
@@ -682,8 +797,13 @@ export function createClippingsService({
 
     const pageRows = rows.slice(0, limit);
     const last = pageRows.at(-1);
+    const [pinned, items] = await Promise.all([
+      withTags(userId, pinnedRows),
+      withTags(userId, pageRows),
+    ]);
     return {
-      items: await withTags(userId, pageRows),
+      pinned,
+      items,
       nextCursor: rows.length > limit && last ? encodeCursor(last) : null,
     };
   }
@@ -727,7 +847,7 @@ export function createClippingsService({
       db
         .select({
           id: clippings.id,
-          rank: sql<number>`row_number() over (order by ts_rank_cd(${searchTsv}, ${query}) desc, word_similarity(${text}, ${clippings.title}) desc, ${clippings.createdAt} desc, ${clippings.id} desc)`.as(
+          rank: sql<number>`row_number() over (order by ts_rank_cd(${searchTsv}, ${query}) desc, word_similarity(${text}, ${shownTitle}) desc, ${clippings.createdAt} desc, ${clippings.id} desc)`.as(
             "words_rank",
           ),
         })
@@ -758,7 +878,7 @@ export function createClippingsService({
       .with(byWords, byMeaning)
       .select({
         ...clippingColumns,
-        titleHeadline: sql<string>`ts_headline('simple', ${unmarked(clippings.title)}, ${query}, ${TITLE_HEADLINE})`,
+        titleHeadline: sql<string>`ts_headline('simple', ${unmarked(shownTitle)}, ${query}, ${TITLE_HEADLINE})`,
         snippetHeadline: sql<string | null>`case
           when ${matches(clippings.note)}
             then ts_headline('simple', ${unmarked(clippings.note)}, ${query}, ${SNIPPET_HEADLINE})
@@ -834,29 +954,35 @@ export function createClippingsService({
       .orderBy(desc(clippings.createdAt), desc(clippings.id));
     return {
       exportedAt,
-      clippings: (await withTags(userId, rows)).map((clipping) => ({
-        ...clipping,
-        tags: clipping.tags.map((tag) => tag.name),
-      })),
+      clippings: (await withTags(userId, rows)).map((clipping) => {
+        const { suggestedTags: _suggestedTags, ...exported } = clipping;
+        return { ...exported, tags: clipping.tags.map((tag) => tag.name) };
+      }),
     };
   }
 
   /**
-   * Changes what the user wrote on their clipping: its note, its tags or both. Returns it as it
-   * now stands, or null when the user has no such clipping.
+   * Changes what the user wrote on their clipping: its title, note, tags or any of them. Returns
+   * it as it now stands, or null when the user has no such clipping.
    */
   async function updateClipping(
     userId: string,
     clippingId: string,
-    { note, tags: tagList }: UpdateClippingInput,
+    { title, note, tags: tagList }: UpdateClippingInput,
   ): Promise<Clipping | null> {
+    const userTitle = title === undefined ? undefined : (title?.trim() ?? "") || null;
+    if (userTitle && userTitle.length > MAX_TITLE_LENGTH) throw new TitleTooLongError();
     if (note !== undefined && note.length > MAX_NOTE_LENGTH) throw new NoteTooLongError();
     const tagNames = tagList === undefined ? undefined : checkedTagNames(tagList);
     if (!UUID.test(clippingId)) return null;
     const updated = await db.transaction(async (tx) => {
       const [row] = await tx
         .update(clippings)
-        .set({ ...(note === undefined ? {} : { note }), updatedAt: clock.now() })
+        .set({
+          ...(userTitle === undefined ? {} : { userTitle }),
+          ...(note === undefined ? {} : { note }),
+          updatedAt: clock.now(),
+        })
         .where(and(eq(clippings.id, clippingId), eq(clippings.userId, userId), live))
         .returning(clippingColumns);
       if (row && tagNames) await setTags(tx, userId, row.id, tagNames);
@@ -865,14 +991,153 @@ export function createClippingsService({
     return updated ? oneWithTags(userId, updated) : null;
   }
 
-  /** One of the user's clippings, or null when they have no such clipping. */
+  /**
+   * One of the user's clippings, or null when they have no such clipping. The detail read: it
+   * also carries the tag suggestions the user hasn't dismissed, while they have suggestions on.
+   */
   async function getClipping(userId: string, clippingId: string): Promise<Clipping | null> {
     if (!UUID.test(clippingId)) return null;
     const [row] = await db
       .select(clippingColumns)
       .from(clippings)
       .where(and(eq(clippings.id, clippingId), eq(clippings.userId, userId), live));
+    if (!row) return null;
+    const clipping = await oneWithTags(userId, row);
+    const suggested = await db
+      .select({ name: clippingTagSuggestions.name })
+      .from(clippingTagSuggestions)
+      .where(
+        and(
+          eq(clippingTagSuggestions.clippingId, clippingId),
+          eq(clippingTagSuggestions.userId, userId),
+          isNull(clippingTagSuggestions.dismissedAt),
+          suggestionsOn(userId),
+          notTaggedAs(clippingId, userId, clippingTagSuggestions.name),
+        ),
+      )
+      .orderBy(clippingTagSuggestions.origin, tagKey(clippingTagSuggestions.name));
+    return { ...clipping, suggestedTags: suggested.map((suggestion) => suggestion.name) };
+  }
+
+  /** Whether the user has tag suggestions on. */
+  const suggestionsOn = (userId: string) =>
+    sql`exists (select 1 from ${userSettings} where ${userSettings.userId} = ${userId} and ${userSettings.suggestTags})`;
+
+  /** The clipping doesn't carry a tag of this name, ignoring case. */
+  const notTaggedAs = (clippingId: string, userId: string, name: SQLWrapper) =>
+    sql`not exists (
+      select 1 from ${clippingTags} inner join ${tags} on ${tags.id} = ${clippingTags.tagId}
+      where ${clippingTags.clippingId} = ${clippingId} and ${clippingTags.userId} = ${userId}
+        and ${tagKey(tags.name)} = ${tagKey(name)}
+    )`;
+
+  /**
+   * Pins the clipping above the newest-first list, or takes it down again. Pinning a pinned
+   * clipping keeps its place. Returns it as it now stands, or null when the user has no such
+   * clipping.
+   */
+  async function setPinned(
+    userId: string,
+    clippingId: string,
+    pinned: boolean,
+  ): Promise<Clipping | null> {
+    if (!UUID.test(clippingId)) return null;
+    const now = clock.now();
+    const [row] = await db
+      .update(clippings)
+      .set({
+        pinnedAt: pinned
+          ? sql`coalesce(${clippings.pinnedAt}, ${formatIsoUtc(now)}::timestamptz)`
+          : null,
+        updatedAt: now,
+      })
+      .where(and(eq(clippings.id, clippingId), eq(clippings.userId, userId), live))
+      .returning(clippingColumns);
     return row ? oneWithTags(userId, row) : null;
+  }
+
+  /**
+   * Adds a suggested tag to the clipping and removes the suggestion. The name matches one of the
+   * user's tags ignoring case, so accepting "CSS" files it under "css". A name that isn't a
+   * suggestion any more (dismissed, replaced by a re-read) changes nothing. Returns the clipping
+   * as the detail read has it, or null when the user has no such clipping. Throws
+   * `InvalidTagsError` when the clipping would have too many tags.
+   */
+  async function acceptTagSuggestion(
+    userId: string,
+    clippingId: string,
+    name: string,
+  ): Promise<Clipping | null> {
+    if (!UUID.test(clippingId)) return null;
+    const accepted = await db.transaction(async (tx) => {
+      // Locked, so a concurrent edit of the tags can't be lost under the replace below.
+      const [row] = await tx
+        .select({ id: clippings.id })
+        .from(clippings)
+        .where(and(eq(clippings.id, clippingId), eq(clippings.userId, userId), live))
+        .for("update");
+      if (!row) return false;
+      const suggestion = and(
+        eq(clippingTagSuggestions.clippingId, clippingId),
+        eq(clippingTagSuggestions.userId, userId),
+        isNull(clippingTagSuggestions.dismissedAt),
+        sql`${tagKey(clippingTagSuggestions.name)} = lower(${normalizeTagName(name)})`,
+      );
+      const [found] = await tx
+        .select({ name: clippingTagSuggestions.name })
+        .from(clippingTagSuggestions)
+        .where(suggestion);
+      if (found) {
+        const current = await tx
+          .select({ name: tags.name })
+          .from(clippingTags)
+          .innerJoin(tags, eq(tags.id, clippingTags.tagId))
+          .where(and(eq(clippingTags.clippingId, clippingId), eq(clippingTags.userId, userId)));
+        await setTags(
+          tx,
+          userId,
+          clippingId,
+          checkedTagNames([...current.map((tag) => tag.name), found.name]),
+        );
+        await tx.delete(clippingTagSuggestions).where(suggestion);
+      }
+      return true;
+    });
+    return accepted ? getClipping(userId, clippingId) : null;
+  }
+
+  /**
+   * Dismisses the named suggestions, or all of the clipping's when `names` is left out. A
+   * dismissed name is never suggested for that clipping again. Returns false when the user has no
+   * such clipping.
+   */
+  async function dismissTagSuggestions(
+    userId: string,
+    clippingId: string,
+    names?: readonly string[],
+  ): Promise<boolean> {
+    if (!UUID.test(clippingId)) return false;
+    const [owned] = await db
+      .select({ id: clippings.id })
+      .from(clippings)
+      .where(and(eq(clippings.id, clippingId), eq(clippings.userId, userId), live));
+    if (!owned) return false;
+    const named = names === undefined ? [] : normalizeTagNames(names);
+    if (names !== undefined && named.length === 0) return true;
+    await db
+      .update(clippingTagSuggestions)
+      .set({ dismissedAt: clock.now() })
+      .where(
+        and(
+          eq(clippingTagSuggestions.clippingId, clippingId),
+          eq(clippingTagSuggestions.userId, userId),
+          isNull(clippingTagSuggestions.dismissedAt),
+          names === undefined
+            ? undefined
+            : sql`${tagKey(clippingTagSuggestions.name)} in ${keysOf(named)}`,
+        ),
+      );
+    return true;
   }
 
   /**
@@ -924,10 +1189,107 @@ export function createClippingsService({
     return restored.length > 0;
   }
 
+  /** The user's most-used tag names, up to `USER_TAGS_FOR_SUGGESTIONS`, for the model to reuse. */
+  async function mostUsedTagNames(userId: string): Promise<string[]> {
+    const uses = sql<number>`count(${clippings.id})`;
+    const rows = await db
+      .select({ name: tags.name })
+      .from(tags)
+      .leftJoin(clippingTags, eq(clippingTags.tagId, tags.id))
+      .leftJoin(clippings, and(eq(clippings.id, clippingTags.clippingId), live))
+      .where(eq(tags.userId, userId))
+      .groupBy(tags.id)
+      .orderBy(desc(uses), tagKey(tags.name), tags.name)
+      .limit(USER_TAGS_FOR_SUGGESTIONS);
+    return rows.map((row) => row.name);
+  }
+
+  /**
+   * The tags that at least `NEIGHBOUR_VOTES_NEEDED` of the user's `NEIGHBOURS_VOTING` clippings
+   * nearest in meaning to `vector` (within the "close in meaning" cutoff) carry, most shared
+   * first, in the user's spelling.
+   */
+  async function neighbourTags(
+    userId: string,
+    clippingId: string,
+    vector: number[],
+  ): Promise<string[]> {
+    const distance = cosineDistance(embedding, vector);
+    const nearest = db.$with("nearest").as(
+      db
+        .select({ id: clippings.id })
+        .from(clippings)
+        .where(
+          and(
+            eq(clippings.userId, userId),
+            live,
+            ne(clippings.id, clippingId),
+            closeInMeaning(distance),
+          ),
+        )
+        .orderBy(asc(distance), desc(clippings.createdAt), desc(clippings.id))
+        .limit(NEIGHBOURS_VOTING),
+    );
+    const votes = sql<number>`count(*)`;
+    const rows = await db
+      .with(nearest)
+      .select({ name: tags.name })
+      .from(clippingTags)
+      .innerJoin(nearest, eq(nearest.id, clippingTags.clippingId))
+      .innerJoin(tags, eq(tags.id, clippingTags.tagId))
+      .where(eq(clippingTags.userId, userId))
+      .groupBy(tags.id)
+      .having(sql`${votes} >= ${NEIGHBOUR_VOTES_NEEDED}`)
+      .orderBy(desc(votes), tagKey(tags.name))
+      .limit(NEIGHBOUR_SUGGESTION_LIMIT);
+    return rows.map((row) => row.name);
+  }
+
+  /**
+   * Replaces the clipping's undismissed suggestions with these. A model reply that said nothing
+   * about tags (`model` undefined) leaves the undismissed model suggestions as they were. Names
+   * the clipping already carries, and names the user dismissed before, are not stored. Never
+   * touches `clipping_tags`.
+   */
+  async function replaceSuggestions(
+    tx: Transaction,
+    userId: string,
+    clippingId: string,
+    { model, neighbours }: { model: readonly string[] | undefined; neighbours: readonly string[] },
+    at: Date,
+  ) {
+    await tx
+      .delete(clippingTagSuggestions)
+      .where(
+        and(
+          eq(clippingTagSuggestions.clippingId, clippingId),
+          eq(clippingTagSuggestions.userId, userId),
+          isNull(clippingTagSuggestions.dismissedAt),
+          model === undefined ? eq(clippingTagSuggestions.origin, "neighbours") : undefined,
+        ),
+      );
+    const wanted = [
+      ...normalizeTagNames(model ?? []).map((name) => ({ name, origin: "model" })),
+      ...normalizeTagNames(neighbours).map((name) => ({ name, origin: "neighbours" })),
+    ].filter(({ name }) => name.length <= MAX_TAG_LENGTH);
+    if (wanted.length === 0) return;
+    // A name in both lists is stored once, as the model's: it comes first, and the unique index
+    // skips the second.
+    await tx.execute(sql`
+      insert into ${clippingTagSuggestions} (clipping_id, user_id, name, origin, created_at)
+      select ${clippingId}::uuid, ${userId}, wanted.name, wanted.origin, ${formatIsoUtc(at)}::timestamptz
+      from unnest(${sql.param(wanted.map((w) => w.name))}::text[], ${sql.param(wanted.map((w) => w.origin))}::text[])
+        with ordinality as wanted(name, origin, position)
+      where ${notTaggedAs(clippingId, userId, sql`wanted.name`)}
+      order by wanted.position
+      on conflict do nothing`);
+  }
+
   /**
    * Reads a pending clipping's page and fills in its title, summary and excerpt. Safe to repeat:
-   * only a pending clipping is touched, so a redelivered job does nothing, and the user's note
-   * and tags are never written.
+   * only a pending clipping is touched, so a redelivered job does nothing, and the user's title,
+   * note and tags are never written. For a user with tag suggestions on, it also stores the tags
+   * it suggests (see `replaceSuggestions`), in the transaction that makes the clipping ready.
    */
   async function enrichClipping(
     clippingId: string,
@@ -940,11 +1302,23 @@ export function createClippingsService({
       .where(eq(clippings.id, clippingId));
     if (!row || row.status !== "pending") return "skipped";
 
+    // Only a user with suggestions on has their tag names sent to the model.
+    const [settings] = await db
+      .select({ on: userSettings.suggestTags })
+      .from(userSettings)
+      .where(eq(userSettings.userId, row.userId));
+    const suggesting = settings?.on === true;
+    const userTags = suggesting ? await mostUsedTagNames(row.userId) : undefined;
+
     let read: PageSummary;
     let meaning: number[] | null = null;
     try {
       const page = await fetcher.fetchPage(row.url);
-      read = await summarizer.summarize({ url: row.url, ...page });
+      read = await summarizer.summarize({
+        url: row.url,
+        ...page,
+        ...(userTags === undefined ? {} : { userTags }),
+      });
       // The reading stands without an embedding: search finds the clipping by its words, and the
       // daily sweep embeds it later. A retry would only read the page and call Haiku again.
       meaning = await embed(documentText(read), "document").catch((error: unknown) => {
@@ -960,37 +1334,66 @@ export function createClippingsService({
         .where(and(eq(clippings.id, clippingId), eq(clippings.status, "pending")));
       return "failed";
     }
+
+    // The vote is a bonus: without it the reading and the model's suggestions still stand.
+    const neighbours =
+      suggesting && meaning
+        ? await neighbourTags(row.userId, clippingId, meaning).catch((error: unknown) => {
+            console.error(`Couldn't count neighbour tags for clipping ${clippingId}`, error);
+            return [];
+          })
+        : [];
+
     const now = clock.now();
-    const [updated] = await db
-      .update(clippings)
-      .set({
-        title: read.title,
-        summary: read.summary,
-        excerpt: read.excerpt,
-        embedding: meaning,
-        ...statusChange("ready", now),
-      })
-      .where(and(eq(clippings.id, clippingId), eq(clippings.status, "pending")))
-      .returning({ id: clippings.id });
+    const updated = await db.transaction(async (tx) => {
+      const [ready] = await tx
+        .update(clippings)
+        .set({
+          // Never `user_title`: a rename is the user's.
+          title: read.title,
+          summary: read.summary,
+          excerpt: read.excerpt,
+          embedding: meaning,
+          ...statusChange("ready", now),
+        })
+        .where(and(eq(clippings.id, clippingId), eq(clippings.status, "pending")))
+        .returning({ id: clippings.id });
+      if (ready && suggesting) {
+        await replaceSuggestions(
+          tx,
+          row.userId,
+          clippingId,
+          { model: read.suggestedTags, neighbours },
+          now,
+        );
+      }
+      return ready;
+    });
     return updated ? "ready" : "skipped";
   }
 
   /**
-   * Starts a failed clipping over: back to pending, and the job is requested again. Returns the
-   * clipping as it stands (unchanged when it wasn't failed), or null when the user has no such
-   * clipping.
+   * Reads the page again: a ready or failed clipping goes back to pending and the job is
+   * requested. Its title, note and tags stay the user's. Returns the clipping as it stands
+   * (unchanged when it was already pending), or null when the user has no such clipping.
    */
-  async function retryEnrichment(userId: string, clippingId: string): Promise<Clipping | null> {
+  async function reEnrichClipping(userId: string, clippingId: string): Promise<Clipping | null> {
     if (!UUID.test(clippingId)) return null;
-    const now = clock.now();
+    const [current] = await db
+      .select({ status: clippings.status })
+      .from(clippings)
+      .where(and(eq(clippings.id, clippingId), eq(clippings.userId, userId), live));
+    if (!current) return null;
+    if (current.status === "pending") return getClipping(userId, clippingId);
+
     const [restarted] = await db
       .update(clippings)
-      .set(statusChange("pending", now))
+      .set(statusChange("pending", clock.now()))
       .where(
         and(
           eq(clippings.id, clippingId),
           eq(clippings.userId, userId),
-          eq(clippings.status, "failed"),
+          eq(clippings.status, current.status),
           live,
         ),
       )
@@ -1004,7 +1407,7 @@ export function createClippingsService({
       // restart above stamped the status time, so the sweep counts from there.
       await db
         .update(clippings)
-        .set({ status: "failed" })
+        .set({ status: current.status })
         .where(and(eq(clippings.id, restarted.id), eq(clippings.status, "pending")));
       throw error;
     }
@@ -1014,7 +1417,8 @@ export function createClippingsService({
   /**
    * For the daily cron: requests enrichment again for clippings that have been pending or failed
    * for more than an hour, starting failed ones over. Returns the ids it requested. A batch is
-   * capped, so a backlog drains over several days instead of one long run.
+   * capped, so a backlog drains over several days instead of one long run. Imports waiting their
+   * turn are pending on purpose: `drainImports` takes those.
    */
   async function sweepStuck(): Promise<string[]> {
     const now = clock.now();
@@ -1026,6 +1430,7 @@ export function createClippingsService({
         and(
           inArray(clippings.status, ["pending", "failed"]),
           lt(clippings.statusChangedAt, stuckBefore),
+          or(ne(clippings.source, "import"), ne(clippings.status, "pending")),
           live,
         ),
       )
@@ -1042,6 +1447,293 @@ export function createClippingsService({
       if (result.status === "rejected") console.error("Couldn't request enrichment", result.reason);
     }
     return ids;
+  }
+
+  /**
+   * For the daily cron: requests enrichment of the oldest pending imports, at most
+   * `IMPORT_DAILY_BUDGET` a day, spread over `IMPORT_SPREAD_SECONDS`. Returns the ids it
+   * requested. Imports are made pending without a job, so this is how they get read.
+   *
+   * It claims the batch in one statement that stamps `import_requested_at` and the status time, so
+   * two overlapping runs never take the same clipping. The budget counts what was requested in
+   * the last `IMPORT_SPREAD_SECONDS`, so a second run the same day takes only the remainder; a
+   * lock keeps two runs from both counting before either claims. A clipping whose job is lost
+   * (still pending a spread window later) is taken again, behind the others. Throws when the
+   * queue can't be reached, after giving the budget back.
+   */
+  async function drainImports(): Promise<string[]> {
+    const now = clock.now();
+    const windowStart = subSeconds(now, IMPORT_SPREAD_SECONDS);
+
+    const claimed = await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext('clippings.drainImports'))`);
+      const [spent] = await tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(clippings)
+        .where(and(eq(clippings.source, "import"), gte(clippings.importRequestedAt, windowStart)));
+      const remaining = IMPORT_DAILY_BUDGET - (spent?.count ?? 0);
+      if (remaining <= 0) return [];
+
+      // A CTE with row locks is evaluated once, so the update gets exactly the rows it locked.
+      const next = tx.$with("next").as(
+        tx
+          .select({ id: clippings.id, waitingSince: clippings.statusChangedAt })
+          .from(clippings)
+          .where(
+            and(
+              eq(clippings.source, "import"),
+              eq(clippings.status, "pending"),
+              or(isNull(clippings.importRequestedAt), lt(clippings.importRequestedAt, windowStart)),
+              live,
+            ),
+          )
+          .orderBy(asc(clippings.statusChangedAt), asc(clippings.createdAt), asc(clippings.id))
+          .limit(remaining)
+          .for("update", { skipLocked: true }),
+      );
+      return tx
+        .with(next)
+        .update(clippings)
+        .set({ importRequestedAt: now, statusChangedAt: now })
+        .from(next)
+        .where(eq(clippings.id, next.id))
+        .returning({
+          id: clippings.id,
+          createdAt: clippings.createdAt,
+          waitingSince: next.waitingSince,
+        });
+    });
+    if (claimed.length === 0) return [];
+
+    // In the order picked, so the import that has waited longest, then the oldest bookmark, gets
+    // the earliest slot.
+    const ids = claimed
+      .toSorted(
+        (a, b) =>
+          a.waitingSince.getTime() - b.waitingSince.getTime() ||
+          a.createdAt.getTime() - b.createdAt.getTime() ||
+          a.id.localeCompare(b.id),
+      )
+      .map((row) => row.id);
+    try {
+      await jobs.requestEnrichments(ids, { spreadOverSeconds: IMPORT_SPREAD_SECONDS });
+    } catch (error) {
+      // Nothing was requested, so don't spend the budget on it: the next run takes them again.
+      await db.update(clippings).set({ importRequestedAt: null }).where(inArray(clippings.id, ids));
+      throw error;
+    }
+    return ids;
+  }
+
+  /** How many of the user's imported clippings still wait to be read. */
+  async function countPendingImports(userId: string): Promise<number> {
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(clippings)
+      .where(
+        and(
+          eq(clippings.userId, userId),
+          eq(clippings.source, "import"),
+          eq(clippings.status, "pending"),
+          live,
+        ),
+      );
+    return row?.count ?? 0;
+  }
+
+  /** The bookmarks as pages to save: the ones that aren't web pages counted, the rest once each. */
+  function toImportPages(items: readonly ImportItem[], foldersAsTags: boolean, now: Date) {
+    let skipped = 0;
+    const pages = new Map<
+      string,
+      { url: string; normalized: string; createdAt: Date; folders: string[] }
+    >();
+    for (const item of items) {
+      const parsed = parseWebUrl(item.url);
+      if (!parsed) {
+        skipped += 1;
+        continue;
+      }
+      const saved =
+        item.addedAt &&
+        isValid(item.addedAt) &&
+        !isAfter(item.addedAt, now) &&
+        !isBefore(item.addedAt, EARLIEST_BOOKMARK)
+          ? item.addedAt
+          : now;
+      const folders = foldersAsTags
+        ? normalizeTagNames(item.folders).filter((name) => name.length <= MAX_TAG_LENGTH)
+        : [];
+      const seen = pages.get(parsed.normalized);
+      if (!seen) {
+        pages.set(parsed.normalized, {
+          url: parsed.url,
+          normalized: parsed.normalized,
+          createdAt: saved,
+          folders,
+        });
+      } else {
+        // The same page twice in one file is one clipping, in both folders, as old as either.
+        if (isBefore(saved, seen.createdAt)) seen.createdAt = saved;
+        seen.folders = normalizeTagNames([...seen.folders, ...folders]);
+      }
+    }
+    for (const page of pages.values()) page.folders = page.folders.slice(0, MAX_TAGS_PER_CLIPPING);
+    return { skipped, pages: [...pages.values()] };
+  }
+
+  /**
+   * What `importClippings` would do with these bookmarks, without writing anything: the same
+   * URL rules and duplicate detection as saving.
+   */
+  async function previewImport(
+    userId: string,
+    items: readonly ImportItem[],
+  ): Promise<ImportCounts> {
+    const { skipped, pages } = toImportPages(items, false, clock.now());
+    if (pages.length === 0) return { created: 0, existing: 0, skipped };
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(clippings)
+      .where(
+        and(
+          eq(clippings.userId, userId),
+          inArray(
+            clippings.urlNormalized,
+            pages.map((page) => page.normalized),
+          ),
+          live,
+        ),
+      );
+    const existing = row?.count ?? 0;
+    return { created: pages.length - existing, existing, skipped };
+  }
+
+  /**
+   * Saves bookmarks as clippings in one transaction, so a failure imports none. Each page goes
+   * through the same normalisation and duplicate detection as `saveClipping`: a page the user
+   * already has is left alone, a deleted clipping of it starts over, and a page that appears
+   * twice in the file counts once. New clippings are pending, titled by their URL, from source
+   * `import`, dated as the bookmark was saved (now when that date is missing, in the future or
+   * before 1990). With `foldersAsTags`, a bookmark's folders become its tags. No job is
+   * published: `drainImports` requests them gradually.
+   */
+  async function importClippings(
+    userId: string,
+    items: readonly ImportItem[],
+    { foldersAsTags }: ImportOptions,
+  ): Promise<ImportCounts> {
+    const now = clock.now();
+    const { skipped, pages } = toImportPages(items, foldersAsTags, now);
+    if (pages.length === 0) return { created: 0, existing: 0, skipped };
+
+    const written = await db.transaction(async (tx) => {
+      const rows: { id: string; urlNormalized: string }[] = [];
+      for (const chunk of chunks(pages, IMPORT_CHUNK_SIZE)) {
+        rows.push(
+          ...(await tx
+            .insert(clippings)
+            .values(
+              chunk.map((page) => ({
+                userId,
+                url: page.url,
+                urlNormalized: page.normalized,
+                title: page.url,
+                source: "import" as const,
+                createdAt: page.createdAt,
+                ...statusChange("pending", now),
+              })),
+            )
+            // A deleted clipping of the same page starts over, as saving it again would.
+            .onConflictDoUpdate({
+              target: [clippings.userId, clippings.urlNormalized],
+              set: {
+                url: sql`excluded.url`,
+                title: sql`excluded.title`,
+                userTitle: null,
+                pinnedAt: null,
+                note: "",
+                summary: null,
+                excerpt: null,
+                source: "import",
+                clientId: null,
+                deletedAt: null,
+                createdAt: sql`excluded.created_at`,
+                status: "pending",
+                statusChangedAt: now,
+                importRequestedAt: null,
+                updatedAt: now,
+              },
+              setWhere: isNotNull(clippings.deletedAt),
+            })
+            .returning({ id: clippings.id, urlNormalized: clippings.urlNormalized })),
+        );
+      }
+      if (rows.length === 0) return rows;
+
+      const ids = rows.map((row) => row.id);
+      // Revived clippings start over without tags or suggestions; new ones have none to delete.
+      for (const chunk of chunks(ids, 5000)) {
+        await tx
+          .delete(clippingTags)
+          .where(and(eq(clippingTags.userId, userId), inArray(clippingTags.clippingId, chunk)));
+        await tx
+          .delete(clippingTagSuggestions)
+          .where(
+            and(
+              eq(clippingTagSuggestions.userId, userId),
+              inArray(clippingTagSuggestions.clippingId, chunk),
+            ),
+          );
+      }
+      if (foldersAsTags) await tagImported(tx, userId, rows, pages, now);
+      return rows;
+    });
+
+    return {
+      created: written.length,
+      existing: pages.length - written.length,
+      skipped,
+    };
+  }
+
+  /** Links the imported clippings to their folders' tags, creating the tags the user lacks. */
+  async function tagImported(
+    tx: Transaction,
+    userId: string,
+    rows: readonly { id: string; urlNormalized: string }[],
+    pages: readonly { normalized: string; folders: readonly string[] }[],
+    createdAt: Date,
+  ) {
+    const foldersOf = new Map(pages.map((page) => [page.normalized, page.folders]));
+    const names = normalizeTagNames(rows.flatMap((row) => foldersOf.get(row.urlNormalized) ?? []));
+    if (names.length === 0) return;
+    for (const chunk of chunks(names.toSorted(), IMPORT_CHUNK_SIZE)) {
+      // Sorted, like `setTags`, so two imports creating the same tags can't deadlock.
+      await tx
+        .insert(tags)
+        .values(chunk.map((name) => ({ userId, name, createdAt })))
+        .onConflictDoNothing();
+    }
+    // Which tag each name is, by Postgres's `lower`, as the unique index has it.
+    const resolved = await tx.execute<{ name: string; id: string }>(sql`
+      select names.name, ${tags.id} as id
+      from unnest(${sql.param(names)}::text[]) as names(name)
+      inner join ${tags} on ${tags.userId} = ${userId} and ${tagKey(tags.name)} = ${tagKey(sql`names.name`)}`);
+    const tagIdOf = new Map(resolved.rows.map((tag) => [tagNameKey(tag.name), tag.id]));
+    const links: { clippingId: string; tagId: string; userId: string }[] = [];
+    for (const row of rows) {
+      const tagIds = new Set(
+        (foldersOf.get(row.urlNormalized) ?? []).flatMap((name) => {
+          const id = tagIdOf.get(tagNameKey(name));
+          return id ? [id] : [];
+        }),
+      );
+      for (const tagId of tagIds) links.push({ clippingId: row.id, tagId, userId });
+    }
+    for (const chunk of chunks(links, 2000)) {
+      await tx.insert(clippingTags).values(chunk).onConflictDoNothing();
+    }
   }
 
   /**
@@ -1114,7 +1806,14 @@ export function createClippingsService({
     deleteClipping,
     restoreClipping,
     enrichClipping,
-    retryEnrichment,
+    reEnrichClipping,
+    setPinned,
+    acceptTagSuggestion,
+    dismissTagSuggestions,
+    previewImport,
+    importClippings,
+    countPendingImports,
+    drainImports,
     sweepStuck,
     embedMissing,
     purgeDeleted,

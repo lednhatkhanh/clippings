@@ -13,9 +13,21 @@ export {
   type PaletteName,
 } from "./appearance.ts";
 export {
+  MAX_BOOKMARKS_FILE_BYTES,
+  MAX_BOOKMARKS_PER_IMPORT,
+  parseBookmarksHtml,
+  serializeBookmarksHtml,
+  type BookmarksParseResult,
+  type BookmarkToExport,
+  type ParsedBookmark,
+  type SkippedBookmark,
+  type SkipReason,
+} from "./bookmarks.ts";
+export {
   CLIPPING_SOURCES,
   CLIPPING_STATUSES,
   MAX_NOTE_LENGTH,
+  MAX_TITLE_LENGTH,
   type Clipping,
   type ClippingSource,
   type ClippingStatus,

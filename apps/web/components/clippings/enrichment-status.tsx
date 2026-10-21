@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import useSWR from "swr";
 
-import { retryEnrichmentAction } from "@/app/(app)/actions.ts";
+import { reEnrichClippingAction } from "@/app/(app)/actions.ts";
 import { useOnline } from "@/components/online-status.tsx";
 import type { ClippingStatus } from "@clippings/shared";
 import { Button, ProgressBar } from "@clippings/ui";
@@ -36,7 +36,7 @@ export function EnrichmentStatus({
   async function retry() {
     setRetrying(true);
     try {
-      await retryEnrichmentAction(clippingId);
+      await reEnrichClippingAction(clippingId);
       router.refresh();
     } finally {
       setRetrying(false);
