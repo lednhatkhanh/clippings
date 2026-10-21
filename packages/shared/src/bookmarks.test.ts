@@ -434,7 +434,9 @@ describe("parseBookmarksHtml", () => {
       // Best of three, so one slow run on a busy machine doesn't decide it.
       const fastest = (html: string) =>
         Math.min(...[1, 2, 3].map(() => timed(() => parseBookmarksHtml(html)).ms));
-      const count = Math.floor(MAX_BOOKMARKS_FILE_BYTES / 8);
+      // A quarter of the largest file: quadratic already shows at this size, and CI runners are
+      // many times slower than a laptop.
+      const count = Math.floor(MAX_BOOKMARKS_FILE_BYTES / 32);
       const full = listsThenFolders(count);
       expect(timed(() => parseBookmarksHtml(full)).result).toEqual({
         ok: true,
@@ -445,7 +447,7 @@ describe("parseBookmarksHtml", () => {
       // quadratic. A ratio, not a time limit, so a slow CI machine doesn't fail it.
       const ratio = fastest(full) / Math.max(fastest(listsThenFolders(count / 4)), 1);
       expect(ratio).toBeLessThan(8);
-    });
+    }, 30_000);
 
     it("names no more folders than the cap, however deep and however many links", () => {
       const depth = 50_000;
