@@ -10,6 +10,7 @@ import { getDatabase } from "@/lib/db.ts";
 import { extensionResourceUrl, parseExtensionIds } from "@/lib/extension/origins.ts";
 import { extensionResourceGate } from "@/lib/extension/resource-gate.ts";
 import { mcpResourceUrl } from "@/lib/mcp/resource.ts";
+import { DEFAULT_SCOPES, WRITE_SCOPE } from "@/lib/mcp/scopes.ts";
 import {
   account,
   type Database,
@@ -109,9 +110,14 @@ export function createAuth({
       jwt({ disableSettingJwtHeader: true }),
       // The OAuth 2.1 authorization server for Claude (claude.ai connectors and Claude Code)
       // and the extension: RFC 8414 and RFC 9728 metadata, PKCE S256, refresh-token rotation,
-      // and access tokens bound to `/mcp` or to the extension API. Scopes stay at the defaults,
-      // which include `offline_access`, so a client that asks for none gets a refresh token.
+      // and access tokens bound to `/mcp` or to the extension API. The scopes are Better Auth's
+      // defaults, which include `offline_access`, plus `clippings:write` for the write tools.
+      // An authorization that names no scope would be given every scope the provider knows, so
+      // the consent gate fills in the defaults, on GET and POST alike: write access is always
+      // asked for by name.
+      // `/.well-known/oauth-protected-resource` advertises `clippings:write` from this list.
       mcp({
+        scopes: [...DEFAULT_SCOPES, WRITE_SCOPE],
         loginPage: OAUTH_LOGIN_PAGE,
         consentPage: OAUTH_CONSENT_PAGE,
         resource: mcpResourceUrl(baseURL),

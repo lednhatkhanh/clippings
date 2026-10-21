@@ -36,7 +36,7 @@ async function Clippings({ searchParams }: { searchParams: SearchParams }) {
   }
 
   // Nothing saved yet: no search to offer.
-  if (page.rows.length === 0 && !toQueryString(params)) return <EmptyState />;
+  if (page.rows.length + page.pinned.length === 0 && !toQueryString(params)) return <EmptyState />;
   return <ClippingsBrowser initialParams={params} initialPage={page} />;
 }
 

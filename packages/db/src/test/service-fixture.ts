@@ -21,7 +21,8 @@ import { createTempDatabase, type TempDatabase } from "./temp-database.ts";
 /**
  * A migrated, throwaway database with the Clippings service on top and in-memory ports: a clock
  * the test moves by hand, a publisher that records what it was asked to enrich, and a fetcher and
- * summarizer that answer from `web`, which maps a URL to what reading it yields, and an embedder
+ * summarizer that answer from `web`, which maps a URL to what reading it yields (its summary's
+ * `suggestedTags` is what the model suggests), and an embedder
  * that knows what words mean only from `meanings`.
  */
 export async function createServiceFixture() {
@@ -32,11 +33,16 @@ export async function createServiceFixture() {
   let now = parseISO("2026-10-01T09:00:00.000Z");
   const clock: Clock = { now: () => now };
   const enrichmentRequests: string[] = [];
+  const batchedEnrichmentRequests: { ids: string[]; spreadOverSeconds: number }[] = [];
   let publishing: "up" | "down" = "up";
   const jobs: JobPublisher = {
     requestEnrichment: async (clippingId) => {
       if (publishing === "down") throw new Error("the queue is unreachable");
       enrichmentRequests.push(clippingId);
+    },
+    requestEnrichments: async (clippingIds, { spreadOverSeconds }) => {
+      if (publishing === "down") throw new Error("the queue is unreachable");
+      batchedEnrichmentRequests.push({ ids: [...clippingIds], spreadOverSeconds });
     },
   };
 
@@ -53,8 +59,11 @@ export async function createServiceFixture() {
       return entry.page;
     },
   };
+  /** The `userTags` each summarize call got, in order: undefined when suggestions were off. */
+  const summarizedWithTags: (readonly string[] | undefined)[] = [];
   const summarizer: Summarizer = {
-    summarize: async ({ url }) => {
+    summarize: async ({ url, userTags }) => {
+      summarizedWithTags.push(userTags);
       const entry = web.get(url);
       if (!entry || "error" in entry) throw new Error(`Nothing to summarize at ${url}`);
       return entry.summary;
@@ -83,6 +92,13 @@ export async function createServiceFixture() {
     pool,
     web,
     enrichmentRequests,
+    /** Every `requestEnrichments` call: the ids in order and the window they were spread over. */
+    batchedEnrichmentRequests,
+    /**
+     * The tag names the summarizer received per call, in order; undefined for a call made with
+     * suggestions off. Set a page's `summary.suggestedTags` in `web` to change what it suggests.
+     */
+    summarizedWithTags,
     /** Makes the publisher throw (or work again), the way an unreachable queue does. */
     setPublishing: (state: "up" | "down") => {
       publishing = state;

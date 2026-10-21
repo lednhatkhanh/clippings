@@ -1,7 +1,8 @@
 // Stand-ins for the services the app calls out to, so a change can be tried in a browser without
-// credentials: QStash (accepts a publish, then makes a signed delivery with retries, like the real
-// one), the Anthropic Messages API (answers the page-reading tool call after a short delay) and
-// Voyage AI's embeddings API (a vector built from the words, so texts that share words are close).
+// credentials: QStash (accepts a publish or a batch, then makes a signed delivery with retries,
+// like the real one), the Anthropic Messages API (answers the page-reading tool call after a short
+// delay) and Voyage AI's embeddings API (a vector built from the words, so texts that share words
+// are close).
 //
 //   node scripts/local/fakes.mjs        QStash on :8080, Anthropic on :8081, Voyage AI on :8082
 //
@@ -14,6 +15,16 @@ import { constructNow, getTime, getUnixTime } from "date-fns";
 const SIGNING_KEY = "local-current-key"; // QSTASH_CURRENT_SIGNING_KEY in local.env
 const RETRY_AFTER_MS = 1000;
 const MODEL_DELAY_MS = 4000; // long enough to see the "Reading the page…" state
+// QStash's real `Upstash-Delay` is honoured up to this, so an import backlog spread over a day
+// still drains visibly (all at once, after this long) instead of over hours.
+const MAX_DELAY_MS = 5000;
+const DELAY_UNIT_MS = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
+
+/** `Upstash-Delay` ("90s", "2h") in milliseconds, capped at `MAX_DELAY_MS`; 0 when absent. */
+function delayMs(header) {
+  const match = /^(\d+)([smhd])$/.exec(String(header ?? ""));
+  return match ? Math.min(Number(match[1]) * DELAY_UNIT_MS[match[2]], MAX_DELAY_MS) : 0;
+}
 
 const base64url = (input) => Buffer.from(input).toString("base64url");
 
@@ -66,27 +77,75 @@ function listen(port, name, handle) {
     .listen(port, "127.0.0.1", () => console.log(`${name} on ${port}`));
 }
 
-listen(8080, "fake qstash", (request, response, body) => {
-  const publish = request.url?.match(/^\/v2\/publish\/(.+)$/);
-  if (request.method !== "POST" || !publish) return response.writeHead(404).end();
+const messageId = () => `msg_${getTime(constructNow(undefined))}`;
 
-  const destination = decodeURIComponent(publish[1]);
-  const retries = Number(request.headers["upstash-retries"] ?? 3);
+/** Takes one message the way QStash does: logs it, then delivers it after its delay. */
+function accept(destination, headers, body) {
+  const retries = Number(headers["upstash-retries"] ?? 3);
   const forwarded = Object.fromEntries(
-    Object.entries(request.headers)
+    Object.entries(headers)
       .filter(([name]) => name.startsWith("upstash-forward-"))
       .map(([name, value]) => [name.slice("upstash-forward-".length), value]),
   );
-  console.log(`[qstash] publish ${destination} retries=${retries} body=${body}`);
-  setTimeout(() => deliver(destination, body, forwarded, retries), 300);
+  const delay = delayMs(headers["upstash-delay"]);
+  console.log(`[qstash] publish ${destination} retries=${retries} delay=${delay}ms body=${body}`);
+  setTimeout(() => deliver(destination, body, forwarded, retries), 300 + delay);
+  return { messageId: messageId() };
+}
+
+listen(8080, "fake qstash", (request, response, body) => {
+  const publish = request.url?.match(/^\/v2\/publish\/(.+)$/);
+  const batch = request.url === "/v2/batch";
+  if (request.method !== "POST" || !(publish || batch)) return response.writeHead(404).end();
+
   response.writeHead(201, { "content-type": "application/json" });
-  response.end(JSON.stringify({ messageId: `msg_${getTime(constructNow(undefined))}` }));
+  if (publish) {
+    return response.end(
+      JSON.stringify(accept(decodeURIComponent(publish[1]), request.headers, body)),
+    );
+  }
+  // A batch is a JSON array of { destination, headers, body }, each message with its own headers
+  // (the client sends them with their original capitalisation, so fold them like Node does).
+  const messages = JSON.parse(body || "[]");
+  console.log(`[qstash] batch of ${messages.length}`);
+  response.end(
+    JSON.stringify(
+      messages.map((message) =>
+        accept(
+          message.destination,
+          Object.fromEntries(
+            Object.entries(message.headers ?? {}).map(([name, value]) => [
+              name.toLowerCase(),
+              value,
+            ]),
+          ),
+          message.body,
+        ),
+      ),
+    ),
+  );
 });
+
+/**
+ * Tag suggestions, when asked for: the first two of the user's tags (listed in `<your_tags>`) and
+ * one new tag, the first long word of the page's title.
+ */
+function suggestTags(message, title) {
+  const listed = /<your_tags>\n([\s\S]*?)\n<\/your_tags>/.exec(message)?.[1] ?? "";
+  const mine = listed === "(none yet)" ? [] : listed.split("\n").filter(Boolean);
+  const word = (title ?? "").toLowerCase().match(/\p{L}{4,}/u)?.[0] ?? "reading";
+  return { existing_tags: mine.slice(0, 2), new_tags: [word] };
+}
 
 listen(8081, "fake anthropic", (request, response, body) => {
   const payload = JSON.parse(body || "{}");
-  const title = /Page title: ([^\\]*)\\n/.exec(JSON.stringify(payload.messages ?? ""))?.[1];
-  console.log(`[anthropic] ${request.url} model=${payload.model} title=${title}`);
+  const message = String(payload.messages?.[0]?.content ?? "");
+  const title = /^Page title: (.*)$/m.exec(message)?.[1];
+  // Present when the tool asks for suggestions (tag suggestions are on for the user).
+  const suggests = Boolean(payload.tools?.[0]?.input_schema?.properties?.existing_tags);
+  console.log(
+    `[anthropic] ${request.url} model=${payload.model} title=${title} suggests=${suggests}`,
+  );
   setTimeout(() => {
     response.writeHead(200, { "content-type": "application/json" });
     response.end(
@@ -106,6 +165,7 @@ listen(8081, "fake anthropic", (request, response, body) => {
               title: `Read: ${title ?? "Untitled"}`,
               summary: "A stand-in summary of the page. It says what the page is about.",
               excerpt: "A stand-in passage copied from the page.",
+              ...(suggests ? suggestTags(message, title) : {}),
             },
           },
         ],

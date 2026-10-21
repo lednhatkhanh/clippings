@@ -13,6 +13,7 @@ import {
   InvalidTagsError,
   InvalidUrlError,
   NoteTooLongError,
+  TitleTooLongError,
   type ClippingsService,
   type ConnectionsService,
   type SettingsService,
@@ -236,8 +237,9 @@ export function createExtensionApi({
     },
 
     /**
-     * Replaces the note, the tags or both on one of the caller's clippings. Tags are names, as in
-     * the web app: a name the user has no tag for creates one.
+     * Replaces the title, the note, the tags or any of them on one of the caller's clippings. An
+     * empty or null title goes back to the page's. Tags are names, as in the web app: a name the
+     * user has no tag for creates one.
      */
     async update(request: Request, clippingId: string): Promise<Response> {
       const caller = await authenticate(request);
@@ -250,7 +252,11 @@ export function createExtensionApi({
         return updated ? reply(request, present(updated), 200) : refuse(request, 404, "not_found");
       } catch (error) {
         // The schema caps both already; these are the service's own checks agreeing.
-        if (error instanceof NoteTooLongError || error instanceof InvalidTagsError) {
+        if (
+          error instanceof TitleTooLongError ||
+          error instanceof NoteTooLongError ||
+          error instanceof InvalidTagsError
+        ) {
           return refuse(request, 400, "invalid_request");
         }
         throw error;

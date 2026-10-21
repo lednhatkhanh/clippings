@@ -6,6 +6,14 @@ export interface Clock {
 /** Starts background enrichment of a clipping. */
 export interface JobPublisher {
   requestEnrichment: (clippingId: string) => Promise<void>;
+  /**
+   * Starts enrichment of many clippings at once, each delayed so the jobs arrive spread evenly
+   * over `spreadOverSeconds` instead of all together. For the import backlog.
+   */
+  requestEnrichments: (
+    clippingIds: readonly string[],
+    options: { spreadOverSeconds: number },
+  ) => Promise<void>;
 }
 
 /** What reading a web page yields. */
@@ -26,11 +34,26 @@ export interface PageSummary {
   title: string;
   summary: string;
   excerpt: string;
+  /**
+   * Tags the model suggests, when it was asked: at most 3 of the user's own (in their spelling)
+   * and at most 1 new one. Left out when suggestions were off or the model's suggestions were
+   * unusable.
+   */
+  suggestedTags?: string[];
 }
+
+/** What the summarizer reads: the page, and the user's tag names when they want suggestions. */
+export type SummarizerInput = { url: string } & FetchedPage & {
+    /**
+     * The user's most-used tag names, when they have tag suggestions on (possibly none yet).
+     * Undefined when suggestions are off: then no tag names leave the app and none are suggested.
+     */
+    userTags?: readonly string[];
+  };
 
 /** Reads a page the way a person would: a clean title, a short summary, a passage worth keeping. */
 export interface Summarizer {
-  summarize: (page: { url: string } & FetchedPage) => Promise<PageSummary>;
+  summarize: (page: SummarizerInput) => Promise<PageSummary>;
 }
 
 /**

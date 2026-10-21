@@ -340,7 +340,10 @@ export const clippings = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     url: text("url").notNull(),
     urlNormalized: text("url_normalized").notNull(),
+    // The page's title, as enrichment wrote it. The title to show is `user_title` when set.
     title: text("title").notNull(),
+    // The user's own title; null shows the page's. Enrichment never writes it.
+    userTitle: text("user_title"),
     note: text("note").notNull().default(""),
     // Written by enrichment; null until the page has been read.
     summary: text("summary"),
@@ -351,6 +354,10 @@ export const clippings = pgTable(
     // When enrichment was last requested or the status last changed: the sweep's "stuck for an
     // hour". Not `updated_at`, which an edit to the note moves too.
     statusChangedAt: timestamptz("status_changed_at").notNull().defaultNow(),
+    // When the daily drain last requested this imported clipping's enrichment; null before that.
+    // The drain counts these against its daily budget, so a second run the same day takes only
+    // what is left and never requests the same clipping twice.
+    importRequestedAt: timestamptz("import_requested_at"),
     // No default: the service stamps both from its clock, so tests control time and the list
     // cursor round-trips exactly.
     createdAt: timestamptz("created_at").notNull(),
@@ -361,11 +368,14 @@ export const clippings = pgTable(
     embedding: vector("embedding", { dimensions: EMBEDDING_DIMENSIONS }),
     // Set when the user deletes the clipping, cleared by Undo. Every read skips deleted rows.
     deletedAt: timestamptz("deleted_at"),
+    // When the user pinned it above the newest-first list; null when not pinned. Deleting and
+    // undoing leave it alone.
+    pinnedAt: timestamptz("pinned_at"),
     // What keyword search matches, kept up to date by Postgres. `simple` doesn't stem, so words
-    // in any language are matched as written. The weights rank title over note over excerpt.
+    // in any language are matched as written. The weights rank both titles over note over excerpt.
     searchTsv: tsvector("search_tsv").generatedAlwaysAs(
       (): SQL =>
-        sql`setweight(to_tsvector('simple', ${clippings.title}), 'A') || setweight(to_tsvector('simple', ${clippings.note}), 'B') || setweight(to_tsvector('simple', coalesce(${clippings.excerpt}, '')), 'C')`,
+        sql`setweight(to_tsvector('simple', ${clippings.title}), 'A') || setweight(to_tsvector('simple', coalesce(${clippings.userTitle}, '')), 'A') || setweight(to_tsvector('simple', ${clippings.note}), 'B') || setweight(to_tsvector('simple', coalesce(${clippings.excerpt}, '')), 'C')`,
     ),
   },
   (table) => [
@@ -376,8 +386,25 @@ export const clippings = pgTable(
     check("clippings_source_check", sql`${table.source} in (${inList(CLIPPING_SOURCES)})`),
     index("clippings_user_newest_idx").on(table.userId, table.createdAt.desc(), table.id.desc()),
     index("clippings_search_tsv_idx").using("gin", table.searchTsv),
-    // Typo tolerance on titles: `<%` (word similarity) uses it.
+    // Typo tolerance on the page's title: `<%` (word similarity) uses it. v1's match still reads
+    // it during a deploy; the release after v2 drops it, with the code that no longer needs it.
     index("clippings_title_trgm_idx").using("gin", table.title.op("gin_trgm_ops")),
+    // Typo tolerance on the title to show: `<%` (word similarity) uses it, and the expression
+    // must be the one `shownTitle` writes in the service.
+    index("clippings_shown_title_trgm_idx").using(
+      "gin",
+      sql`coalesce(${table.userTitle}, ${table.title}) gin_trgm_ops`,
+    ),
+    // The pinned group of the browse read.
+    index("clippings_user_pinned_idx")
+      .on(table.userId, table.pinnedAt.desc())
+      .where(sql`${table.pinnedAt} is not null and ${table.deletedAt} is null`),
+    // The import backlog the daily drain takes from, oldest first.
+    index("clippings_pending_imports_idx")
+      .on(table.statusChangedAt, table.createdAt)
+      .where(
+        sql`${table.source} = 'import' and ${table.status} = 'pending' and ${table.deletedAt} is null`,
+      ),
   ],
 );
 
@@ -431,6 +458,44 @@ export const clippingTags = pgTable(
   ],
 );
 
+/** Where a tag suggestion came from. */
+export const SUGGESTION_ORIGINS = ["model", "neighbours"] as const;
+
+/**
+ * A tag enrichment suggests for a clipping. Never applied by itself: the user accepts it (it
+ * becomes a `clipping_tags` link and this row goes) or dismisses it (`dismissed_at` is set, and
+ * the row stays so a re-read doesn't suggest the name again). The user id is on every row and the
+ * foreign key includes it, as in `clipping_tags`.
+ */
+export const clippingTagSuggestions = pgTable(
+  "clipping_tag_suggestions",
+  {
+    clippingId: uuid("clipping_id").notNull(),
+    userId: text("user_id").notNull(),
+    name: text("name").notNull(),
+    origin: text("origin", { enum: SUGGESTION_ORIGINS }).notNull(),
+    dismissedAt: timestamptz("dismissed_at"),
+    // No default: the service stamps it from its clock.
+    createdAt: timestamptz("created_at").notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "clipping_tag_suggestions_clipping_fkey",
+      columns: [table.clippingId, table.userId],
+      foreignColumns: [clippings.id, clippings.userId],
+    }).onDelete("cascade"),
+    // A name is suggested once per clipping, ignoring case, like the user's tag names.
+    uniqueIndex("clipping_tag_suggestions_name_key").on(
+      table.clippingId,
+      sql`lower(${table.name})`,
+    ),
+    check(
+      "clipping_tag_suggestions_origin_check",
+      sql`${table.origin} in (${inList(SUGGESTION_ORIGINS)})`,
+    ),
+  ],
+);
+
 /** A user's appearance settings: one row per user, created the first time they change one. */
 export const userSettings = pgTable(
   "user_settings",
@@ -450,6 +515,8 @@ export const userSettings = pgTable(
     density: text("density", { enum: APPEARANCE_VALUES.density })
       .notNull()
       .default(APPEARANCE_DEFAULTS.density),
+    // Whether enrichment proposes tags for the user's clippings. Off until they turn it on.
+    suggestTags: boolean("suggest_tags").notNull().default(false),
     // No default: the service stamps it from its clock.
     updatedAt: timestamptz("updated_at").notNull(),
   },

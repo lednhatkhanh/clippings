@@ -1,20 +1,32 @@
 "use client";
 
+import { Copy, Ellipsis, Pin, PinOff, Share2 } from "lucide-react";
 import { useState } from "react";
-import { GridList, GridListItem, GridListLoadMoreItem } from "react-aria-components";
+import {
+  Button as AriaButton,
+  GridList,
+  GridListItem,
+  GridListLoadMoreItem,
+} from "react-aria-components";
 import useSWR from "swr";
 
-import { loadMoreClippingsAction, retryEnrichmentAction } from "@/app/(app)/actions.ts";
+import {
+  loadMoreClippingsAction,
+  reEnrichClippingAction,
+  setPinnedAction,
+} from "@/app/(app)/actions.ts";
 import { useOnline } from "@/components/online-status.tsx";
 import { SheetTransition } from "@/components/page-transition.tsx";
 import { hrefWithTag, loadBrowseParams } from "@/lib/clippings/browse-params.ts";
+import { appendPage, applyPin, type ListGroups } from "@/lib/clippings/pins.ts";
 import type { ClippingRowData } from "@/lib/clippings/rows.ts";
-import { Button, ProgressBar, TagChips } from "@clippings/ui";
+import { Button, Menu, MenuItem, MenuTrigger, ProgressBar, TagChips, toasts } from "@clippings/ui";
 
 import { useRowPresence, type RowPresence } from "./deleted-clippings.tsx";
 import { Favicon } from "./favicon.tsx";
 import { fetchRow, POLL_EVERY_MS } from "./fetch-row.ts";
 import { HighlightedText } from "./highlighted-text.tsx";
+import { copyLinkWithToast, shareLinkWithToast, useCanShare } from "./link-actions.ts";
 import { StatusMotion } from "./status-motion.tsx";
 
 /** Whether every animation on an element has finished: a row settles on its last one. */
@@ -23,12 +35,17 @@ const hasSettled = (element: Element) =>
 
 function ClippingRow({
   row: initialRow,
+  pinned,
+  onTogglePin,
   tagHref,
   presence,
   isNew,
   onSettle,
 }: {
   row: ClippingRowData;
+  /** Whether the list has it pinned: the list moves it between groups, so it decides. */
+  pinned: boolean;
+  onTogglePin: () => void;
   /** Where a tag chip leads: this list, narrowed to the tag. */
   tagHref: (tag: string) => string;
   /** Set while a deleted row leaves or an undone one returns. */
@@ -42,6 +59,7 @@ function ClippingRow({
   const [retrying, setRetrying] = useState(false);
   const [entering, setEntering] = useState(isNew);
   const online = useOnline();
+  const canShare = useCanShare();
 
   // A pending row asks for itself until enrichment has finished, then shows the result in place.
   useSWR(row.status === "pending" ? `/api/clippings/${row.id}` : null, fetchRow, {
@@ -52,7 +70,7 @@ function ClippingRow({
   async function retry() {
     setRetrying(true);
     try {
-      const restarted = await retryEnrichmentAction(row.id);
+      const restarted = await reEnrichClippingAction(row.id);
       if (restarted) setRow(restarted);
     } finally {
       setRetrying(false);
@@ -82,8 +100,16 @@ function ClippingRow({
         >
           <Favicon url={row.url} />
           <div className="flex min-w-0 flex-1 status-content flex-col gap-row-gap">
-            <span className="truncate typescale-clipping-title">
-              {row.highlights ? <HighlightedText segments={row.highlights.title} /> : row.title}
+            <span className="flex min-w-0 items-center gap-1.5">
+              {pinned ? (
+                <>
+                  <Pin aria-hidden="true" className="size-3.5 shrink-0 text-ink-muted" />
+                  <span className="sr-only">Pinned:&nbsp;</span>
+                </>
+              ) : null}
+              <span className="truncate typescale-clipping-title">
+                {row.highlights ? <HighlightedText segments={row.highlights.title} /> : row.title}
+              </span>
             </span>
             <span className="flex flex-wrap items-center gap-x-1.5 typescale-label-sm font-mono text-ink-faint">
               <span>{row.domain}</span>
@@ -115,6 +141,30 @@ function ClippingRow({
               </div>
             ) : null}
           </div>
+          <MenuTrigger>
+            <AriaButton
+              aria-label={`Actions for ${row.title}`}
+              className="state-layer -me-2 -mt-2.5 flex size-11 shrink-0 cursor-default items-center justify-center rounded-md text-ink-muted"
+            >
+              <Ellipsis className="size-5" />
+            </AriaButton>
+            <Menu aria-label={`Actions for ${row.title}`}>
+              <MenuItem icon={pinned ? PinOff : Pin} isDisabled={!online} onAction={onTogglePin}>
+                {pinned ? "Unpin" : "Pin"}
+              </MenuItem>
+              {canShare ? (
+                <MenuItem
+                  icon={Share2}
+                  onAction={() => void shareLinkWithToast({ title: row.title, url: row.url })}
+                >
+                  Share
+                </MenuItem>
+              ) : null}
+              <MenuItem icon={Copy} onAction={() => void copyLinkWithToast(row.url)}>
+                Copy link
+              </MenuItem>
+            </Menu>
+          </MenuTrigger>
           {/* A quiet hint on the keyboard-focused row only; touch has no keyboard. */}
           <span
             aria-hidden="true"
@@ -132,29 +182,49 @@ function ClippingRow({
 }
 
 /**
- * The rows the list shows. The first page is given; later pages of the list `query` describes
- * (a `toQueryString` result) load as the last row scrolls into view. Remount it (change its
- * `key`) when the first page changes.
+ * The rows the list shows. The first page is given, with the pinned group above it; later pages
+ * of the list `query` describes (a `toQueryString` result) load as the last row scrolls into
+ * view. Pinned rows are the first rows of the same list, so the arrow keys run through them.
+ * Pinning moves a row between the groups at once. Remount it (change its `key`) when the first
+ * page changes.
  */
 export function ClippingList({
   query,
+  initialPinned,
   initialRows,
   initialCursor,
   newIds,
 }: {
   query: string;
+  initialPinned: ClippingRowData[];
   initialRows: ClippingRowData[];
   initialCursor: string | null;
   /** Rows saved while this list was on screen, which drop in. */
   newIds: ReadonlySet<string>;
 }) {
-  const [rows, setRows] = useState(initialRows);
+  const [groups, setGroups] = useState<ListGroups<ClippingRowData>>({
+    pinned: initialPinned,
+    rows: initialRows,
+  });
   const [cursor, setCursor] = useState(initialCursor);
   const [isLoading, setIsLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   const { presence, settle } = useRowPresence();
   const params = loadBrowseParams(query);
   const tagHref = (tag: string) => hrefWithTag(params, tag);
+  // Search results ignore pins: a pinned result stays where it ranks.
+  const groupPins = params.q.trim() === "";
+
+  async function togglePin(clippingId: string, pinned: boolean) {
+    const options = { groupPins, hasMore: cursor !== null };
+    setGroups((current) => applyPin(current, clippingId, pinned, options));
+    const done = await setPinnedAction(clippingId, pinned).catch(() => false);
+    if (done) return;
+    setGroups((current) => applyPin(current, clippingId, !pinned, options));
+    toasts.show({
+      message: pinned ? "Couldn't pin the clipping." : "Couldn't unpin the clipping.",
+    });
+  }
 
   async function loadMore() {
     if (!cursor || isLoading) return;
@@ -162,7 +232,7 @@ export function ClippingList({
     setFailed(false);
     try {
       const page = await loadMoreClippingsAction(query, cursor);
-      setRows((current) => [...current, ...page.rows]);
+      setGroups((current) => appendPage(current, page.rows));
       setCursor(page.nextCursor);
     } catch {
       setFailed(true);
@@ -174,7 +244,7 @@ export function ClippingList({
   return (
     <>
       <GridList aria-label="Your clippings" className="flex flex-col">
-        {rows
+        {[...groups.pinned, ...groups.rows]
           .filter((row) => presence.get(row.id) !== "gone")
           .map((row) => {
             const rowPresence = presence.get(row.id);
@@ -182,6 +252,8 @@ export function ClippingList({
               <ClippingRow
                 key={row.id}
                 row={row}
+                pinned={row.pinned}
+                onTogglePin={() => void togglePin(row.id, !row.pinned)}
                 tagHref={tagHref}
                 presence={rowPresence === "gone" ? undefined : rowPresence}
                 isNew={newIds.has(row.id)}

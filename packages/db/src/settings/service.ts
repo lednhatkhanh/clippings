@@ -69,7 +69,27 @@ export function createSettingsService({ pool, clock }: SettingsServiceDeps) {
     return saved!;
   }
 
-  return { getSettings, updateSettings };
+  /** Whether the user has tag suggestions on. Off until they turn it on. */
+  async function getSuggestTags(userId: string): Promise<boolean> {
+    const [row] = await db
+      .select({ on: userSettings.suggestTags })
+      .from(userSettings)
+      .where(eq(userSettings.userId, userId));
+    return row?.on ?? false;
+  }
+
+  /** Turns the user's tag suggestions on or off, and returns the setting as it now stands. */
+  async function setSuggestTags(userId: string, on: boolean): Promise<boolean> {
+    const updatedAt = clock.now();
+    const [saved] = await db
+      .insert(userSettings)
+      .values({ userId, suggestTags: on, updatedAt })
+      .onConflictDoUpdate({ target: userSettings.userId, set: { suggestTags: on, updatedAt } })
+      .returning({ on: userSettings.suggestTags });
+    return saved!.on;
+  }
+
+  return { getSettings, updateSettings, getSuggestTags, setSuggestTags };
 }
 
 export type SettingsService = ReturnType<typeof createSettingsService>;

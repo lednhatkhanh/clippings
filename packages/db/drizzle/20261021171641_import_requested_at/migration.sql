@@ -1,0 +1,1 @@
+ALTER TABLE "clippings" ADD COLUMN "import_requested_at" timestamp with time zone;
