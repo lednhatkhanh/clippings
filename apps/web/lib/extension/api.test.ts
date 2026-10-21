@@ -25,7 +25,11 @@ import {
   TEST_DATABASE_URL,
   type ServiceFixture,
 } from "@clippings/db/testing";
-import { CLIPPINGS_EXTENSION_ID, type ExtensionSaveResponse } from "@clippings/shared";
+import {
+  CLIPPINGS_EXTENSION_ID,
+  MAX_TITLE_LENGTH,
+  type ExtensionSaveResponse,
+} from "@clippings/shared";
 
 import { createExtensionApi } from "./api.ts";
 import { extensionOrigin, extensionRedirectUri, extensionResourceUrl } from "./origins.ts";
@@ -147,7 +151,7 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
   function update(
     api: ReturnType<typeof app>["api"],
     id: string,
-    changes: { note?: string; tags?: string[] },
+    changes: { title?: string | null; note?: string; tags?: string[] },
     accessToken: string,
   ) {
     return api.update(
@@ -266,6 +270,48 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
         createdAt: created.clipping.createdAt,
       },
     });
+  });
+
+  it("renames a clipping, goes back to the page's title, and refuses a title that is too long", async () => {
+    const setup = app(ALLOWED);
+    const tokens = await connect(setup, await signIn("ada", ALLOWED));
+    const created = (await (
+      await save(setup.api, "https://example.com/a", tokens.access_token)
+    ).json()) as ExtensionSaveResponse;
+    const pageTitle = created.clipping.title;
+
+    const renamed = await update(
+      setup.api,
+      created.clipping.id,
+      { title: "  My name for it " },
+      tokens.access_token,
+    );
+    expect(renamed.status).toBe(200);
+    expect(await renamed.json()).toMatchObject({
+      id: created.clipping.id,
+      title: "My name for it",
+    });
+    expect(await fixture.service.getClipping("ada", created.clipping.id)).toMatchObject({
+      title: "My name for it",
+      titleEdited: true,
+      pageTitle,
+    });
+
+    for (const title of [null, ""]) {
+      await update(setup.api, created.clipping.id, { title: "Again" }, tokens.access_token);
+      const reset = await update(setup.api, created.clipping.id, { title }, tokens.access_token);
+      expect(reset.status).toBe(200);
+      expect(await reset.json()).toMatchObject({ title: pageTitle });
+    }
+
+    const long = await update(
+      setup.api,
+      created.clipping.id,
+      { title: "x".repeat(MAX_TITLE_LENGTH + 1) },
+      tokens.access_token,
+    );
+    expect(long.status).toBe(400);
+    expect(await long.json()).toEqual({ error: "invalid_request" });
   });
 
   it("says whether the caller saved a page, and nothing more", async () => {

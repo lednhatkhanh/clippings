@@ -242,9 +242,11 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
       expect(exported.exportedAt).toBe("2026-10-01T09:00:07.000Z");
       // An export names its tags; the saved clipping carries them as objects.
       expect(exported.clippings).toEqual([
-        { ...last, tags: [] },
-        { ...first, tags: ["reading"] },
+        { ...last, tags: [], suggestedTags: undefined },
+        { ...first, tags: ["reading"], suggestedTags: undefined },
       ]);
+      // Suggestions belong to the detail read; an export has none.
+      expect(exported.clippings.every((clipping) => !("suggestedTags" in clipping))).toBe(true);
       expect(exported.clippings[1]?.note).toBe("read on the train");
     });
 
@@ -332,7 +334,7 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
       expect(page.items.map((item) => item.note)).toEqual(["new note"]);
     });
 
-    it("a deleted clipping can't be edited or retried, and isn't swept", async () => {
+    it("a deleted clipping can't be edited or read again, and isn't swept", async () => {
       const ana = await fixture.createUser("ana");
       fixture.web.set("https://example.com/down", { error: new Error("503") });
       const { clipping } = await fixture.service.saveClipping(ana, {
@@ -345,7 +347,7 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
       fixture.enrichmentRequests.length = 0;
 
       expect(await fixture.service.updateClipping(ana, clipping.id, { note: "x" })).toBeNull();
-      expect(await fixture.service.retryEnrichment(ana, clipping.id)).toBeNull();
+      expect(await fixture.service.reEnrichClipping(ana, clipping.id)).toBeNull();
       expect(await fixture.service.deleteClipping(ana, clipping.id)).toBe(false);
       expect(await fixture.service.sweepStuck()).toEqual([]);
       expect(fixture.enrichmentRequests).toEqual([]);
@@ -539,7 +541,7 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
       });
     });
 
-    it("retry puts a failed clipping back to pending and publishes it again; it leaves others alone", async () => {
+    it("reading again puts a failed or ready clipping back to pending and publishes it; a pending one is left alone", async () => {
       const ana = await fixture.createUser("ana");
       const ben = await fixture.createUser("ben");
       fixture.web.set("https://example.com/down", { error: new Error("503") });
@@ -550,37 +552,77 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
       await fixture.service.enrichClipping(clipping.id, { lastAttempt: true });
       fixture.enrichmentRequests.length = 0;
 
-      expect(await fixture.service.retryEnrichment(ben, clipping.id)).toBeNull();
+      expect(await fixture.service.reEnrichClipping(ben, clipping.id)).toBeNull();
       expect(fixture.enrichmentRequests).toEqual([]);
-      const retried = await fixture.service.retryEnrichment(ana, clipping.id);
+      const retried = await fixture.service.reEnrichClipping(ana, clipping.id);
 
       expect(retried?.status).toBe("pending");
       expect(fixture.enrichmentRequests).toEqual([clipping.id]);
 
-      // Retrying a clipping that isn't failed changes nothing and publishes nothing.
+      // Already pending: nothing changes and nothing is published twice.
+      fixture.enrichmentRequests.length = 0;
+      expect((await fixture.service.reEnrichClipping(ana, clipping.id))?.status).toBe("pending");
+      expect(fixture.enrichmentRequests).toEqual([]);
+
+      // A ready clipping can be read again too.
       fixture.web.set("https://example.com/down", essay);
       await fixture.service.enrichClipping(clipping.id);
-      fixture.enrichmentRequests.length = 0;
-      const again = await fixture.service.retryEnrichment(ana, clipping.id);
-      expect(again?.status).toBe("ready");
-      expect(fixture.enrichmentRequests).toEqual([]);
+      const again = await fixture.service.reEnrichClipping(ana, clipping.id);
+      expect(again?.status).toBe("pending");
+      expect(fixture.enrichmentRequests).toEqual([clipping.id]);
     });
 
-    it("retry that can't publish leaves the clipping failed and tells the caller", async () => {
+    it("reading again keeps the user's title, note and tags, and refreshes the page's title", async () => {
       const ana = await fixture.createUser("ana");
-      fixture.web.set("https://example.com/down", { error: new Error("503") });
+      fixture.web.set("https://example.com/essay", essay);
       const { clipping } = await fixture.service.saveClipping(ana, {
-        url: "https://example.com/down",
+        url: "https://example.com/essay",
         source: "web",
       });
-      await fixture.service.enrichClipping(clipping.id, { lastAttempt: true });
+      await fixture.service.enrichClipping(clipping.id);
+      await fixture.service.updateClipping(ana, clipping.id, {
+        title: "Gardening essay",
+        note: "for Ben",
+        tags: ["garden"],
+      });
+      fixture.web.set("https://example.com/essay", {
+        page: essay.page,
+        summary: { ...essay.summary, title: "A rewritten title", summary: "Fresh summary." },
+      });
+
+      await fixture.service.reEnrichClipping(ana, clipping.id);
+      await fixture.service.enrichClipping(clipping.id);
+
+      expect(await fixture.service.getClipping(ana, clipping.id)).toMatchObject({
+        status: "ready",
+        title: "Gardening essay",
+        pageTitle: "A rewritten title",
+        titleEdited: true,
+        summary: "Fresh summary.",
+        note: "for Ben",
+        tags: [expect.objectContaining({ name: "garden" })],
+      });
+    });
+
+    it("reading again that can't publish puts the clipping back as it was and tells the caller", async () => {
+      const ana = await fixture.createUser("ana");
+      fixture.web.set("https://example.com/down", { error: new Error("503") });
+      fixture.web.set("https://example.com/essay", essay);
+      const failed = (
+        await fixture.service.saveClipping(ana, { url: "https://example.com/down", source: "web" })
+      ).clipping;
+      const ready = (
+        await fixture.service.saveClipping(ana, { url: "https://example.com/essay", source: "web" })
+      ).clipping;
+      await fixture.service.enrichClipping(failed.id, { lastAttempt: true });
+      await fixture.service.enrichClipping(ready.id);
       fixture.setPublishing("down");
 
-      await expect(fixture.service.retryEnrichment(ana, clipping.id)).rejects.toThrow(
-        "unreachable",
-      );
+      await expect(fixture.service.reEnrichClipping(ana, failed.id)).rejects.toThrow("unreachable");
+      await expect(fixture.service.reEnrichClipping(ana, ready.id)).rejects.toThrow("unreachable");
 
-      expect((await fixture.service.getClipping(ana, clipping.id))?.status).toBe("failed");
+      expect((await fixture.service.getClipping(ana, failed.id))?.status).toBe("failed");
+      expect((await fixture.service.getClipping(ana, ready.id))?.status).toBe("ready");
     });
   });
 

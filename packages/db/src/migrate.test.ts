@@ -57,6 +57,16 @@ function foldersWithExtraMigration(sql: string) {
   return { folder, extra };
 }
 
+/** A copy of the shipped migrations without one of them. */
+function foldersWithout(skipped: string) {
+  const folder = mkdtempSync(join(tmpdir(), "clippings-migrations-"));
+  for (const name of readdirSync(SHIPPED)) {
+    if (name.endsWith(skipped)) continue;
+    cpSync(join(SHIPPED, name), join(folder, name), { recursive: true });
+  }
+  return folder;
+}
+
 describe.skipIf(!TEST_DATABASE_URL)("migrate", () => {
   let database: TempDatabase;
 
@@ -123,5 +133,40 @@ describe.skipIf(!TEST_DATABASE_URL)("migrate", () => {
     await applyLegacyRunner(database.url, ["0001_better_auth.sql"]);
 
     await expect(migrate({ connectionString: database.url })).rejects.toThrow(/old runner/);
+  });
+
+  it("allows clippings:write on OAuth clients registered before v2, except the extension's", async () => {
+    await migrate({
+      connectionString: database.url,
+      migrationsFolder: foldersWithout("_oauth_clients_write_scope"),
+    });
+    const v1Scopes = ["openid", "profile", "email", "offline_access"];
+    await withClient(database.url, async (client) => {
+      const insert = (id: string, scopes: string[] | null, redirectUri: string) =>
+        client.query(
+          `insert into "oauthClient" ("id", "clientId", "scopes", "redirectUris") values ($1, $1, $2, $3)`,
+          [id, scopes, [redirectUri]],
+        );
+      await insert("mcp", v1Scopes, "https://claude.ai/api/mcp/auth_callback");
+      await insert("done", [...v1Scopes, "clippings:write"], "http://localhost:6274/callback");
+      await insert("none", null, "https://example.com/callback");
+      await insert("empty", [], "https://example.com/callback");
+      await insert("extension", ["offline_access"], `https://${"a".repeat(32)}.chromiumapp.org/`);
+    });
+
+    expect(await migrate({ connectionString: database.url })).toHaveLength(1);
+
+    await withClient(database.url, async (client) => {
+      const { rows } = await client.query<{ id: string; scopes: string[] | null }>(
+        `select "id", "scopes" from "oauthClient" order by "id"`,
+      );
+      expect(Object.fromEntries(rows.map((row) => [row.id, row.scopes]))).toEqual({
+        mcp: [...v1Scopes, "clippings:write"],
+        done: [...v1Scopes, "clippings:write"],
+        none: null,
+        empty: [],
+        extension: ["offline_access"],
+      });
+    });
   });
 });

@@ -20,11 +20,18 @@ export interface ClippingRowData {
   /** The page's summary once it has been read, shown under the title when there's no snippet. */
   summary: string | null;
   tags: Tag[];
+  /** Whether it is pinned above the newest-first list. */
+  pinned: boolean;
   /** Where it matched, when the row is a search result. */
   highlights?: SearchHighlights;
 }
 
 export interface RowsPage {
+  /**
+   * The pinned clippings that match the list's filters, shown above `rows`: on the first page
+   * only, and never for search results, which ignore pins.
+   */
+  pinned: ClippingRowData[];
   rows: ClippingRowData[];
   nextCursor: string | null;
 }
@@ -54,12 +61,14 @@ export function toRow(
     status: clipping.status,
     summary: clipping.summary,
     tags: clipping.tags,
+    pinned: clipping.pinned,
   };
 }
 
 /**
  * What the list shows for these params, worded as of now: search results when there is a query
- * (one page, no cursor), else one page of the user's clippings, newest first.
+ * (one page, no cursor), else one page of the user's clippings, newest first, with the pinned
+ * ones that match the filters above them on the first page.
  */
 export async function loadRows(
   userId: string,
@@ -70,12 +79,17 @@ export async function loadRows(
   if (q.trim()) {
     const { items } = await getClippings().searchClippings(userId, { q, tags, sources, sort });
     return {
+      pinned: [],
       rows: items.map((hit) => toRow(hit.clipping, now, hit.highlights)),
       nextCursor: null,
     };
   }
   const page = await getClippings().listClippings(userId, { cursor, tags, sources });
-  return { rows: page.items.map((clipping) => toRow(clipping, now)), nextCursor: page.nextCursor };
+  return {
+    pinned: page.pinned.map((clipping) => toRow(clipping, now)),
+    rows: page.items.map((clipping) => toRow(clipping, now)),
+    nextCursor: page.nextCursor,
+  };
 }
 
 /** One of the user's clippings as a list row, or null when they have no such clipping. */

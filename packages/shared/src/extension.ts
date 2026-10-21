@@ -1,7 +1,7 @@
 import * as z from "zod";
 
 import { PALETTE_NAMES } from "./appearance.ts";
-import { MAX_NOTE_LENGTH } from "./clipping.ts";
+import { MAX_NOTE_LENGTH, MAX_TITLE_LENGTH } from "./clipping.ts";
 import { MAX_TAG_LENGTH, MAX_TAGS_PER_CLIPPING, TAG_COLORS } from "./tag.ts";
 import { parseWebUrl } from "./url.ts";
 
@@ -24,15 +24,18 @@ export const extensionSaveRequestSchema = z.object({
 export type ExtensionSaveRequest = z.infer<typeof extensionSaveRequestSchema>;
 
 /**
- * `PATCH /api/extension/clippings/:id`: replace the clipping's note, its tags (by name, creating
- * new ones) or both.
+ * `PATCH /api/extension/clippings/:id`: replace the clipping's title, its note, its tags (by name,
+ * creating new ones) or any of them. An empty or null title goes back to the page's.
  */
 export const extensionUpdateRequestSchema = z
   .object({
+    title: z.string().max(MAX_TITLE_LENGTH).nullable().optional(),
     note: z.string().max(MAX_NOTE_LENGTH).optional(),
     tags: z.array(z.string().max(MAX_TAG_LENGTH)).max(MAX_TAGS_PER_CLIPPING).optional(),
   })
-  .refine(({ note, tags }) => note !== undefined || tags !== undefined);
+  .refine(
+    ({ title, note, tags }) => title !== undefined || note !== undefined || tags !== undefined,
+  );
 export type ExtensionUpdateRequest = z.infer<typeof extensionUpdateRequestSchema>;
 
 /** One of the user's tags, as the popup's tag picker offers it. */

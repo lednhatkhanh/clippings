@@ -6,4 +6,5 @@ export const SOURCE_LABELS: Record<ClippingSource, string> = {
   extension: "Extension",
   mcp: "Claude",
   digest: "Digest",
+  import: "Import",
 };

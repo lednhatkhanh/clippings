@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   authorize as authorizeWith,
+  consentQuery,
   authorizePath as authorizePathFor,
   browserHeaders as browser,
   consent as consentWith,
@@ -26,6 +27,7 @@ import {
 
 import { createMcpRoute } from "./handler.ts";
 import { mcpResourceUrl } from "./resource.ts";
+import { WRITE_SCOPE } from "./scopes.ts";
 
 const REDIRECT_URI = "http://127.0.0.1:43210/callback";
 // Another loopback port than the registered one, as Claude Code picks a free port.
@@ -387,6 +389,200 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
     );
     expect(unknown.status).toBe(200);
     expect(await unknown.text()).toContain('"code":-32601');
+  });
+
+  describe("write access", () => {
+    const READ_TOOLS = ["list_recent", "save_clipping", "search_clippings"];
+    const WRITE_TOOLS = [
+      "delete_clipping",
+      "get_clipping",
+      "list_tags",
+      "restore_clipping",
+      "update_clipping",
+    ];
+
+    /** The names `tools/list` answered with. */
+    async function toolNames(response: Response) {
+      expect(response.status).toBe(200);
+      const body = await response.text();
+      const json = body.startsWith("{") ? body : (body.match(/^data: (.*)$/m)?.[1] ?? "");
+      const { result } = JSON.parse(json) as { result: { tools: { name: string }[] } };
+      return result.tools.map((tool) => tool.name).sort();
+    }
+
+    const scopeOf = (accessToken: string) =>
+      (
+        JSON.parse(Buffer.from(accessToken.split(".")[1]!, "base64url").toString()) as {
+          scope: string;
+        }
+      ).scope.split(" ");
+
+    it("advertises the write scope in the protected resource metadata", async () => {
+      const { call } = app(ALLOWED);
+      const metadata = (await (await call("/.well-known/oauth-protected-resource/mcp")).json()) as {
+        scopes_supported: string[];
+      };
+      expect(metadata.scopes_supported).toEqual([WRITE_SCOPE]);
+    });
+
+    it("gives a client that asks for no scope the defaults, not write access", async () => {
+      const setup = app(ALLOWED);
+      const cookie = await signIn("ada", ALLOWED);
+      const clientId = await register(setup.call);
+
+      // The consent page is told what is being granted.
+      const query = new URLSearchParams(await consentQuery(setup.call, cookie, flow(clientId)));
+      expect(query.get("scope")?.split(" ").sort()).toEqual([
+        "email",
+        "offline_access",
+        "openid",
+        "profile",
+      ]);
+
+      const tokens = await connect(setup, cookie, clientId);
+      expect(scopeOf(tokens.access_token)).not.toContain(WRITE_SCOPE);
+      expect(await toolNames(await listTools(setup.mcp, tokens.access_token))).toEqual(READ_TOOLS);
+
+      // Refreshing keeps what was granted.
+      const refreshed = (await (await refresh(setup.call, tokens)).json()) as {
+        access_token: string;
+      };
+      expect(await toolNames(await listTools(setup.mcp, refreshed.access_token))).toEqual(
+        READ_TOOLS,
+      );
+    });
+
+    it("gives a client that asks for no scope the defaults when it authorizes with a POST", async () => {
+      const setup = app(ALLOWED);
+      const cookie = await signIn("ada", ALLOWED);
+      const [path, form] = authorizePath(await register(setup.call), pkce().challenge).split("?");
+
+      const response = await setup.call(path!, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded", cookie, ...browser },
+        body: form,
+      });
+      const page = await target(response);
+      expect(page).toMatch(/^\/connect\?/);
+      const query = new URLSearchParams(page.slice("/connect?".length));
+      expect(query.get("scope")?.split(" ").sort()).toEqual([
+        "email",
+        "offline_access",
+        "openid",
+        "profile",
+      ]);
+      // Every authorization asks, also one that came as a POST.
+      expect(query.get("prompt")).toContain("consent");
+    });
+
+    it("gives a client that asks for write access only the read tools when the user allows read-only", async () => {
+      const setup = app(ALLOWED);
+      const request = {
+        ...flow(await register(setup.call)),
+        scope: `openid offline_access ${WRITE_SCOPE}`,
+      };
+      const tokens = await connectWith(
+        setup.call,
+        await signIn("ada", ALLOWED),
+        ORIGIN,
+        request,
+        {},
+        "openid offline_access",
+      );
+
+      expect(scopeOf(tokens.access_token)).not.toContain(WRITE_SCOPE);
+      expect(await toolNames(await listTools(setup.mcp, tokens.access_token))).toEqual(READ_TOOLS);
+
+      // Refreshing keeps what was granted.
+      const refreshed = (await (
+        await refresh(setup.call, { ...tokens, refresh_token: tokens.refresh_token ?? "" })
+      ).json()) as { access_token: string };
+      expect(scopeOf(refreshed.access_token)).not.toContain(WRITE_SCOPE);
+    });
+
+    it("refuses a consent for a scope the client did not ask for", async () => {
+      const setup = app(ALLOWED);
+      const cookie = await signIn("ada", ALLOWED);
+      const query = await consentQuery(setup.call, cookie, {
+        ...flow(await register(setup.call)),
+        scope: "openid",
+      });
+
+      const response = await consentWith(setup.call, {
+        cookie,
+        origin: ORIGIN,
+        query,
+        scope: `openid ${WRITE_SCOPE}`,
+      });
+      expect(response.status).toBeGreaterThanOrEqual(400);
+    });
+
+    it("gives a client that asks for read scopes only the read tools", async () => {
+      const setup = app(ALLOWED);
+      const tokens = await connectWith(setup.call, await signIn("ada", ALLOWED), ORIGIN, {
+        ...flow(await register(setup.call)),
+        scope: "openid offline_access",
+      });
+
+      expect(await toolNames(await listTools(setup.mcp, tokens.access_token))).toEqual(READ_TOOLS);
+    });
+
+    it("offers the write tools to a client that asked for the write scope, and they work", async () => {
+      const setup = app(`${ALLOWED} bob@example.com`);
+      const ada = await signIn("ada", ALLOWED);
+      await signIn("bob", "bob@example.com");
+      const tokens = await connectWith(setup.call, ada, ORIGIN, {
+        ...flow(await register(setup.call)),
+        scope: `openid offline_access ${WRITE_SCOPE}`,
+      });
+      expect(scopeOf(tokens.access_token)).toContain(WRITE_SCOPE);
+      const bobsClipping = (
+        await fixture.service.saveClipping("bob", { url: "https://example.com/bob", source: "web" })
+      ).clipping;
+
+      const client = new Client({ name: "write-test", version: "1.0.0" });
+      const transport = new StreamableHTTPClientTransport(new URL(RESOURCE), {
+        fetch: (input, init) => {
+          const request = new Request(input, init);
+          request.headers.set("authorization", `Bearer ${tokens.access_token}`);
+          return setup.mcp(request);
+        },
+      });
+      await client.connect(transport);
+      try {
+        const { tools } = await client.listTools();
+        expect(tools.map((tool) => tool.name).sort()).toEqual(
+          [...READ_TOOLS, ...WRITE_TOOLS].sort(),
+        );
+
+        const saved = await client.callTool({
+          name: "save_clipping",
+          arguments: { url: "https://example.com/otters" },
+        });
+        const { clipping } = JSON.parse(toolText(saved)) as { clipping: { id: string } };
+
+        const updated = await client.callTool({
+          name: "update_clipping",
+          arguments: { id: clipping.id, title: "Otters", note: "swim", tags: ["animals"] },
+        });
+        expect(updated.isError).toBeFalsy();
+        expect(await fixture.service.getClipping("ada", clipping.id)).toMatchObject({
+          title: "Otters",
+          note: "swim",
+          tags: [{ name: "animals" }],
+        });
+
+        // Bob's clipping is out of reach.
+        const foreign = await client.callTool({
+          name: "delete_clipping",
+          arguments: { id: bobsClipping.id },
+        });
+        expect(foreign.isError).toBe(true);
+        expect(await fixture.service.getClipping("bob", bobsClipping.id)).not.toBeNull();
+      } finally {
+        await client.close();
+      }
+    });
   });
 
   it("serves the official MCP client over Streamable HTTP: connects, lists tools, saves and searches", async () => {

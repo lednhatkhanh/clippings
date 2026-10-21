@@ -7,7 +7,12 @@ import { requireUserId } from "@/lib/auth/session.ts";
 import { loadBrowseParams } from "@/lib/clippings/browse-params.ts";
 import { loadRows, toRow, type ClippingRowData, type RowsPage } from "@/lib/clippings/rows.ts";
 import { getClippings } from "@/lib/clippings/service.ts";
-import { InvalidTagsError, InvalidUrlError, NoteTooLongError } from "@clippings/db";
+import {
+  InvalidTagsError,
+  InvalidUrlError,
+  NoteTooLongError,
+  TitleTooLongError,
+} from "@clippings/db";
 import { formatAbsoluteDate, type Tag } from "@clippings/shared";
 
 export type SaveOutcome =
@@ -93,6 +98,93 @@ export async function updateClippingAction(clippingId: string, note: string): Pr
   }
 }
 
+/** How renaming a clipping ended. `title` is the one now shown: the page's when it was cleared. */
+export type RenameOutcome =
+  | { status: "saved"; title: string; pageTitle: string; titleEdited: boolean }
+  | { status: "too_long" }
+  | { status: "failed" };
+
+/**
+ * Gives one of the user's clippings its own title. Empty, or only spaces, goes back to the page's
+ * title. "failed" when the clipping isn't theirs.
+ */
+export async function renameClippingAction(
+  clippingId: string,
+  title: string,
+): Promise<RenameOutcome> {
+  const userId = await requireUserId();
+  // A server action takes whatever a client sends.
+  if (typeof clippingId !== "string" || typeof title !== "string") return { status: "failed" };
+
+  try {
+    const updated = await getClippings().updateClipping(userId, clippingId, { title });
+    if (!updated) return { status: "failed" };
+    revalidatePath("/");
+    revalidatePath(`/c/${clippingId}`);
+    return {
+      status: "saved",
+      title: updated.title,
+      pageTitle: updated.pageTitle,
+      titleEdited: updated.titleEdited,
+    };
+  } catch (error) {
+    if (error instanceof TitleTooLongError) return { status: "too_long" };
+    throw error;
+  }
+}
+
+/** Pins or unpins one of the user's clippings. False if it isn't theirs. */
+export async function setPinnedAction(clippingId: string, pinned: boolean): Promise<boolean> {
+  const userId = await requireUserId();
+  if (typeof clippingId !== "string" || typeof pinned !== "boolean") return false;
+
+  const updated = await getClippings().setPinned(userId, clippingId, pinned);
+  revalidatePath("/");
+  revalidatePath(`/c/${clippingId}`);
+  return updated !== null;
+}
+
+/**
+ * Adds a suggested tag to one of the user's clippings, matching an existing tag ignoring case.
+ * Returns the clipping's tags as stored, or null when it isn't theirs or the tag isn't valid.
+ */
+export async function acceptTagSuggestionAction(
+  clippingId: string,
+  name: string,
+): Promise<Tag[] | null> {
+  const userId = await requireUserId();
+  if (typeof clippingId !== "string" || typeof name !== "string") return null;
+
+  try {
+    const updated = await getClippings().acceptTagSuggestion(userId, clippingId, name);
+    revalidatePath("/");
+    revalidatePath(`/c/${clippingId}`);
+    return updated?.tags ?? null;
+  } catch (error) {
+    if (error instanceof InvalidTagsError) return null;
+    throw error;
+  }
+}
+
+/**
+ * Dismisses the named suggestions on one of the user's clippings, or all of them when `names` is
+ * left out. They stay gone, even after the page is read again. False if it isn't theirs.
+ */
+export async function dismissTagSuggestionsAction(
+  clippingId: string,
+  names?: string[],
+): Promise<boolean> {
+  const userId = await requireUserId();
+  if (typeof clippingId !== "string") return false;
+  if (names !== undefined && !(Array.isArray(names) && names.every((n) => typeof n === "string"))) {
+    return false;
+  }
+
+  const dismissed = await getClippings().dismissTagSuggestions(userId, clippingId, names);
+  revalidatePath(`/c/${clippingId}`);
+  return dismissed;
+}
+
 /**
  * Makes `tags` the tags on one of the user's clippings, creating new ones. Returns them as
  * stored, or null when the clipping isn't theirs or the tags aren't valid.
@@ -141,10 +233,15 @@ export async function loadMoreClippingsAction(query: string, cursor: string): Pr
   return loadRows(userId, loadBrowseParams(query), cursor);
 }
 
-/** Starts a failed clipping over. Returns its row as it now stands, or null if it isn't theirs. */
-export async function retryEnrichmentAction(clippingId: string): Promise<ClippingRowData | null> {
+/**
+ * Reads the page again: a failed clipping's Retry, and "Read the page again" on a ready one. It
+ * keeps the user's title, note and tags. Returns the row as it now stands, or null if the
+ * clipping isn't theirs.
+ */
+export async function reEnrichClippingAction(clippingId: string): Promise<ClippingRowData | null> {
   const userId = await requireUserId();
-  const clipping = await getClippings().retryEnrichment(userId, clippingId);
+  const clipping = await getClippings().reEnrichClipping(userId, clippingId);
   revalidatePath("/");
+  revalidatePath(`/c/${clippingId}`);
   return clipping ? toRow(clipping, constructNow(undefined)) : null;
 }

@@ -15,3 +15,6 @@ export function getSettings(): SettingsService {
  * page share one lookup.
  */
 export const getAppearance = cache((userId: string) => getSettings().getSettings(userId));
+
+/** Whether the user has tag suggestions on. Off until they turn it on in Settings. */
+export const getSuggestTags = cache((userId: string) => getSettings().getSuggestTags(userId));

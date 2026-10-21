@@ -76,7 +76,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       await use(
         createClippingsService({
           pool: database,
-          jobs: { requestEnrichment: async () => {} },
+          jobs: { requestEnrichment: async () => {}, requestEnrichments: async () => {} },
           clock: systemClock,
           fetcher: { fetchPage: unavailable("Fetching a page") },
           summarizer: { summarize: unavailable("Summarizing") },

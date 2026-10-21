@@ -61,8 +61,12 @@ for going offline; a second build gets a new build id, so it triggers the update
 
 - **QStash** accepts a publish, then delivers to the app with a valid signature and
   `Upstash-Retried`, retrying after a non-2xx answer like the real one. Its log shows each attempt.
+  It takes batches (`/v2/batch`, as the import backlog publishes) and honours `Upstash-Delay`, capped
+  at 5 seconds so a backlog spread over a day drains locally in moments.
 - **Anthropic** answers the page-reading tool call after four seconds, so the pending state is
-  visible. Its title is the page's own, prefixed with `Read:`.
+  visible. Its title is the page's own, prefixed with `Read:`. When the request asks for tag
+  suggestions, it suggests the user's first two tags and one new tag, the first long word of the
+  page title.
 - **Voyage AI** embeds a text as its words (one hashed axis per word), so search by meaning finds
   texts that share a word even where keyword search wouldn't, such as a word in the summary.
   Real semantic quality stays with the user.

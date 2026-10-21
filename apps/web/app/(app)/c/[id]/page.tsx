@@ -5,12 +5,14 @@ import { notFound, redirect, unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 
 import { DeleteClippingButton } from "@/components/clippings/delete-clipping-button.tsx";
+import { DetailActions } from "@/components/clippings/detail-actions.tsx";
 import { DetailSheet, Sheet } from "@/components/clippings/detail-sheet.tsx";
 import { EnrichmentStatus } from "@/components/clippings/enrichment-status.tsx";
 import { Favicon } from "@/components/clippings/favicon.tsx";
 import { NoteEditor } from "@/components/clippings/note-editor.tsx";
 import { RelatedClippings } from "@/components/clippings/related-clippings.tsx";
 import { TagEditor } from "@/components/clippings/tag-editor.tsx";
+import { TitleEditor } from "@/components/clippings/title-editor.tsx";
 import { LoadError } from "@/components/load-error.tsx";
 import { PageHeader } from "@/components/page-header.tsx";
 import {
@@ -34,6 +36,8 @@ const STATUS_LABELS: Record<ClippingStatus, string> = {
 /** What was stored, as stored: for the curious and for checking what a client saved. */
 function RawMetadata({ clipping }: { clipping: Clipping }) {
   const fields = [
+    // The page's own name, once the user has given the clipping another.
+    ...(clipping.titleEdited ? [{ term: "Page title", value: clipping.pageTitle }] : []),
     { term: "Normalized URL", value: clipping.urlNormalized, mono: true },
     { term: "Source", value: clipping.source, mono: true },
     { term: "Saved by client", value: clipping.clientId ?? "None (saved while signed in)" },
@@ -86,9 +90,12 @@ async function ClippingDetail({ params }: Pick<PageProps<"/c/[id]">, "params">) 
   return (
     <div className="flex flex-col gap-5">
       <header className="flex flex-col gap-2.5">
-        <h1 className="typescale-headline-sm text-balance wrap-anywhere medium:typescale-headline-md">
-          {clipping.title}
-        </h1>
+        <TitleEditor
+          clippingId={clipping.id}
+          title={clipping.title}
+          pageTitle={clipping.pageTitle}
+          titleEdited={clipping.titleEdited}
+        />
         {/* On paper there is no link to follow, so the address itself goes under the title. */}
         <p className="hidden typescale-body-md font-mono wrap-anywhere print:block">
           {clipping.url}
@@ -120,6 +127,14 @@ async function ClippingDetail({ params }: Pick<PageProps<"/c/[id]">, "params">) 
         <DeleteClippingButton clippingId={clipping.id} />
       </div>
 
+      <DetailActions
+        clippingId={clipping.id}
+        url={clipping.url}
+        title={clipping.title}
+        pinned={clipping.pinned}
+        status={clipping.status}
+      />
+
       {clipping.status === "ready" ? (
         clipping.summary ? (
           <p className="max-w-reading typescale-reading text-pretty">{clipping.summary}</p>
@@ -128,7 +143,11 @@ async function ClippingDetail({ params }: Pick<PageProps<"/c/[id]">, "params">) 
         <EnrichmentStatus clippingId={clipping.id} status={clipping.status} />
       )}
 
-      <TagEditor clippingId={clipping.id} tags={clipping.tags} />
+      <TagEditor
+        clippingId={clipping.id}
+        tags={clipping.tags}
+        suggestedTags={clipping.suggestedTags}
+      />
 
       <NoteEditor clippingId={clipping.id} note={clipping.note} />
 

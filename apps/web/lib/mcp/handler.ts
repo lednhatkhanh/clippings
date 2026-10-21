@@ -9,22 +9,38 @@ import { isAllowlisted, parseAllowlist } from "@/lib/auth/allowlist.ts";
 import type { createAuth } from "@/lib/auth/auth.ts";
 import type { ConnectionsService } from "@clippings/db";
 
+import { WRITE_SCOPE } from "./scopes.ts";
 import { registerClippingTools, type McpClippings } from "./tools.ts";
 
 /** An access token's verified claims, as `requireMcpAuth` hands them over. */
 type AccessTokenClaims = Parameters<Parameters<typeof requireMcpAuth>[1]>[1];
 
+const READ_INSTRUCTIONS =
+  "Clippings is the user's private collection of saved web pages. Save a page they want to keep with save_clipping; find what they saved with search_clippings or list_recent.";
+
+const WRITE_INSTRUCTIONS = `${READ_INSTRUCTIONS} Read one clipping with get_clipping and change its title, note or tags with update_clipping. Call list_tags before tagging and reuse the user's tags. delete_clipping can be undone with restore_clipping for 24 hours. Change or delete only what the user asked you to.`;
+
 /**
  * The MCP server behind `/mcp`: stateless, serving spec 2026-07-28 and falling back to stateless
  * Streamable HTTP for 2025-era clients. It expects `request.auth` to be set from a verified
  * access token (see `toAuthInfo`).
+ *
+ * Two servers are built once, one that saves and searches and one that also reads one clipping,
+ * edits, tags and deletes, and each request goes to the one its token's scopes allow: only a
+ * token with `clippings:write` is offered the write tools in `tools/list`, and any other token
+ * calling one gets the same "unknown tool" error as for a tool that doesn't exist.
  */
 export function createClippingsMcpHandler(deps: { clippings: McpClippings; appOrigin: string }) {
-  return createMcpHandler((server) => registerClippingTools(server, deps), {
-    serverInfo: { name: "clippings", version: "1.0.0" },
-    instructions:
-      "Clippings is the user's private collection of saved web pages. Save a page they want to keep with save_clipping; find what they saved with search_clippings or list_recent.",
-  });
+  const serverFor = (write: boolean) =>
+    createMcpHandler((server) => registerClippingTools(server, deps, { write }), {
+      serverInfo: { name: "clippings", version: "1.0.0" },
+      instructions: write ? WRITE_INSTRUCTIONS : READ_INSTRUCTIONS,
+    });
+  const readOnly = serverFor(false);
+  const readWrite = serverFor(true);
+
+  return (request: Request) =>
+    (request.auth?.scopes.includes(WRITE_SCOPE) ? readWrite : readOnly)(request);
 }
 
 /**

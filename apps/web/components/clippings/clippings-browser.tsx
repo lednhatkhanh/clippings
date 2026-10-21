@@ -118,7 +118,14 @@ export function ClippingsBrowser({
   // Rows that arrived in the same list (a save refreshes it) drop in; another list has none new.
   const [shown, setShown] = useState({ key, page: initialPage, newIds: NO_NEW_ROWS });
   if (current && current !== shown.page) {
-    const newIds = key === shown.key ? newRowIds(shown.page.rows, current.rows) : NO_NEW_ROWS;
+    // A row that only moved between the pinned group and the rest is not new.
+    const newIds =
+      key === shown.key
+        ? newRowIds(
+            [...shown.page.pinned, ...shown.page.rows],
+            [...current.pinned, ...current.rows],
+          )
+        : NO_NEW_ROWS;
     setShown({ key, page: current, newIds });
   }
 
@@ -126,7 +133,7 @@ export function ClippingsBrowser({
   const shownParams = new URLSearchParams(shown.key);
   const shownQuery = shownParams.get("q") ?? "";
   const hasFilters = tags.length > 0 || sources.length > 0;
-  const rows = shown.page.rows;
+  const { pinned, rows } = shown.page;
 
   return (
     <div className="flex flex-col gap-3">
@@ -207,7 +214,7 @@ export function ClippingsBrowser({
         aria-busy={isStale}
         className={cn("transition-opacity duration-150", isStale && "opacity-60")}
       >
-        {rows.length === 0 ? (
+        {rows.length + pinned.length === 0 ? (
           <NoResults
             q={shownQuery}
             hasFilters={hasFilters}
@@ -215,8 +222,9 @@ export function ClippingsBrowser({
           />
         ) : (
           <ClippingList
-            key={`${shown.key}|${rows.map((row) => row.id).join()}`}
+            key={`${shown.key}|${pinned.map((row) => row.id).join()}|${rows.map((row) => row.id).join()}`}
             query={shown.key}
+            initialPinned={pinned}
             initialRows={rows}
             initialCursor={shown.page.nextCursor}
             newIds={shown.newIds}
