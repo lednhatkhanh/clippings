@@ -1,20 +1,19 @@
-import { Literata, Roboto_Flex, Roboto_Mono } from "next/font/google";
+import { Fraunces, Geist, Geist_Mono } from "next/font/google";
 
-// `variable` exposes each family as the token the design system reads (`--md-ref-typeface-*`).
-export const serif = Literata({
+// `variable` exposes each family as the token the design system reads (`--typeface-*`).
+export const serif = Fraunces({
   subsets: ["latin"],
   axes: ["opsz"],
-  variable: "--md-ref-typeface-brand",
+  variable: "--typeface-brand",
 });
 
-export const sans = Roboto_Flex({
+export const sans = Geist({
   subsets: ["latin"],
-  axes: ["opsz", "GRAD"],
-  variable: "--md-ref-typeface-plain",
+  variable: "--typeface-plain",
 });
 
-export const mono = Roboto_Mono({
+export const mono = Geist_Mono({
   subsets: ["latin"],
-  variable: "--md-ref-typeface-mono",
+  variable: "--typeface-mono",
   preload: false,
 });

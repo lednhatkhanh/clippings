@@ -1,12 +1,14 @@
 "use client";
 
+import { Link as LinkIcon, Puzzle } from "lucide-react";
 import { useState } from "react";
+import { Button as AriaButton } from "react-aria-components";
 import { useFormStatus } from "react-dom";
 
 import { revokeConnectionAction } from "@/app/(app)/settings/actions.ts";
 import { Button, Dialog, Heading, Modal, toasts } from "@clippings/ui";
 
-import { SettingsSection } from "./settings-section.tsx";
+import { SettingsCard, SettingsRow } from "./settings-section.tsx";
 
 /** A connected client as the Connections tab shows it. */
 export interface ConnectionRow {
@@ -19,7 +21,7 @@ export interface ConnectionRow {
 function RevokeButton() {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" isPending={pending}>
+    <Button type="submit" variant="danger" isPending={pending}>
       Revoke
     </Button>
   );
@@ -34,20 +36,38 @@ function ConnectionItem({ connection }: { connection: ConnectionRow }) {
     else toasts.show({ message: `Couldn't revoke ${connection.name}. Try again.` });
   }
 
+  const Glyph = /extension/i.test(connection.name) ? Puzzle : LinkIcon;
+
   return (
-    <li className="flex items-center gap-3 py-2">
-      <div className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate typescale-body-lg text-on-surface">{connection.name}</span>
-        <span className="typescale-body-md text-on-surface-variant">{connection.lastUsed}</span>
-      </div>
-      <Button variant="outlined" onPress={() => setIsOpen(true)}>
+    <SettingsRow
+      title={
+        <span className="flex items-center gap-3">
+          <span
+            aria-hidden="true"
+            className="flex size-9 shrink-0 items-center justify-center rounded-md bg-accent-soft text-on-accent-soft"
+          >
+            <Glyph className="size-4.5" />
+          </span>
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate typescale-title-sm text-ink">{connection.name}</span>
+            <span className="typescale-body-sm font-normal text-ink-faint">
+              {connection.lastUsed}
+            </span>
+          </span>
+        </span>
+      }
+    >
+      <AriaButton
+        onPress={() => setIsOpen(true)}
+        className="state-layer flex h-11 cursor-default items-center rounded-md px-4 typescale-label-lg text-danger medium:h-10"
+      >
         Revoke
-      </Button>
+      </AriaButton>
       <Modal isDismissable isOpen={isOpen} onOpenChange={setIsOpen}>
         <Dialog role="alertdialog">
           <Heading>{`Revoke ${connection.name}?`}</Heading>
           <form action={revoke} className="flex flex-col gap-4">
-            <p className="typescale-body-md text-on-surface-variant">
+            <p className="typescale-body-md text-ink-muted">
               It loses access to your clippings right away. To use it again, connect it again.
             </p>
             <div className="flex justify-end gap-2">
@@ -59,28 +79,23 @@ function ConnectionItem({ connection }: { connection: ConnectionRow }) {
           </form>
         </Dialog>
       </Modal>
-    </li>
+    </SettingsRow>
   );
 }
 
 /** The apps connected to the account through OAuth (Claude, the extension), each revocable. */
 export function ConnectionsSettings({ connections }: { connections: readonly ConnectionRow[] }) {
   return (
-    <SettingsSection
-      title="Connected apps"
-      description="Apps that can read and save your clippings. Revoking one signs it out at once."
-    >
+    <SettingsCard title="Connected apps">
       {connections.length === 0 ? (
-        <p className="typescale-body-md text-on-surface-variant">
+        <p className="py-4.5 typescale-body-md text-ink-muted">
           No apps are connected. Connect Claude or the Clippings extension, and it shows up here.
         </p>
       ) : (
-        <ul className="flex flex-col divide-y divide-outline-variant">
-          {connections.map((connection) => (
-            <ConnectionItem key={connection.clientId} connection={connection} />
-          ))}
-        </ul>
+        connections.map((connection) => (
+          <ConnectionItem key={connection.clientId} connection={connection} />
+        ))
       )}
-    </SettingsSection>
+    </SettingsCard>
   );
 }

@@ -8,9 +8,8 @@ import { hrefWithTag, loadBrowseParams } from "@/lib/clippings/browse-params.ts"
 import { MAX_TAG_LENGTH, type Tag } from "@clippings/shared";
 import { TagPicker } from "@clippings/ui";
 
+import { SaveStatus, type SaveState } from "./save-status.tsx";
 import { useTags } from "./use-tags.ts";
-
-type SaveState = "idle" | "saving" | "saved" | "failed";
 
 const STATUS_TEXT: Record<SaveState, string> = {
   idle: "",
@@ -60,10 +59,7 @@ export function TagEditor({ clippingId, tags: initialTags }: { clippingId: strin
         maxLength={MAX_TAG_LENGTH}
         isDisabled={!online}
       />
-      {/* An <output> is a polite live region, so the status is announced without moving focus. */}
-      <output aria-live="polite" className="min-h-4 typescale-label-sm text-on-surface-variant">
-        {STATUS_TEXT[state]}
-      </output>
+      <SaveStatus state={state} text={STATUS_TEXT[state]} />
     </div>
   );
 }

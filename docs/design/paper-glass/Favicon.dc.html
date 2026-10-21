@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Favicon and app icon</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+.cap{font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;line-height:14px}
+.serif{font-family:'Fraunces',Georgia,serif;font-optical-sizing:auto}
+.tile{border-radius:24px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;box-sizing:border-box;padding:20px}
+.light-tile{background:#F2EDE3;color:#6B6253;box-shadow:inset 0 0 0 1px rgba(70,52,28,.12)}
+.dark-tile{background:#16140F;color:#9D9381;box-shadow:inset 0 0 0 1px rgba(255,240,210,.09)}
+</style>
+</helmet>
+<div style="width: 1280px; height: 760px; box-sizing: border-box; padding: 48px; background: #F2EDE3; color: #26221C; font-family: 'Geist', system-ui, sans-serif; display: flex; flex-direction: column; gap: 28px">
+
+<svg width="0" height="0" style="position: absolute" aria-hidden="true">
+<defs>
+<linearGradient id="fv-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F5D25A"></stop><stop offset="1" stop-color="#DCA613"></stop></linearGradient>
+<linearGradient id="fv-sheen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".5"></stop><stop offset=".55" stop-color="#FFFFFF" stop-opacity="0"></stop></linearGradient>
+<linearGradient id="fv-paper" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFDF8"></stop><stop offset="1" stop-color="#F3ECDF"></stop></linearGradient>
+<symbol id="fv-sheet" viewBox="0 0 64 64">
+<g transform="rotate(-6 32 33)">
+<rect x="18" y="14.5" width="29" height="41" rx="5" fill="#6B4E00" opacity=".28"></rect>
+<path d="M23 12h15.5l8.5 8.5V49a4 4 0 0 1-4 4H23a4 4 0 0 1-4-4V16a4 4 0 0 1 4-4z" fill="url(#fv-paper)"></path>
+<path d="M38.5 12v5.5a3 3 0 0 0 3 3H47z" fill="#E4D9C3"></path>
+<path d="M25 12h8.5v16l-4.25-3.2L25 28z" fill="#26221C"></path>
+<path d="M25 37h16M25 43h10" stroke="#D8CCB4" stroke-width="2.6" stroke-linecap="round" fill="none"></path>
+</g>
+</symbol>
+<symbol id="fv-sheet-sm" viewBox="0 0 64 64">
+<g transform="rotate(-6 32 33)">
+<path d="M21 10h18l9 9v32a4 4 0 0 1-4 4H21a4 4 0 0 1-4-4V14a4 4 0 0 1 4-4z" fill="#FFFDF8"></path>
+<path d="M24 10h11v22l-5.5-4.2L24 32z" fill="#26221C"></path>
+</g>
+</symbol>
+<symbol id="fv-icon" viewBox="0 0 64 64">
+<rect width="64" height="64" rx="15" fill="url(#fv-bg)"></rect>
+<rect width="64" height="64" rx="15" fill="url(#fv-sheen)"></rect>
+<rect x=".5" y=".5" width="63" height="63" rx="14.5" fill="none" stroke="#FFFFFF" stroke-opacity=".4"></rect>
+<use href="#fv-sheet"></use>
+</symbol>
+<symbol id="fv-icon-sm" viewBox="0 0 64 64">
+<rect width="64" height="64" rx="14" fill="url(#fv-bg)"></rect>
+<use href="#fv-sheet-sm"></use>
+</symbol>
+<symbol id="fv-mask" viewBox="0 0 64 64">
+<rect width="64" height="64" fill="url(#fv-bg)"></rect>
+<rect width="64" height="64" fill="url(#fv-sheen)"></rect>
+<g transform="translate(32 32) scale(.74) translate(-32 -32)"><use href="#fv-sheet"></use></g>
+</symbol>
+<symbol id="fv-mono" viewBox="0 0 64 64">
+<g transform="rotate(-6 32 33)">
+<path fill-rule="evenodd" d="M21 10h18l9 9v32a4 4 0 0 1-4 4H21a4 4 0 0 1-4-4V14a4 4 0 0 1 4-4zM24 10v22l5.5-4.2L35 32V10z" fill="currentColor"></path>
+</g>
+</symbol>
+</defs>
+</svg>
+
+<header style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px">
+<div>
+<div style="font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #6B6253; font-weight: 500">Favicon &amp; app icon</div>
+<h1 class="serif" style="margin: 6px 0 0; font-size: 36px; line-height: 42px; font-weight: 500; letter-spacing: -.015em">A clipping, kept</h1>
+<p style="margin: 8px 0 0; max-width: 620px; font-size: 14px; line-height: 21px; color: #544C40">A sheet of paper with a bookmark ribbon, tipped slightly as if just set down, on an ochre tile with a glass sheen. Below 32px the folded corner and text lines drop out so the shape stays crisp.</p>
+</div>
+</header>
+
+<div style="display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 16px; flex: 1">
+
+<div class="tile light-tile" style="flex-direction: row; gap: 40px">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 12px">
+<svg width="200" height="200" role="img" aria-label="Clippings app icon" style="filter: drop-shadow(0 18px 30px rgba(120,85,0,.28)) drop-shadow(0 2px 4px rgba(60,40,20,.15))"><use href="#fv-icon"></use></svg>
+<span class="cap">512 · app icon, icon.svg</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 20px; align-items: center">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 6px"><svg width="90" height="90" aria-hidden="true" style="filter: drop-shadow(0 8px 14px rgba(120,85,0,.25))"><use href="#fv-icon"></use></svg><span class="cap">180 · apple-icon</span></div>
+<div style="display: flex; align-items: flex-end; gap: 18px">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 6px"><svg width="32" height="32" aria-hidden="true"><use href="#fv-icon-sm"></use></svg><span class="cap">32</span></div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 6px"><svg width="16" height="16" aria-hidden="true"><use href="#fv-icon-sm"></use></svg><span class="cap">16</span></div>
+</div>
+</div>
+</div>
+
+<div class="tile dark-tile">
+<svg width="128" height="128" aria-hidden="true" style="filter: drop-shadow(0 18px 30px rgba(0,0,0,.6))"><use href="#fv-icon"></use></svg>
+<span class="cap">On dark</span>
+</div>
+
+<div class="tile light-tile">
+<div style="position: relative; width: 128px; height: 128px; border-radius: 50%; overflow: hidden; box-shadow: 0 10px 24px -8px rgba(60,40,20,.35)">
+<svg width="128" height="128" aria-hidden="true"><use href="#fv-mask"></use></svg>
+</div>
+<span class="cap">Maskable · PWA, 74% safe zone</span>
+</div>
+
+<div class="tile light-tile" style="gap: 18px">
+<div style="display: flex; gap: 14px; align-items: center">
+<span style="width: 56px; height: 56px; border-radius: 16px; background: #26221C; color: #F3CC4A; display: flex; align-items: center; justify-content: center"><svg width="40" height="40" aria-hidden="true"><use href="#fv-mono"></use></svg></span>
+<span style="width: 56px; height: 56px; border-radius: 16px; background: #DCE6D4; color: #22341E; display: flex; align-items: center; justify-content: center"><svg width="40" height="40" aria-hidden="true"><use href="#fv-mono"></use></svg></span>
+</div>
+<span class="cap">Monochrome · themed icons</span>
+</div>
+
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+<div style="height: 64px; border-radius: 16px; background: #E8E1D2; display: flex; align-items: flex-end; padding: 0 16px; gap: 4px; box-sizing: border-box">
+<div style="height: 44px; width: 240px; border-radius: 12px 12px 0 0; background: #FCFAF5; display: flex; align-items: center; gap: 10px; padding: 0 14px; box-sizing: border-box; font-size: 13px; font-weight: 500"><svg width="16" height="16" aria-hidden="true"><use href="#fv-icon-sm"></use></svg>Clippings</div>
+<div style="height: 40px; width: 200px; display: flex; align-items: center; gap: 10px; padding: 0 14px; box-sizing: border-box; font-size: 13px; color: #6B6253"><span style="width: 16px; height: 16px; border-radius: 4px; background: #CFC6B4"></span>Another tab</div>
+</div>
+<div style="height: 64px; border-radius: 16px; background: #0F0E0B; display: flex; align-items: flex-end; padding: 0 16px; gap: 4px; box-sizing: border-box">
+<div style="height: 44px; width: 240px; border-radius: 12px 12px 0 0; background: #24201B; color: #EEE7DA; display: flex; align-items: center; gap: 10px; padding: 0 14px; box-sizing: border-box; font-size: 13px; font-weight: 500"><svg width="16" height="16" aria-hidden="true"><use href="#fv-icon-sm"></use></svg>Clippings</div>
+<div style="height: 40px; width: 200px; display: flex; align-items: center; gap: 10px; padding: 0 14px; box-sizing: border-box; font-size: 13px; color: #9D9381"><span style="width: 16px; height: 16px; border-radius: 4px; background: #3A352D"></span>Another tab</div>
+</div>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":760}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

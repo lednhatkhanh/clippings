@@ -2,16 +2,3 @@
 
 /* Tailwind only scans the extension by default; the design system's components live elsewhere. */
 @source "../../../../packages/ui/src";
-
-/*
- * The design system's icon font again, by a path Vite resolves and bundles: Tailwind inlines
- * `icons.css` without rebasing its `url()`, so that face points nowhere in the extension. The
- * later face with the same descriptors is the one the browser uses.
- */
-@font-face {
-  font-family: "Material Symbols Rounded";
-  font-style: normal;
-  font-weight: 300 500;
-  font-display: block;
-  src: url("../../../../packages/ui/src/fonts/material-symbols-rounded.woff2") format("woff2");
-}

@@ -70,29 +70,28 @@ export function applyAppearance(appearance: Appearance, target?: ApplyTarget): v
 }
 
 /**
- * How an appearance change animates. "reveal": the new look grows as a circle from the control.
- * "fade": a crossfade. "none": it applies at once.
+ * How an appearance change animates. "fade": a slow crossfade, like evening light. "reveal": the
+ * new look grows as a circle from the control. "none": it applies at once.
  */
 export type AppearanceTransition = "reveal" | "fade" | "none";
 
 /**
- * The transition a change to `key` gets: light and dark keep the circular reveal, palette and
- * contrast crossfade, density just reflows. Taking back a change after a failed save applies at
- * once, so it doesn't look like a second user action.
+ * The transition a change to `key` gets: theme, palette and contrast crossfade, density just
+ * reflows. Taking back a change after a failed save applies at once, so it doesn't look like a
+ * second user action.
  */
 export function appearanceTransitionFor(
   key: AppearanceKey,
   options?: { revert?: boolean },
 ): AppearanceTransition {
   if (options?.revert) return "none";
-  if (key === "theme") return "reveal";
   if (key === "density") return "none";
   return "fade";
 }
 
-/** Used when the token can't be read; matches `--md-sys-motion-duration-medium4`. */
-const REVEAL_FALLBACK_MS = 400;
-const REVEAL_EASING = "cubic-bezier(0.05, 0.7, 0.1, 1)";
+/** Used when the token can't be read; matches `--motion-duration-slow`. */
+const REVEAL_FALLBACK_MS = 520;
+const REVEAL_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
 const TRANSITION_ATTRIBUTE = "data-appearance-transition";
 
 /** The appearance view transition still running, if any. */
@@ -109,11 +108,11 @@ function parseCssTime(value: string): number | undefined {
 
 /**
  * Runs `update` inside a view transition, so the page changes from the old look to the new one
- * instead of jumping. `kind` (default "reveal") picks the animation, see `appearanceTransitionFor`:
- * "reveal" grows the new look as a circle from `origin` (default: the viewport center) over
- * `--md-sys-motion-duration-medium4`, "fade" crossfades on the default effects spring, and "none"
- * just runs `update`, skipping the rest of any appearance transition still running. Under reduced
- * motion every animated change is the crossfade. Without `document.startViewTransition`, `update`
+ * instead of jumping. `kind` (default "fade") picks the animation, see `appearanceTransitionFor`:
+ * "fade" crossfades slowly (`base.css`), "reveal" grows the new look as a circle from `origin`
+ * (default: the viewport center) over `--motion-duration-slow`, and "none" just runs `update`,
+ * skipping the rest of any appearance transition still running. Under reduced motion every
+ * animated change is the crossfade. Without `document.startViewTransition`, `update`
  * just runs.
  *
  * The browser snapshots the new state right after `update` returns, so React state set in it must
@@ -123,7 +122,7 @@ export function transitionAppearance(
   update: () => void,
   options?: { kind?: AppearanceTransition; origin?: { x: number; y: number } },
 ): void {
-  const kind = options?.kind ?? "reveal";
+  const kind = options?.kind ?? "fade";
   if (typeof document === "undefined" || typeof document.startViewTransition !== "function") {
     update();
     return;
@@ -156,9 +155,8 @@ export function transitionAppearance(
   const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
   const style = getComputedStyle(root);
   const duration =
-    parseCssTime(style.getPropertyValue("--md-sys-motion-duration-medium4")) ?? REVEAL_FALLBACK_MS;
-  const easing =
-    style.getPropertyValue("--md-sys-motion-easing-emphasized-decelerate").trim() || REVEAL_EASING;
+    parseCssTime(style.getPropertyValue("--motion-duration-slow")) ?? REVEAL_FALLBACK_MS;
+  const easing = style.getPropertyValue("--motion-ease-settle").trim() || REVEAL_EASING;
 
   transition.ready.then(
     () => {

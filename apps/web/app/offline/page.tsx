@@ -16,7 +16,7 @@ export default function OfflinePage() {
     <AuthCard>
       <NotebookIllustration className="h-auto w-50" />
       <h1 className="typescale-headline-sm">You&apos;re offline.</h1>
-      <p className="typescale-body-md text-on-surface-variant">
+      <p className="typescale-body-md text-ink-muted">
         Your clippings will be here when you&apos;re back.
       </p>
       <RetryButton />

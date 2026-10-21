@@ -1,5 +1,6 @@
 "use client";
 
+import { Monitor, Moon, Sun } from "lucide-react";
 import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
@@ -16,15 +17,7 @@ import {
 } from "@clippings/ui";
 
 import { PalettePicker } from "./palette-picker.tsx";
-import { SettingsSection } from "./settings-section.tsx";
-
-/** Where the circular reveal starts: the control just pressed, or the middle of the window. */
-function revealOrigin() {
-  const control = document.activeElement;
-  if (!(control instanceof HTMLElement) || control === document.body) return undefined;
-  const box = control.getBoundingClientRect();
-  return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
-}
+import { SettingsCard, SettingsRow } from "./settings-section.tsx";
 
 /**
  * Mode, palette, contrast and density. A change shows at once on this device, is mirrored for
@@ -46,7 +39,7 @@ export function AppearanceSettings({ initial }: { initial: Appearance }) {
       flushSync(() => setAppearance(latest));
       applyAppearance(latest);
     };
-    transitionAppearance(update, { kind, origin: revealOrigin() });
+    transitionAppearance(update, { kind });
   }
 
   function change<K extends AppearanceKey>(key: K, value: Appearance[K]) {
@@ -64,30 +57,44 @@ export function AppearanceSettings({ initial }: { initial: Appearance }) {
   }
 
   return (
-    <div className="flex flex-col gap-8">
-      <SettingsSection title="Mode" description="Light, dark, or whatever your device uses.">
+    <SettingsCard title="Appearance">
+      <SettingsRow title="Mode" description="Light, dark, or whatever your device uses.">
         <SegmentedButtons
           aria-label="Mode"
+          className="medium:w-auto"
           selectedKey={appearance.theme}
           onSelectionChange={(key) => change("theme", key as Appearance["theme"])}
         >
-          <Segment id="system">System</Segment>
-          <Segment id="light">Light</Segment>
-          <Segment id="dark">Dark</Segment>
+          <Segment id="system" icon={Monitor}>
+            System
+          </Segment>
+          <Segment id="light" icon={Sun}>
+            Light
+          </Segment>
+          <Segment id="dark" icon={Moon}>
+            Dark
+          </Segment>
         </SegmentedButtons>
-      </SettingsSection>
+      </SettingsRow>
 
-      <PalettePicker
-        value={appearance.palette}
-        onChange={(palette) => change("palette", palette)}
-      />
+      <SettingsRow
+        stacked
+        title="Accent"
+        description="Tints buttons, selection and the paper's glow."
+      >
+        <PalettePicker
+          value={appearance.palette}
+          onChange={(palette) => change("palette", palette)}
+        />
+      </SettingsRow>
 
-      <SettingsSection
+      <SettingsRow
         title="Contrast"
         description="System follows your device's contrast setting. More and Most make text and edges stronger."
       >
         <SegmentedButtons
           aria-label="Contrast"
+          className="medium:w-auto"
           selectedKey={appearance.contrast}
           onSelectionChange={(key) => change("contrast", key as Appearance["contrast"])}
         >
@@ -96,18 +103,19 @@ export function AppearanceSettings({ initial }: { initial: Appearance }) {
           <Segment id="medium">More</Segment>
           <Segment id="high">Most</Segment>
         </SegmentedButtons>
-      </SettingsSection>
+      </SettingsRow>
 
-      <SettingsSection title="Density" description="Compact fits more clippings on the screen.">
+      <SettingsRow title="Density" description="Compact fits more clippings on the screen.">
         <SegmentedButtons
           aria-label="Density"
+          className="medium:w-auto"
           selectedKey={appearance.density}
           onSelectionChange={(key) => change("density", key as Appearance["density"])}
         >
           <Segment id="comfortable">Comfortable</Segment>
           <Segment id="compact">Compact</Segment>
         </SegmentedButtons>
-      </SettingsSection>
-    </div>
+      </SettingsRow>
+    </SettingsCard>
   );
 }

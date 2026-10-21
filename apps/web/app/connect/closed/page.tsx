@@ -17,9 +17,7 @@ const REASONS: Record<string, string> = {
 async function Reason({ searchParams }: { searchParams: Promise<{ reason?: string }> }) {
   const { reason } = await searchParams;
   return (
-    <p className="typescale-body-md text-on-surface-variant">
-      {REASONS[reason ?? ""] ?? REASONS.failed}
-    </p>
+    <p className="typescale-body-md text-ink-muted">{REASONS[reason ?? ""] ?? REASONS.failed}</p>
   );
 }
 
@@ -39,7 +37,7 @@ export default function ConnectionClosedPage({
       <Suspense fallback={null}>
         <Reason searchParams={searchParams} />
       </Suspense>
-      <p className="typescale-body-md text-on-surface-variant">You can close this tab.</p>
+      <p className="typescale-body-md text-ink-muted">You can close this tab.</p>
     </AuthCard>
   );
 }

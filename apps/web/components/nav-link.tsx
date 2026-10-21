@@ -1,68 +1,73 @@
 "use client";
 
+import type { LucideIcon } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Suspense } from "react";
 
-import { Icon, cn, type IconName } from "@clippings/ui";
+import { cn } from "@clippings/ui";
 
-/** The list owns its detail pages (`/c/[id]`), so "Clippings" stays marked on them. */
-const matches = (pathname: string, href: string) =>
-  href === "/"
-    ? pathname === "/" || pathname.startsWith("/c/")
-    : pathname === href || pathname.startsWith(`${href}/`);
+import { sectionIndex, sectionTransitionType } from "./nav-sections.ts";
 
 interface NavLinkProps {
   href: Route;
-  icon: IconName;
+  icon: LucideIcon;
   label: string;
 }
 
-function NavLinkView({ href, icon, label, active }: NavLinkProps & { active: boolean }) {
+function NavLinkView({
+  href,
+  icon: IconComponent,
+  label,
+  pathname,
+}: NavLinkProps & { pathname: string | null }) {
+  const active = pathname !== null && sectionIndex(pathname) === sectionIndex(href);
+  const type = pathname === null ? undefined : sectionTransitionType(pathname, href);
+
   return (
     <Link
       href={href}
-      transitionTypes={["nav-top"]}
+      transitionTypes={type ? [type] : undefined}
       aria-current={active ? "page" : undefined}
       data-active={active ? "" : undefined}
       className={cn(
-        "group state-layer flex min-h-12 flex-1 flex-col items-center justify-center gap-1 rounded-lg py-3 text-on-surface-variant",
-        "medium:py-1",
-        "large:h-14 large:flex-row large:justify-start large:gap-3 large:rounded-full large:px-4 large:py-0",
-        "transition-colors data-active:text-on-surface large:data-active:text-on-secondary-container",
+        "group state-layer flex min-h-14 flex-1 flex-col items-center justify-center gap-1 rounded-lg text-ink-muted transition-colors",
+        "data-active:text-ink",
+        // Collapsed rail: an icon in a 48px tile.
+        "medium:size-12 medium:min-h-0 medium:flex-none",
+        "medium:data-active:text-on-accent-soft",
+        // Expanded rail: icon and label in a 44px row.
+        "large:h-11 large:w-full large:flex-row large:justify-start large:gap-3 large:px-3.5",
       )}
     >
-      <span
-        className={cn(
-          "relative flex h-8 w-16 items-center justify-center rounded-full transition-colors",
-          "group-data-active:text-on-secondary-container",
-          "large:static large:h-auto large:w-auto",
-        )}
-      >
-        {/* The pill, behind the state layer: around the icon, or the whole link when large. */}
+      <span className="relative flex h-7.5 w-14 items-center justify-center transition-colors group-data-active:text-on-accent-soft medium:static medium:h-auto medium:w-auto">
+        {/* The highlight, behind the state layer: around the icon, or the whole link from medium. */}
         <span
           aria-hidden="true"
-          className="absolute inset-0 -z-2 rounded-full bg-secondary-container nav-indicator"
+          className="absolute inset-0 -z-10 rounded-md bg-accent-soft nav-indicator"
         />
-        <Icon name={icon} filled={active} />
+        <IconComponent className="size-5" />
       </span>
-      <span className="typescale-label-md large:typescale-label-lg">{label}</span>
+      <span className="typescale-label-sm medium:sr-only large:not-sr-only large:typescale-label-lg">
+        {label}
+      </span>
     </Link>
   );
 }
 
 function CurrentNavLink(props: NavLinkProps) {
-  return <NavLinkView {...props} active={matches(usePathname(), props.href)} />;
+  return <NavLinkView {...props} pathname={usePathname()} />;
 }
 
 /**
  * A destination in the navigation, marked when it is the current page. On a route with a dynamic
  * param the pathname is known only per request, so the prerendered shell shows the link unmarked.
+ * A click adds the transition type for the move (see `sectionTransitionType`).
  */
 export function NavLink(props: NavLinkProps) {
   return (
-    <Suspense fallback={<NavLinkView {...props} active={false} />}>
+    <Suspense fallback={<NavLinkView {...props} pathname={null} />}>
       <CurrentNavLink {...props} />
     </Suspense>
   );

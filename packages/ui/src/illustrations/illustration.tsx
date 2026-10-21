@@ -5,8 +5,8 @@ import { cn } from "../cn.ts";
 export type IllustrationProps = Omit<ComponentProps<"svg">, "children" | "viewBox">;
 
 /**
- * Shared frame for the "ink and wash" illustrations: one line weight in `on-surface-variant`
- * and flat washes from the palette, so they re-tint with the palette, mode and contrast.
+ * Shared frame for the "ink and wash" illustrations: one line weight in `ink-faint`
+ * on paper, with flat washes in the accent, so they re-tint with the palette, mode and contrast.
  * Decorative: pair them with visible text.
  */
 export function Illustration({
@@ -19,7 +19,7 @@ export function Illustration({
       viewBox="0 0 240 160"
       aria-hidden="true"
       fill="none"
-      className={cn("text-on-surface-variant", className)}
+      className={cn("text-ink-faint", className)}
       {...props}
     >
       {children}

@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Keyboard shortcuts and focus</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;padding:0}
+.pg{font-family:'Geist',system-ui,sans-serif;color:var(--ink);background:var(--ground);-webkit-font-smoothing:antialiased;font-size:14px;line-height:20px}
+.pg.light{--ground:#F2EDE3;--ground-sunk:#E8E1D2;--card:#FCFAF5;--card-2:#F7F2E8;--ink:#26221C;--ink-2:#544C40;--ink-3:#6B6253;--line:rgba(70,52,28,.12);--line-strong:rgba(70,52,28,.24);--glass:rgba(250,247,240,.62);--glass-strong:rgba(252,250,245,.82);--glass-edge:rgba(255,255,255,.72);--glass-hi:rgba(255,255,255,.85);--field-inset:rgba(60,40,20,.10);--scrim:rgba(46,34,18,.16);--blob-b:rgba(170,200,172,.55);--blob-c:rgba(236,190,150,.5);--kbd-bg:#FFFDF8;--kbd-edge:rgba(70,52,28,.18);
+--shadow-paper:inset 0 1px 0 rgba(255,255,255,.7),0 0 0 1px rgba(80,60,30,.06),0 1px 1px rgba(60,40,20,.05),0 3px 6px -2px rgba(60,40,20,.07),0 12px 24px -8px rgba(60,40,20,.09);
+--shadow-glass:inset 0 1px 0 var(--glass-hi),0 1px 2px rgba(60,40,20,.08),0 16px 36px -12px rgba(60,40,20,.26);
+--shadow-float:inset 0 1px 0 var(--glass-hi),0 0 0 1px rgba(80,60,30,.08),0 4px 10px -2px rgba(60,40,20,.12),0 30px 60px -16px rgba(60,40,20,.38)}
+.pg.dark{--ground:#16140F;--ground-sunk:#0F0E0B;--card:#24201B;--card-2:#1F1C17;--ink:#EEE7DA;--ink-2:#C4BAA8;--ink-3:#9D9381;--line:rgba(255,240,210,.09);--line-strong:rgba(255,240,210,.18);--glass:rgba(34,31,26,.6);--glass-strong:rgba(40,36,30,.8);--glass-edge:rgba(255,245,225,.10);--glass-hi:rgba(255,250,235,.07);--field-inset:rgba(0,0,0,.4);--scrim:rgba(0,0,0,.42);--blob-b:rgba(120,160,125,.12);--blob-c:rgba(210,140,100,.11);--kbd-bg:#2C2822;--kbd-edge:rgba(0,0,0,.5);
+--shadow-paper:inset 0 1px 0 rgba(255,250,235,.05),0 0 0 1px rgba(255,240,210,.06),0 1px 1px rgba(0,0,0,.3),0 4px 8px -2px rgba(0,0,0,.28),0 14px 28px -10px rgba(0,0,0,.45);
+--shadow-glass:inset 0 1px 0 var(--glass-hi),0 0 0 1px rgba(0,0,0,.25),0 18px 40px -12px rgba(0,0,0,.6);
+--shadow-float:inset 0 1px 0 var(--glass-hi),0 0 0 1px rgba(0,0,0,.35),0 4px 10px -2px rgba(0,0,0,.4),0 30px 60px -16px rgba(0,0,0,.75)}
+.light.accent-ochre{--accent:#E2AE1C;--accent-top:#F3CC4A;--on-accent:#3A2C00;--accent-soft:#F3E2A6;--on-accent-soft:#4A3A00;--accent-text:#7A5C00;--accent-ring:rgba(150,110,0,.22);--accent-glow:rgba(150,105,0,.42);--blob-a:rgba(244,206,90,.6)}
+.dark.accent-ochre{--accent:#E0B03A;--accent-top:#EEC65E;--on-accent:#271D00;--accent-soft:#3A3119;--on-accent-soft:#F2DA92;--accent-text:#EBC65C;--accent-ring:rgba(255,220,120,.25);--accent-glow:rgba(0,0,0,.5);--blob-a:rgba(224,176,58,.15)}
+.light.accent-terracotta{--accent:#BF5629;--accent-top:#D26B3E;--on-accent:#FFFFFF;--accent-soft:#F5D9CA;--on-accent-soft:#5A2008;--accent-text:#A3461E;--accent-ring:rgba(140,50,10,.25);--accent-glow:rgba(150,60,20,.4);--blob-a:rgba(235,160,120,.5)}
+.dark.accent-terracotta{--accent:#E8906A;--accent-top:#F2A784;--on-accent:#2D0F03;--accent-soft:#3E2519;--on-accent-soft:#F7CBB5;--accent-text:#F0A280;--accent-ring:rgba(255,190,160,.25);--accent-glow:rgba(0,0,0,.5);--blob-a:rgba(232,144,106,.14)}
+.light.accent-sage{--accent:#5A7656;--accent-top:#6C8A67;--on-accent:#FFFFFF;--accent-soft:#DCE6D4;--on-accent-soft:#22341E;--accent-text:#46603F;--accent-ring:rgba(40,70,35,.25);--accent-glow:rgba(40,70,35,.35);--blob-a:rgba(160,195,160,.55)}
+.dark.accent-sage{--accent:#A6C19C;--accent-top:#BCD3B2;--on-accent:#15240F;--accent-soft:#263124;--on-accent-soft:#CFE1C6;--accent-text:#AECBA4;--accent-ring:rgba(200,230,190,.22);--accent-glow:rgba(0,0,0,.5);--blob-a:rgba(166,193,156,.13)}
+.light.accent-ink{--accent:#3E5E8A;--accent-top:#4F709D;--on-accent:#FFFFFF;--accent-soft:#DCE4F0;--on-accent-soft:#162B4A;--accent-text:#385883;--accent-ring:rgba(30,50,90,.25);--accent-glow:rgba(30,50,90,.35);--blob-a:rgba(160,185,225,.5)}
+.dark.accent-ink{--accent:#A8C0E6;--accent-top:#BED0EF;--on-accent:#0F2240;--accent-soft:#222A3A;--on-accent-soft:#CFDCF2;--accent-text:#B0C7EA;--accent-ring:rgba(190,210,245,.22);--accent-glow:rgba(0,0,0,.5);--blob-a:rgba(168,192,230,.13)}
+.light .t-green{--tag-bg:#DDE9D6;--tag-fg:#234A1F}.dark .t-green{--tag-bg:#233222;--tag-fg:#BFDDB4}
+.serif{font-family:'Fraunces',Georgia,serif;font-optical-sizing:auto}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.eyebrow{font-size:11px;line-height:14px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:500;margin:0}
+.muted{color:var(--ink-2)}.faint{color:var(--ink-3)}
+.cap{font-family:'Geist Mono',ui-monospace,monospace;font-size:10.5px;line-height:14px;color:var(--ink-3)}
+.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.i-sm{width:14px;height:14px}
+.paper{background:linear-gradient(180deg,var(--card),var(--card-2));box-shadow:var(--shadow-paper);border-radius:16px}
+.glass{background:var(--glass);-webkit-backdrop-filter:blur(22px) saturate(160%);backdrop-filter:blur(22px) saturate(160%);border:1px solid var(--glass-edge);box-shadow:var(--shadow-glass)}
+.float{background:var(--glass-strong);-webkit-backdrop-filter:blur(28px) saturate(170%);backdrop-filter:blur(28px) saturate(170%);border:1px solid var(--glass-edge);box-shadow:var(--shadow-float)}
+.key{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 7px;box-sizing:border-box;border-radius:7px;background:var(--kbd-bg);box-shadow:inset 0 -1.5px 0 var(--kbd-edge),0 0 0 1px var(--line-strong);font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;font-weight:500;color:var(--ink)}
+.keys{display:inline-flex;align-items:center;gap:4px;color:var(--ink-3);font-size:12px}
+.sc{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:36px;border-top:1px solid var(--line)}
+.sc:first-of-type{border-top:0}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 16px;border-radius:12px;font-size:14px;font-weight:500;white-space:nowrap;box-sizing:border-box}
+.btn-filled{background:linear-gradient(180deg,var(--accent-top),var(--accent));color:var(--on-accent);box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 0 0 1px var(--accent-ring),0 1px 2px rgba(0,0,0,.12),0 8px 18px -8px var(--accent-glow)}
+.btn-paper{background:linear-gradient(180deg,var(--card),var(--card-2));box-shadow:var(--shadow-paper);color:var(--ink)}
+.f{outline:2px solid var(--accent-text);outline-offset:2px}
+.nav-item{display:flex;align-items:center;gap:12px;height:44px;padding:0 14px;border-radius:14px;color:var(--ink-2);font-weight:500}
+.chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:9px;font-size:13px;font-weight:500;background:var(--tag-bg);color:var(--tag-fg)}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.75}
+.switch{width:44px;height:26px;border-radius:13px;background:linear-gradient(180deg,var(--accent-top),var(--accent));position:relative;flex:none}
+.switch span{position:absolute;top:3px;left:21px;width:20px;height:20px;border-radius:50%;background:linear-gradient(180deg,#FFFDF8,#F2EDE3);box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.seg{display:inline-flex;padding:3px;gap:2px;border-radius:13px;background:var(--ground-sunk);box-shadow:inset 0 1px 2px var(--field-inset)}
+.seg-item{height:32px;padding:0 12px;border-radius:10px;display:inline-flex;align-items:center;font-weight:500;color:var(--ink-2)}
+.seg-item.sel{background:linear-gradient(180deg,var(--card),var(--card-2));box-shadow:var(--shadow-paper);color:var(--ink)}
+.step{display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--accent-soft);color:var(--on-accent-soft);font-size:11px;font-weight:600;flex:none}
+.blob{position:absolute;border-radius:50%;pointer-events:none}
+</style>
+</helmet>
+<div class="pg {{themeClass}}" style="position: relative; width: 1280px; height: 900px; overflow: hidden">
+
+<div class="blob" aria-hidden="true" style="top: -160px; left: 20%; width: 560px; height: 560px; background: radial-gradient(closest-side, var(--blob-a), transparent)"></div>
+<div class="blob" aria-hidden="true" style="bottom: -200px; left: -120px; width: 560px; height: 560px; background: radial-gradient(closest-side, var(--blob-c), transparent)"></div>
+<div class="blob" aria-hidden="true" style="top: 300px; right: -160px; width: 600px; height: 600px; background: radial-gradient(closest-side, var(--blob-b), transparent)"></div>
+
+<a href="#main" class="glass f" style="position: absolute; top: 20px; left: 32px; height: 40px; padding: 0 16px; border-radius: 12px; display: inline-flex; align-items: center; gap: 8px; color: var(--ink); text-decoration: none; font-weight: 500; z-index: 2">Skip to content<span class="key">↵</span></a>
+
+<section role="dialog" aria-labelledby="kb-title" class="float" style="position: absolute; left: 32px; top: 80px; width: 696px; box-sizing: border-box; padding: 24px 28px 20px; border-radius: 24px">
+<div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px">
+<div>
+<h1 id="kb-title" class="serif" style="margin: 0; font-size: 26px; line-height: 32px; font-weight: 500; letter-spacing: -.01em">Keyboard shortcuts</h1>
+<p class="faint" style="margin: 4px 0 0; font-size: 13px">Shortcuts are off while you type in a field. Press <span class="key">?</span> anywhere to open this.</p>
+</div>
+<button class="btn btn-paper f" aria-label="Close" style="width: 40px; padding: 0"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 32px; margin-top: 20px">
+
+<div>
+<h2 class="eyebrow" style="margin-bottom: 6px">Anywhere</h2>
+<div class="sc"><span>Jump to anything</span><span class="keys"><span class="key">⌘</span><span class="key">K</span></span></div>
+<div class="sc"><span>Search clippings</span><span class="keys"><span class="key">/</span></span></div>
+<div class="sc"><span>Save a link</span><span class="keys"><span class="key">N</span></span></div>
+<div class="sc"><span>Paste a link to save it</span><span class="keys"><span class="key">⌘</span><span class="key">V</span></span></div>
+<div class="sc"><span>Go to Clippings</span><span class="keys"><span class="key">G</span>then<span class="key">C</span></span></div>
+<div class="sc"><span>Go to Tags</span><span class="keys"><span class="key">G</span>then<span class="key">T</span></span></div>
+<div class="sc"><span>Go to Settings</span><span class="keys"><span class="key">G</span>then<span class="key">S</span></span></div>
+<div class="sc"><span>Toggle light and dark</span><span class="keys"><span class="key">⇧</span><span class="key">D</span></span></div>
+</div>
+
+<div>
+<h2 class="eyebrow" style="margin-bottom: 6px">In the list</h2>
+<div class="sc"><span>Next / previous</span><span class="keys"><span class="key">J</span><span class="key">K</span>or<span class="key">↓</span><span class="key">↑</span></span></div>
+<div class="sc"><span>First / last</span><span class="keys"><span class="key">Home</span><span class="key">End</span></span></div>
+<div class="sc"><span>Open clipping</span><span class="keys"><span class="key">↵</span></span></div>
+<div class="sc"><span>Open original</span><span class="keys"><span class="key">O</span></span></div>
+<div class="sc"><span>Edit tags</span><span class="keys"><span class="key">T</span></span></div>
+<div class="sc"><span>Delete</span><span class="keys"><span class="key">⌫</span></span></div>
+<div class="sc"><span>Undo</span><span class="keys"><span class="key">⌘</span><span class="key">Z</span></span></div>
+<div class="sc"><span>More actions</span><span class="keys"><span class="key">⇧</span><span class="key">F10</span></span></div>
+</div>
+
+<div>
+<h2 class="eyebrow" style="margin-bottom: 6px">On a clipping</h2>
+<div class="sc"><span>Back to the list</span><span class="keys"><span class="key">Esc</span></span></div>
+<div class="sc"><span>Next / previous clipping</span><span class="keys"><span class="key">J</span><span class="key">K</span></span></div>
+<div class="sc"><span>Edit note</span><span class="keys"><span class="key">E</span></span></div>
+<div class="sc"><span>Save note</span><span class="keys"><span class="key">⌘</span><span class="key">↵</span></span></div>
+</div>
+
+<div>
+<h2 class="eyebrow" style="margin-bottom: 6px">Menus and dialogs</h2>
+<div class="sc"><span>Move</span><span class="keys"><span class="key">↑</span><span class="key">↓</span></span></div>
+<div class="sc"><span>Choose</span><span class="keys"><span class="key">↵</span>or<span class="key">Space</span></span></div>
+<div class="sc"><span>Type to find an item</span><span class="keys"><span class="key">A–Z</span></span></div>
+<div class="sc"><span>Close, focus returns</span><span class="keys"><span class="key">Esc</span></span></div>
+</div>
+
+</div>
+</section>
+
+<aside class="paper" aria-label="Focus" style="position: absolute; left: 760px; right: 32px; top: 20px; bottom: 20px; box-sizing: border-box; padding: 24px; border-radius: 24px; display: flex; flex-direction: column; gap: 18px">
+<div>
+<h2 class="serif" style="margin: 0; font-size: 22px; line-height: 28px; font-weight: 500">Focus you can always see</h2>
+<p class="muted" style="margin: 6px 0 0; font-size: 13px; line-height: 19px">A 2px ring in the accent’s text colour, 2px out, following each shape’s radius. It shows on <span class="mono">[data-focus-visible]</span> only, so mouse clicks stay quiet, and it never relies on colour alone.</p>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 14px; align-items: center">
+<div><div class="nav-item f" style="background: transparent">Tags</div><div class="cap" style="margin-top: 6px">Link · rail</div></div>
+<div><button class="btn btn-filled f">Save a link</button><div class="cap" style="margin-top: 6px">Button</div></div>
+<div><span class="chip t-green f"><span class="dot"></span>design</span><div class="cap" style="margin-top: 8px">Tag · TagGroup</div></div>
+<div><span style="display: inline-flex; align-items: center; gap: 10px"><span class="switch f" aria-hidden="true"><span></span></span>Compact</span><div class="cap" style="margin-top: 8px">Switch</div></div>
+<div style="grid-column: span 2"><div class="seg"><span class="seg-item sel">System</span><span class="seg-item f">Light</span><span class="seg-item">Dark</span></div><div class="cap" style="margin-top: 6px">ToggleButtonGroup · arrows move, one tab stop</div></div>
+</div>
+
+<div>
+<h3 class="eyebrow" style="margin-bottom: 10px">Tab order on Home</h3>
+<ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; font-size: 13px">
+<li style="display: flex; gap: 10px; align-items: center"><span class="step">1</span>Skip to content</li>
+<li style="display: flex; gap: 10px; align-items: center"><span class="step">2</span>Save a link, then the rail links</li>
+<li style="display: flex; gap: 10px; align-items: center"><span class="step">3</span>Search field, then source filters <span class="faint">(one stop, arrows inside)</span></li>
+<li style="display: flex; gap: 10px; align-items: center"><span class="step">4</span>The list <span class="faint">(one stop; remembers the last row)</span></li>
+<li style="display: flex; gap: 10px; align-items: center"><span class="step">5</span>Row actions <span class="faint">(→ from a row reaches its ⋯ button)</span></li>
+</ol>
+</div>
+
+<div style="margin-top: auto; display: flex; flex-direction: column; gap: 8px">
+<h3 class="eyebrow">Hints, not clutter</h3>
+<p class="muted" style="margin: 0; font-size: 13px; line-height: 19px">The screen stays calm: only ⌘K in the rail and a quiet ↵ on the focused row. Every other shortcut lives in tooltips, the ⌘K palette and this sheet, and none show on touch screens.</p>
+</div>
+</aside>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"mode":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"enum","options":["ochre","terracotta","sage","ink"],"default":"ochre"},"$preview":{"width":1280,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+const mode = this.props.mode ?? 'light';
+const accent = this.props.accent ?? 'ochre';
+return { themeClass: mode + ' accent-' + accent };
+}
+}
+</script>
+</body>
+</html>

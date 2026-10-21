@@ -6,7 +6,7 @@ import { Button, LinkButton } from "@clippings/ui";
 /** A render error outside the signed-in app, such as on the sign-in page. */
 export default function RootError({ retry }: { retry: () => void }) {
   return (
-    <main className="min-h-dvh bg-surface px-4 text-on-surface">
+    <main className="flex min-h-dvh items-center justify-center px-4 text-ink">
       <StatusPage
         isAlert
         title="Something went wrong."

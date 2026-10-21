@@ -5,11 +5,11 @@ import { useLayoutEffect, useRef, type ReactNode } from "react";
 import type { ClippingStatus } from "@clippings/shared";
 
 /** The animations a status change runs, in `app/list-motion.css`. */
-const STATUS_ANIMATIONS = new Set(["status-resize", "row-fade-in"]);
+const STATUS_ANIMATIONS = new Set(["status-resize", "status-fade-in", "status-rise"]);
 
 /**
- * A list row's sheet, which glides to its new height when the clipping's status changes (a pending
- * row becoming ready or failed) while the new text fades in, so the list below never jumps. Its
+ * A list row's paper, which glides to its new height when the clipping's status changes (a pending
+ * row becoming ready or failed) while the new text eases in, so the list below never jumps. Its
  * text column takes `status-content`. See `app/list-motion.css`.
  */
 export function StatusMotion({
@@ -48,7 +48,7 @@ export function StatusMotion({
       ref={ref}
       className={className}
       onAnimationEnd={(event) => {
-        // Done once both the glide and the fade have finished; reduced motion ends the glide first.
+        // Done once the glide and the text have finished; reduced motion ends the glide first.
         const sheet = event.currentTarget;
         const running = sheet
           .getAnimations({ subtree: true })

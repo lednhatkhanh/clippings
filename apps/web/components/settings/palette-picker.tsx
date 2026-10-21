@@ -1,23 +1,37 @@
 "use client";
 
-import { Label, Radio, RadioGroup } from "react-aria-components";
+import { Check } from "lucide-react";
+import { Radio, RadioGroup } from "react-aria-components";
 
 import { PALETTE_NAMES, type PaletteName } from "@clippings/shared";
-import { cn, Icon } from "@clippings/ui";
+import { cn } from "@clippings/ui";
 
 // Each swatch is in its palette's own colors, which stay put whatever palette the page is in.
-const PALETTES: Record<PaletteName, { label: string; ring: string; dot: string }> = {
-  olive: { label: "Olive", ring: "bg-palette-olive-container", dot: "bg-palette-olive" },
-  ochre: { label: "Ochre", ring: "bg-palette-ochre-container", dot: "bg-palette-ochre" },
+const PALETTES: Record<PaletteName, { label: string; hint: string; swatch: string }> = {
+  olive: {
+    label: "Olive",
+    hint: "Quiet green",
+    swatch: "bg-linear-to-b from-palette-olive-top to-palette-olive text-on-palette-olive",
+  },
+  ochre: {
+    label: "Ochre",
+    hint: "Warm, bright",
+    swatch: "bg-linear-to-b from-palette-ochre-top to-palette-ochre text-on-palette-ochre",
+  },
   terracotta: {
     label: "Terracotta",
-    ring: "bg-palette-terracotta-container",
-    dot: "bg-palette-terracotta",
+    hint: "Earthy",
+    swatch:
+      "bg-linear-to-b from-palette-terracotta-top to-palette-terracotta text-on-palette-terracotta",
   },
-  ink: { label: "Ink", ring: "bg-palette-ink-container", dot: "bg-palette-ink" },
+  ink: {
+    label: "Ink",
+    hint: "Cool blue",
+    swatch: "bg-linear-to-b from-palette-ink-top to-palette-ink text-on-palette-ink",
+  },
 };
 
-/** One of the four palettes, each shown in its own colors. */
+/** The accent: four paper cards, each with a swatch in its own colors. */
 export function PalettePicker({
   value,
   onChange,
@@ -27,37 +41,35 @@ export function PalettePicker({
 }) {
   return (
     <RadioGroup
+      aria-label="Accent"
       value={value}
       onChange={(next) => onChange(next as PaletteName)}
-      className="flex flex-col gap-3"
     >
-      <Label className="typescale-title-md">Palette</Label>
-      <div className="grid grid-cols-2 gap-3 medium:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 medium:grid-cols-4">
         {PALETTE_NAMES.map((palette) => (
           <Radio
             key={palette}
             value={palette}
-            className="state-layer flex cursor-default items-center gap-3 rounded-md border border-outline-variant p-3 transition-colors data-selected:border-primary data-selected:bg-secondary-container data-selected:text-on-secondary-container"
+            className="group relative flex lift cursor-default flex-col items-start gap-3 rounded-lg paper p-3.5 text-start"
           >
-            {({ isSelected }) => (
-              <>
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    "flex size-10 shrink-0 items-center justify-center rounded-full",
-                    PALETTES[palette].ring,
-                  )}
-                >
-                  <span className={cn("size-4 rounded-full", PALETTES[palette].dot)} />
-                </span>
-                <span className="flex-1 typescale-label-lg">{PALETTES[palette].label}</span>
-                {isSelected ? (
-                  <span className="flex check-pop">
-                    <Icon name="check" />
-                  </span>
-                ) : null}
-              </>
-            )}
+            {/* The selection: a 2px ring in the accent's ink, over the card's own edge. */}
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 rounded-lg border-2 border-accent-ink opacity-0 transition-opacity group-data-selected:opacity-100"
+            />
+            <span
+              aria-hidden="true"
+              className={cn(
+                "flex size-8 items-center justify-center rounded-full shadow-paper",
+                PALETTES[palette].swatch,
+              )}
+            >
+              <Check className="size-4 stroke-3 opacity-0 transition-opacity group-data-selected:opacity-100" />
+            </span>
+            <span className="flex flex-col">
+              <span className="typescale-title-sm">{PALETTES[palette].label}</span>
+              <span className="typescale-body-sm text-ink-faint">{PALETTES[palette].hint}</span>
+            </span>
           </Radio>
         ))}
       </div>

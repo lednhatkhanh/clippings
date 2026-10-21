@@ -1,4 +1,5 @@
 import { constructNow } from "date-fns";
+import { Check, ExternalLink } from "lucide-react";
 import { Suspense, use, useEffect, useRef, useState, type ReactNode } from "react";
 import { browser, type Browser } from "wxt/browser";
 
@@ -21,7 +22,7 @@ import {
   type ExtensionSaveResponse,
   type Tag,
 } from "@clippings/shared";
-import { Button, Icon, LinkButton, ProgressBar, TagPicker, TextField } from "@clippings/ui";
+import { Button, LinkButton, ProgressBar, TagPicker, TextField } from "@clippings/ui";
 
 /** How long the note waits after the last keystroke before it saves. */
 const NOTE_SAVE_DELAY_MS = 400;
@@ -73,8 +74,14 @@ async function open(): Promise<View> {
 /** Started as the popup loads, before React renders, and read with `use`. */
 const opening = open();
 
-function Panel({ children }: { children: ReactNode }) {
-  return <main className="flex w-80 flex-col gap-4 p-4">{children}</main>;
+/** The popup: its content on a sheet of paper over the ground, the actions below it. */
+function Panel({ children, actions }: { children: ReactNode; actions?: ReactNode }) {
+  return (
+    <main className="flex w-80 flex-col gap-3 p-3">
+      <div className="flex flex-col gap-4 rounded-lg paper p-4">{children}</div>
+      {actions}
+    </main>
+  );
 }
 
 function SignedOut({
@@ -95,20 +102,23 @@ function SignedOut({
   }
 
   return (
-    <Panel>
-      <h1 className="typescale-title-md">Sign in to save pages</h1>
+    <Panel
+      actions={
+        <Button onPress={() => void signIn()} isPending={waiting}>
+          Sign in
+        </Button>
+      }
+    >
+      <h1 className="typescale-title-lg">Sign in to save pages</h1>
       {problem ? (
-        <p role="alert" className="typescale-body-md text-error">
+        <p role="alert" className="typescale-body-md text-danger">
           {SIGN_IN_PROBLEMS[problem]}
         </p>
       ) : (
-        <p className="typescale-body-md text-on-surface-variant">
+        <p className="typescale-body-md text-ink-muted">
           Use the Google account you use for Clippings.
         </p>
       )}
-      <Button onPress={() => void signIn()} isPending={waiting}>
-        Sign in
-      </Button>
     </Panel>
   );
 }
@@ -191,7 +201,7 @@ function NoteField({
         onChange={change}
         onBlur={save}
       />
-      <p aria-live="polite" className="min-h-5 typescale-body-sm text-on-surface-variant">
+      <p aria-live="polite" className="min-h-5 typescale-body-sm text-ink-faint">
         {NOTE_STATES[state]}
       </p>
     </div>
@@ -254,7 +264,7 @@ function TagField({ clippingId, initialTags }: { clippingId: string; initialTags
         maxLength={MAX_TAG_LENGTH}
       />
       {/* An <output> is a polite live region, so the status is announced without moving focus. */}
-      <output aria-live="polite" className="min-h-5 typescale-body-sm text-on-surface-variant">
+      <output aria-live="polite" className="min-h-5 typescale-body-sm text-ink-faint">
         {TAG_STATES[state]}
       </output>
     </div>
@@ -278,12 +288,24 @@ function Saved({
   }
 
   return (
-    <Panel>
-      <h1 aria-live="polite" className="flex items-center gap-2 typescale-title-md">
+    <Panel
+      actions={
+        <>
+          <LinkButton variant="filled" href={clipping.link} target="_blank" rel="noopener">
+            Open in Clippings
+            <ExternalLink className="size-4.5" />
+          </LinkButton>
+          <Button variant="text" onPress={() => void signOut()} className="self-start">
+            Sign out
+          </Button>
+        </>
+      }
+    >
+      <h1 aria-live="polite" className="flex items-center gap-2 typescale-title-lg">
         {saved.status === "created" ? (
           <>
-            <span className="inline-flex saved-pop text-primary">
-              <Icon name="check" />
+            <span className="inline-flex size-6 saved-pop items-center justify-center rounded-full accent-fill">
+              <Check className="size-4" />
             </span>
             Saved
           </>
@@ -291,16 +313,9 @@ function Saved({
           <>Saved on {formatAbsoluteDate(clipping.createdAt, constructNow(undefined))}</>
         )}
       </h1>
-      <p className="truncate typescale-body-sm text-on-surface-variant">{clipping.title}</p>
+      <p className="truncate typescale-body-sm text-ink-faint">{clipping.title}</p>
       <NoteField clippingId={clipping.id} initialNote={clipping.note} quote={quote} />
       <TagField clippingId={clipping.id} initialTags={clipping.tags} />
-      <LinkButton variant="tonal" href={clipping.link} target="_blank" rel="noopener">
-        Open in Clippings
-        <Icon name="open_in_new" />
-      </LinkButton>
-      <Button variant="text" onPress={() => void signOut()} className="self-start">
-        Sign out
-      </Button>
     </Panel>
   );
 }
@@ -320,13 +335,12 @@ function CurrentView({ view, reopen }: { view: Promise<View>; reopen: () => void
       return <Saved saved={current.saved} quote={current.quote} onSignedOut={reopen} />;
     case "error":
       return (
-        <Panel>
+        <Panel actions={<Button onPress={reopen}>Try again</Button>}>
           <p role="alert" className="typescale-body-lg">
             {current.reason === "offline"
               ? "You're offline. Clippings will save this page when you're back online."
               : "Couldn't save this page."}
           </p>
-          <Button onPress={reopen}>Try again</Button>
         </Panel>
       );
   }

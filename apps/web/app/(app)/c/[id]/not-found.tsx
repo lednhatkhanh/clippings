@@ -7,7 +7,7 @@ export default function ClippingNotFound() {
     <StatusPage
       title="This clipping isn't here."
       actions={
-        <LinkButton variant="tonal" href="/" routerOptions={{ transitionTypes: ["nav-back"] }}>
+        <LinkButton variant="paper" href="/" routerOptions={{ transitionTypes: ["nav-back"] }}>
           Back to your clippings
         </LinkButton>
       }

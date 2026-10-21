@@ -3,59 +3,36 @@ import { describe, expect, it } from "vitest";
 
 import { generateTheme, renderThemesCss, renderTokensJson } from "./generate.ts";
 
-// The system roles Material Theme Builder exports (49), spelled out here as the
-// spec rather than read back from the generator.
+// The color roles, spelled out here as the spec rather than read back from the generator.
 const REQUIRED_ROLES = [
-  "primary",
-  "on-primary",
-  "primary-container",
-  "on-primary-container",
-  "secondary",
-  "on-secondary",
-  "secondary-container",
-  "on-secondary-container",
-  "tertiary",
-  "on-tertiary",
-  "tertiary-container",
-  "on-tertiary-container",
-  "error",
-  "on-error",
-  "error-container",
-  "on-error-container",
-  "background",
-  "on-background",
-  "surface",
-  "on-surface",
-  "surface-variant",
-  "on-surface-variant",
-  "outline",
-  "outline-variant",
-  "shadow",
+  "ground",
+  "ground-sunk",
+  "paper",
+  "paper-shade",
+  "ink",
+  "ink-muted",
+  "ink-faint",
+  "line",
+  "line-strong",
+  "edge",
+  "accent",
+  "accent-top",
+  "on-accent",
+  "accent-soft",
+  "on-accent-soft",
+  "accent-ink",
+  "danger",
+  "on-danger",
+  "danger-soft",
+  "on-danger-soft",
+  "glass",
+  "glass-strong",
+  "glass-edge",
   "scrim",
-  "inverse-surface",
-  "inverse-on-surface",
-  "inverse-primary",
-  "primary-fixed",
-  "on-primary-fixed",
-  "primary-fixed-dim",
-  "on-primary-fixed-variant",
-  "secondary-fixed",
-  "on-secondary-fixed",
-  "secondary-fixed-dim",
-  "on-secondary-fixed-variant",
-  "tertiary-fixed",
-  "on-tertiary-fixed",
-  "tertiary-fixed-dim",
-  "on-tertiary-fixed-variant",
-  "surface-dim",
-  "surface-bright",
-  "surface-container-lowest",
-  "surface-container-low",
-  "surface-container",
-  "surface-container-high",
-  "surface-container-highest",
-  "surface-tint",
 ] as const;
+
+// Roles that sit over other colors carry an alpha; every other role is opaque.
+const TRANSLUCENT_ROLES = ["line", "line-strong", "glass", "glass-strong", "glass-edge", "scrim"];
 
 // WCAG 2.x relative luminance and contrast ratio, written out from the definition.
 const channel = (value: number) => {
@@ -144,7 +121,7 @@ const CONTRASTS = ["standard", "medium", "high"] as const;
 const MODES = ["light", "dark"] as const;
 
 describe("generateTheme", () => {
-  it("emits every system role for every palette, contrast level and mode", () => {
+  it("emits every role for every palette, contrast level and mode", () => {
     const theme = generateTheme();
 
     expect(Object.keys(theme.palettes).toSorted()).toEqual([...PALETTES].toSorted());
@@ -155,51 +132,94 @@ describe("generateTheme", () => {
           expect(Object.keys(roles).toSorted(), `${palette} ${contrast} ${mode}`).toEqual(
             [...REQUIRED_ROLES].toSorted(),
           );
-          for (const hex of Object.values(roles)) {
-            expect(hex).toMatch(/^#[0-9a-f]{6}$/);
+          for (const [role, hex] of Object.entries(roles)) {
+            expect(hex, `${palette} ${contrast} ${mode} ${role}`).toMatch(
+              TRANSLUCENT_ROLES.includes(role) ? /^#[0-9a-f]{8}$/ : /^#[0-9a-f]{6}$/,
+            );
           }
         }
       }
     }
   });
 
-  it("keeps text, accent and outline pairs readable at every contrast level", () => {
+  // [foreground, background, standard minimum, high-contrast minimum]
+  const READABLE_PAIRS = [
+    ["ink", "ground", 7, 7],
+    ["ink", "paper", 7, 7],
+    ["ink-muted", "ground", 4.5, 7],
+    ["ink-muted", "paper", 4.5, 7],
+    ["ink-muted", "ground-sunk", 4.5, 7],
+    ["ink-faint", "ground", 4.5, 7],
+    ["ink-faint", "paper", 4.5, 7],
+    ["on-accent", "accent", 4.5, 6],
+    ["on-accent", "accent-top", 4.5, 6],
+    // Non-text contrast: a control's boundary.
+    ["edge", "paper", 3, 4.5],
+    ["edge", "ground", 3, 4.5],
+    ["on-accent-soft", "accent-soft", 4.5, 7],
+    ["accent-ink", "paper", 4.5, 7],
+    ["accent-ink", "ground", 4.5, 7],
+    ["danger", "paper", 4.5, 7],
+    ["danger", "ground", 4.5, 7],
+    ["on-danger", "danger", 4.5, 7],
+    ["on-danger-soft", "danger-soft", 4.5, 7],
+  ] as const;
+
+  it("keeps every text pair readable and every control edge visible, more so at high contrast", () => {
     const theme = generateTheme();
-    const minimums = [
-      ["on-surface", "surface", 7],
-      ["primary", "surface", 4.5],
-      ["outline", "surface", 3],
-    ] as const;
 
     for (const palette of PALETTES) {
       for (const contrast of CONTRASTS) {
         for (const mode of MODES) {
           const { roles } = theme.palettes[palette].schemes[contrast][mode];
-          for (const [foreground, background, minimum] of minimums) {
+          for (const [foreground, background, standard, high] of READABLE_PAIRS) {
             const ratio = contrastRatio(roles[foreground], roles[background]);
             expect(
               ratio,
               `${palette} ${contrast} ${mode}: ${foreground} on ${background}`,
-            ).toBeGreaterThanOrEqual(minimum);
+            ).toBeGreaterThanOrEqual(contrast === "high" ? high : standard);
           }
         }
       }
     }
   });
 
-  it("never lets a light surface be pure white", () => {
+  it("raises contrast with each level and never lowers it", () => {
+    const theme = generateTheme();
+
+    for (const palette of PALETTES) {
+      for (const mode of MODES) {
+        for (const [foreground, background] of READABLE_PAIRS) {
+          const ratios = CONTRASTS.map((contrast) => {
+            const { roles } = theme.palettes[palette].schemes[contrast][mode];
+            return contrastRatio(roles[foreground], roles[background]);
+          });
+          expect(ratios[1], `${palette} ${mode} ${foreground}: medium`).toBeGreaterThanOrEqual(
+            ratios[0]! - 0.05,
+          );
+          expect(ratios[2], `${palette} ${mode} ${foreground}: high`).toBeGreaterThanOrEqual(
+            ratios[1]! - 0.05,
+          );
+        }
+      }
+    }
+  });
+
+  it("lays paper lighter than the ground in light mode and above it in dark mode", () => {
     const theme = generateTheme();
 
     for (const palette of PALETTES) {
       for (const contrast of CONTRASTS) {
-        const { roles } = theme.palettes[palette].schemes[contrast].light;
-        const surfaces = Object.entries(roles).filter(
-          ([name]) => name.startsWith("surface") || name === "background",
+        const { light, dark } = theme.palettes[palette].schemes[contrast];
+        expect(luminance(light.roles.paper), `${palette} ${contrast} light`).toBeGreaterThan(
+          luminance(light.roles.ground),
         );
-        expect(surfaces.length).toBeGreaterThan(0);
-        for (const [name, hex] of surfaces) {
-          expect(hex, `${palette} ${contrast}: ${name}`).not.toBe("#ffffff");
-        }
+        expect(luminance(dark.roles.paper), `${palette} ${contrast} dark`).toBeGreaterThan(
+          luminance(dark.roles.ground),
+        );
+        expect(light.roles.paper, `${palette} ${contrast}: paper is never white`).not.toBe(
+          "#ffffff",
+        );
       }
     }
   });
@@ -255,8 +275,8 @@ describe("generateTheme", () => {
         );
         for (const role of REQUIRED_ROLES) {
           const [, light, dark] =
-            /^light-dark\((#[0-9a-f]{6}), (#[0-9a-f]{6})\)$/.exec(
-              declarations.get(`--md-sys-color-${role}`) ?? "",
+            /^light-dark\((#[0-9a-f]{6,8}), (#[0-9a-f]{6,8})\)$/.exec(
+              declarations.get(`--pg-${role}`) ?? "",
             ) ?? [];
           const scheme = tokens.palettes[palette].schemes[contrast];
           expect(scheme.light.roles[role], `${palette} ${contrast} light ${role}`).toBe(light);

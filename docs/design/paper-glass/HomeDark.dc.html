@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Clippings home, dark</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="min-height: 960px">
+<dc-import name="Main" mode="{{mode}}" accent="{{accent}}" hint-size="100%,960px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"mode":{"editor":"enum","options":["light","dark"],"default":"dark"},"accent":{"editor":"enum","options":["ochre","terracotta","sage","ink"],"default":"ochre"},"$preview":{"width":1280,"height":960}}'>
+class Component extends DCLogic {
+renderVals() {
+return { mode: this.props.mode ?? 'dark', accent: this.props.accent ?? 'ochre' };
+}
+}
+</script>
+</body>
+</html>
