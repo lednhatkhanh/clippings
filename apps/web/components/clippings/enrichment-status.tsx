@@ -46,7 +46,7 @@ export function EnrichmentStatus({
   if (status === "pending") {
     return (
       <div className="flex flex-col gap-2">
-        <span aria-hidden="true" className="typescale-body-md text-on-surface-variant">
+        <span aria-hidden="true" className="typescale-body-md text-ink-faint">
           Reading the page…
         </span>
         <ProgressBar label="Reading the page" />
@@ -54,7 +54,7 @@ export function EnrichmentStatus({
     );
   }
   return (
-    <div className="flex flex-wrap items-center gap-x-3 typescale-body-md text-on-surface-variant">
+    <div className="flex flex-wrap items-center gap-x-3 typescale-body-md text-ink-muted">
       <span>Couldn&apos;t read this page. Your link and note are saved.</span>
       <Button variant="text" onPress={retry} isPending={retrying} isDisabled={!online}>
         Retry

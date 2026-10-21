@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Clipping detail</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;padding:0}
+a{color:var(--accent-text)}a:hover{color:var(--ink)}
+.pg{font-family:'Geist',system-ui,sans-serif;color:var(--ink);background:var(--ground);-webkit-font-smoothing:antialiased;font-size:14px;line-height:20px}
+.pg.light{--ground:#F2EDE3;--ground-sunk:#E8E1D2;--card:#FCFAF5;--card-2:#F7F2E8;--ink:#26221C;--ink-2:#544C40;--ink-3:#6B6253;--line:rgba(70,52,28,.12);--line-strong:rgba(70,52,28,.24);--glass:rgba(250,247,240,.62);--glass-edge:rgba(255,255,255,.72);--glass-hi:rgba(255,255,255,.85);--field:rgba(255,255,255,.55);--field-inset:rgba(60,40,20,.10);--danger:#A63A24;--blob-b:rgba(170,200,172,.55);--blob-c:rgba(236,190,150,.5);--grain:.07;
+--shadow-paper:inset 0 1px 0 rgba(255,255,255,.7),0 0 0 1px rgba(80,60,30,.06),0 1px 1px rgba(60,40,20,.05),0 3px 6px -2px rgba(60,40,20,.07),0 12px 24px -8px rgba(60,40,20,.09);
+--shadow-glass:inset 0 1px 0 var(--glass-hi),0 1px 2px rgba(60,40,20,.08),0 16px 36px -12px rgba(60,40,20,.26)}
+.pg.dark{--ground:#16140F;--ground-sunk:#0F0E0B;--card:#24201B;--card-2:#1F1C17;--ink:#EEE7DA;--ink-2:#C4BAA8;--ink-3:#9D9381;--line:rgba(255,240,210,.09);--line-strong:rgba(255,240,210,.18);--glass:rgba(34,31,26,.6);--glass-edge:rgba(255,245,225,.10);--glass-hi:rgba(255,250,235,.07);--field:rgba(0,0,0,.24);--field-inset:rgba(0,0,0,.4);--danger:#F0A08A;--blob-b:rgba(120,160,125,.12);--blob-c:rgba(210,140,100,.11);--grain:.05;
+--shadow-paper:inset 0 1px 0 rgba(255,250,235,.05),0 0 0 1px rgba(255,240,210,.06),0 1px 1px rgba(0,0,0,.3),0 4px 8px -2px rgba(0,0,0,.28),0 14px 28px -10px rgba(0,0,0,.45);
+--shadow-glass:inset 0 1px 0 var(--glass-hi),0 0 0 1px rgba(0,0,0,.25),0 18px 40px -12px rgba(0,0,0,.6)}
+.light.accent-ochre{--accent:#E2AE1C;--accent-top:#F3CC4A;--on-accent:#3A2C00;--accent-soft:#F3E2A6;--on-accent-soft:#4A3A00;--accent-text:#7A5C00;--accent-ring:rgba(150,110,0,.22);--accent-glow:rgba(150,105,0,.42);--blob-a:rgba(244,206,90,.6)}
+.dark.accent-ochre{--accent:#E0B03A;--accent-top:#EEC65E;--on-accent:#271D00;--accent-soft:#3A3119;--on-accent-soft:#F2DA92;--accent-text:#EBC65C;--accent-ring:rgba(255,220,120,.25);--accent-glow:rgba(0,0,0,.5);--blob-a:rgba(224,176,58,.15)}
+.light.accent-terracotta{--accent:#BF5629;--accent-top:#D26B3E;--on-accent:#FFFFFF;--accent-soft:#F5D9CA;--on-accent-soft:#5A2008;--accent-text:#A3461E;--accent-ring:rgba(140,50,10,.25);--accent-glow:rgba(150,60,20,.4);--blob-a:rgba(235,160,120,.5)}
+.dark.accent-terracotta{--accent:#E8906A;--accent-top:#F2A784;--on-accent:#2D0F03;--accent-soft:#3E2519;--on-accent-soft:#F7CBB5;--accent-text:#F0A280;--accent-ring:rgba(255,190,160,.25);--accent-glow:rgba(0,0,0,.5);--blob-a:rgba(232,144,106,.14)}
+.light.accent-sage{--accent:#5A7656;--accent-top:#6C8A67;--on-accent:#FFFFFF;--accent-soft:#DCE6D4;--on-accent-soft:#22341E;--accent-text:#46603F;--accent-ring:rgba(40,70,35,.25);--accent-glow:rgba(40,70,35,.35);--blob-a:rgba(160,195,160,.55)}
+.dark.accent-sage{--accent:#A6C19C;--accent-top:#BCD3B2;--on-accent:#15240F;--accent-soft:#263124;--on-accent-soft:#CFE1C6;--accent-text:#AECBA4;--accent-ring:rgba(200,230,190,.22);--accent-glow:rgba(0,0,0,.5);--blob-a:rgba(166,193,156,.13)}
+.light.accent-ink{--accent:#3E5E8A;--accent-top:#4F709D;--on-accent:#FFFFFF;--accent-soft:#DCE4F0;--on-accent-soft:#162B4A;--accent-text:#385883;--accent-ring:rgba(30,50,90,.25);--accent-glow:rgba(30,50,90,.35);--blob-a:rgba(160,185,225,.5)}
+.dark.accent-ink{--accent:#A8C0E6;--accent-top:#BED0EF;--on-accent:#0F2240;--accent-soft:#222A3A;--on-accent-soft:#CFDCF2;--accent-text:#B0C7EA;--accent-ring:rgba(190,210,245,.22);--accent-glow:rgba(0,0,0,.5);--blob-a:rgba(168,192,230,.13)}
+.light .t-amber{--tag-bg:#F4E4B5;--tag-fg:#5B4300}.dark .t-amber{--tag-bg:#3A3119;--tag-fg:#F0D58A}
+.light .t-green{--tag-bg:#DDE9D6;--tag-fg:#234A1F}.dark .t-green{--tag-bg:#233222;--tag-fg:#BFDDB4}
+.serif{font-family:'Fraunces',Georgia,serif;font-optical-sizing:auto}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.eyebrow{font-size:11px;line-height:14px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:500}
+.muted{color:var(--ink-2)}.faint{color:var(--ink-3)}
+.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.i-sm{width:14px;height:14px}
+.paper{background:linear-gradient(180deg,var(--card),var(--card-2));box-shadow:var(--shadow-paper);border-radius:16px}
+.glass{background:var(--glass);-webkit-backdrop-filter:blur(22px) saturate(160%);backdrop-filter:blur(22px) saturate(160%);border:1px solid var(--glass-edge);box-shadow:var(--shadow-glass)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 16px;border-radius:14px;font-size:14px;font-weight:500;white-space:nowrap;box-sizing:border-box}
+.btn-filled{background:linear-gradient(180deg,var(--accent-top),var(--accent));color:var(--on-accent);box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 0 0 1px var(--accent-ring),0 1px 2px rgba(0,0,0,.12),0 8px 18px -8px var(--accent-glow)}
+.btn-paper{background:linear-gradient(180deg,var(--card),var(--card-2));box-shadow:var(--shadow-paper);color:var(--ink)}
+.btn-danger{color:var(--danger)}
+.icon-btn{width:44px;padding:0}
+.chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 6px 0 10px;border-radius:9px;font-size:13px;font-weight:500;background:var(--tag-bg);color:var(--tag-fg);white-space:nowrap}
+.chip button{width:20px;height:20px;border-radius:6px;display:flex;align-items:center;justify-content:center;opacity:.75}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.75}
+.badge{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:7px;font-size:11px;font-weight:500;box-shadow:inset 0 0 0 1px var(--line-strong);color:var(--ink-2)}
+.fav{width:22px;height:22px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex:none;background:linear-gradient(180deg,var(--card),var(--card-2));box-shadow:var(--shadow-paper);font-family:'Fraunces',Georgia,serif;font-size:12px;font-weight:600;color:var(--ink-2)}
+.sunk{border-radius:14px;background:var(--field);border:1px solid var(--line);box-shadow:inset 0 1px 2px var(--field-inset),0 1px 0 var(--glass-hi)}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;font-weight:500;color:var(--ink-2);text-decoration:none}
+.tab .pill{width:56px;height:30px;border-radius:15px;display:flex;align-items:center;justify-content:center}
+.tab[aria-current=page]{color:var(--ink);font-weight:600}
+.tab[aria-current=page] .pill{background:var(--accent-soft);color:var(--on-accent-soft);box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
+.blob{position:absolute;border-radius:50%;pointer-events:none}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:var(--grain);mix-blend-mode:multiply}
+.dark .grain{mix-blend-mode:screen}
+</style>
+</helmet>
+<div class="pg {{themeClass}}" style="position: relative; width: 390px; height: 844px; overflow: hidden">
+
+<div class="blob" aria-hidden="true" style="top: -90px; right: -110px; width: 360px; height: 360px; background: radial-gradient(closest-side, var(--blob-a), transparent)"></div>
+<div class="blob" aria-hidden="true" style="top: 420px; left: -150px; width: 380px; height: 380px; background: radial-gradient(closest-side, var(--blob-c), transparent)"></div>
+<div class="blob" aria-hidden="true" style="top: 640px; right: -130px; width: 380px; height: 380px; background: radial-gradient(closest-side, var(--blob-b), transparent)"></div>
+
+<main style="position: absolute; left: 12px; right: 12px; top: 80px">
+<article class="paper" style="border-radius: 22px; box-sizing: border-box; padding: 22px 20px 24px; display: flex; flex-direction: column; gap: 18px">
+<header style="display: flex; flex-direction: column; gap: 10px">
+<h1 class="serif" style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 500; letter-spacing: -.015em">Principles of calm technology</h1>
+<p class="faint" style="margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 12px; line-height: 16px">
+<span class="fav" aria-hidden="true">C</span>
+<span class="mono">calmtech.com</span>
+<span aria-hidden="true">·</span>
+<time>Saved 20 Oct</time>
+<span class="badge"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Source: </span>Extension</span>
+</p>
+</header>
+<div style="display: flex; gap: 8px">
+<a class="btn btn-filled" href="#" style="flex: 1; text-decoration: none"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg>Open original</a>
+<button class="btn btn-paper btn-danger icon-btn" aria-label="Delete clipping"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg></button>
+</div>
+<p class="serif" style="margin: 0; font-size: 17px; line-height: 27px; font-weight: 400; color: var(--ink)">Technology should ask for as little attention as it can. It informs without overwhelming, lives at the edge of awareness, and comes to the centre only when it is needed.</p>
+<section style="display: flex; flex-direction: column; gap: 8px">
+<h2 class="eyebrow" style="margin: 0">Tags</h2>
+<div style="display: flex; flex-wrap: wrap; gap: 6px">
+<span class="chip t-green"><span class="dot"></span>design<button aria-label="Remove design"><svg class="i i-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></span>
+<span class="chip t-amber"><span class="dot"></span>reading<button aria-label="Remove reading"><svg class="i i-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></span>
+<button style="display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px; border-radius: 9px; font-size: 13px; font-weight: 500; color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line-strong)"><svg class="i i-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>Add tag</button>
+</div>
+</section>
+<section style="display: flex; flex-direction: column; gap: 8px">
+<label class="eyebrow" for="note">Note</label>
+<textarea id="note" class="sunk" rows="3" style="resize: none; box-sizing: border-box; padding: 12px 14px; font-size: 15px; line-height: 22px; color: var(--ink); outline: 0">Good framing for the settings page: say less, show state quietly.</textarea>
+</section>
+<button style="display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 2px; border-top: 1px solid var(--line); color: var(--ink-2); font-weight: 500" aria-expanded="false">Details<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+</article>
+</main>
+
+<header class="glass" style="position: absolute; top: 12px; left: 12px; right: 12px; height: 56px; box-sizing: border-box; padding: 0 6px; border-radius: 20px; display: flex; align-items: center; justify-content: space-between">
+<a class="btn icon-btn" href="#" aria-label="Back to clippings" style="color: var(--ink)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg></a>
+<span class="serif" style="font-size: 17px; font-weight: 500">Clipping</span>
+<button class="btn icon-btn" aria-label="Share"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" x2="12" y1="2" y2="15"></line></svg></button>
+</header>
+
+<nav aria-label="Main" class="glass" style="position: absolute; left: 12px; right: 12px; bottom: 14px; height: 68px; box-sizing: border-box; padding: 4px; border-radius: 24px; display: flex">
+<a class="tab" href="#" aria-current="page"><span class="pill"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path></svg></span>Clippings</a>
+<a class="tab" href="#"><span class="pill"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"></path><circle cx="7.5" cy="7.5" r=".5"></circle></svg></span>Tags</a>
+<a class="tab" href="#"><span class="pill"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7h-9"></path><path d="M14 17H5"></path><circle cx="17" cy="17" r="3"></circle><circle cx="7" cy="7" r="3"></circle></svg></span>Settings</a>
+</nav>
+
+<svg class="grain" width="390" height="844" aria-hidden="true"><filter id="grain-detail"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"></feTurbulence><feColorMatrix type="saturate" values="0"></feColorMatrix></filter><rect width="100%" height="100%" filter="url(#grain-detail)"></rect></svg>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"mode":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"enum","options":["ochre","terracotta","sage","ink"],"default":"terracotta"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+const mode = this.props.mode ?? 'light';
+const accent = this.props.accent ?? 'terracotta';
+return { themeClass: mode + ' accent-' + accent };
+}
+}
+</script>
+</body>
+</html>

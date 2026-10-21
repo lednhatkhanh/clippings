@@ -17,14 +17,14 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, title: APP_NAME, statusBarStyle: "default" },
 };
 
-const paper = tokens.palettes[DEFAULT_PALETTE].schemes.standard;
+const defaults = tokens.palettes[DEFAULT_PALETTE].schemes.standard;
 
 export const viewport: Viewport = {
   colorScheme: "light dark",
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: paper.light.roles.surface },
-    { media: "(prefers-color-scheme: dark)", color: paper.dark.roles.surface },
+    { media: "(prefers-color-scheme: light)", color: defaults.light.roles.ground },
+    { media: "(prefers-color-scheme: dark)", color: defaults.dark.roles.ground },
   ],
 };
 

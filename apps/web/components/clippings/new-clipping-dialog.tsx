@@ -1,5 +1,6 @@
 "use client";
 
+import { Plus } from "lucide-react";
 import { createContext, use, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 
@@ -12,7 +13,6 @@ import {
   Button,
   Dialog,
   Heading,
-  Icon,
   LinkButton,
   Modal,
   TagChips,
@@ -77,17 +77,17 @@ function AlreadySaved({ existing, onDone }: { existing: Existing; onDone: () => 
   return (
     <output className="flex flex-col gap-3">
       <p className="typescale-body-lg">Already saved on {existing.savedOn}.</p>
-      {existing.note ? (
-        <p className="typescale-body-md text-on-surface-variant">{existing.note}</p>
-      ) : null}
+      {existing.note ? <p className="typescale-body-md text-ink-muted">{existing.note}</p> : null}
       <TagChips
         aria-label="Its tags"
         tags={existing.tags}
         href={(tag) => hrefWithTag(loadBrowseParams(""), tag)}
       />
       <div className="flex justify-end gap-2">
-        <LinkButton href={`/c/${existing.clippingId}`}>Open</LinkButton>
-        <Button variant="tonal" onPress={() => setEditing(true)}>
+        <LinkButton variant="filled" href={`/c/${existing.clippingId}`}>
+          Open
+        </LinkButton>
+        <Button variant="paper" onPress={() => setEditing(true)}>
           Update note
         </Button>
       </div>
@@ -216,7 +216,7 @@ export function NewClippingDialog() {
 
   return (
     <Button variant="filled" isDisabled={!online} onPress={() => open()}>
-      <Icon name="add" />
+      <Plus className="size-4.5" />
       New clipping
     </Button>
   );

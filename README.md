@@ -12,7 +12,8 @@ open issues are its slices.
 
 v1 is under construction. What exists today:
 
-- Monorepo, CI, and the design system (Material 3 tokens, four palettes, light/dark/contrast).
+- Monorepo, CI, and the Paper & Glass design system (four accent palettes, light/dark, three
+  contrast levels, Lucide icons).
 - The web app shell with Google sign-in and an email allowlist.
 - Environments on Vercel and Neon, instant-restore backups, and a database per PR.
 

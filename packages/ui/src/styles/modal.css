@@ -1,14 +1,16 @@
 /*
  * Modal motion, driven by React Aria's `data-entering` / `data-exiting` states. RAC keeps both the
  * overlay and the modal mounted until their own animations finish, and the dialog moves focus in
- * only once the modal has entered. `modal-scrim` goes on `ModalOverlay`, `modal-panel` on `Modal`.
+ * only once the modal has entered. `modal-scrim` goes on `ModalOverlay`, `modal-panel` (a bottom
+ * sheet on phones, a dialog from the medium size class up) or `modal-panel-float` (always a
+ * dialog, for the command palette) on `Modal`.
  *
- * Compact is a bottom sheet: it slides up and down and never fades; only the scrim does. From the
- * medium size class up it is Material Web's dialog: it drops 50px and grows from 35% of its height
- * (a `clip-path` stands in for MW's `::before` height animation), its content fades in after the
- * container, and it leaves the same way, faster. No scale. Reduced motion makes both a short fade.
- * The spatial factor (tokens.css) can't reach into keyframes, so the reduced-motion blocks here
- * swap the travel for a fade themselves, and shorten the scrim to match.
+ * The scrim fades in and blurs the page behind it a little. The dialog rises 14px and grows from
+ * 97% on the paper spring while it fades in on the fade spring; it leaves faster, on the exit
+ * easing. The sheet slides up on the settle easing, with no overshoot at the screen's edge.
+ * Travel and scale are multiplied by the spatial factor (tokens.css), so under reduced motion
+ * nothing moves and only the fades remain. The springs' own durations are multiplied by it too,
+ * which is why every animation here pairs a spatial one with a fade that keeps its length.
  *
  * Exits name only their end state, so they start from wherever the element is. An Escape mid-enter
  * pins the pose it reached (`Modal` writes it inline), and the exit leaves from there.
@@ -27,124 +29,89 @@
 
 @keyframes modal-sheet-in {
   from {
-    translate: 0 100%;
+    translate: 0 calc(100% * var(--motion-spatial-factor));
   }
 }
 
 @keyframes modal-sheet-out {
   to {
-    translate: 0 100%;
+    translate: 0 calc(100% * var(--motion-spatial-factor));
   }
 }
 
-/* The container fades in over its first 50ms and out over its last 50ms, as in MW. */
-@keyframes modal-dialog-in {
+@keyframes modal-rise-in {
   from {
-    translate: 0 -50px;
-    clip-path: inset(0 0 65% 0 round var(--radius-xl));
-    opacity: 0;
-  }
-  10% {
-    opacity: 1;
-  }
-  to {
-    clip-path: inset(0 round var(--radius-xl));
+    translate: 0 calc(14px * var(--motion-spatial-factor));
+    scale: calc(1 - 0.03 * var(--motion-spatial-factor));
   }
 }
 
-@keyframes modal-dialog-out {
-  66% {
-    opacity: 1;
-  }
+@keyframes modal-rise-out {
   to {
-    translate: 0 -50px;
-    clip-path: inset(0 0 65% 0 round var(--radius-xl));
-    opacity: 0;
-  }
-}
-
-/* Headline and content hold at 0 for the first fifth, then fade in once the container has grown. */
-@keyframes modal-content-in {
-  from,
-  20% {
-    opacity: 0;
+    translate: 0 calc(8px * var(--motion-spatial-factor));
+    scale: calc(1 - 0.015 * var(--motion-spatial-factor));
   }
 }
 
 @utility modal-scrim {
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+
   &[data-entering] {
-    animation: modal-fade-in var(--md-sys-motion-duration-medium4) linear both;
+    animation: modal-fade-in var(--motion-duration-base) var(--motion-ease-settle) both;
   }
 
   &[data-exiting] {
-    animation: modal-fade-out var(--md-sys-motion-duration-short4) linear both;
+    animation: modal-fade-out var(--motion-duration-quick) var(--motion-ease-exit) both;
   }
 
-  @variant medium {
-    &[data-entering] {
-      animation-duration: var(--md-sys-motion-duration-long2);
-    }
+  @media (prefers-reduced-transparency: reduce) {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
 
-    &[data-exiting] {
-      animation-duration: var(--md-sys-motion-duration-short3);
-    }
+/* The dialog's pose, shared by the sheet's medium-and-up form and the palette. */
+@utility modal-panel-float {
+  &[data-entering] {
+    animation:
+      modal-rise-in var(--motion-spring-paper-duration) var(--motion-spring-paper) both,
+      modal-fade-in var(--motion-spring-fade-duration) var(--motion-spring-fade) both;
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    &[data-entering],
-    &[data-exiting] {
-      animation-duration: var(--md-sys-motion-duration-short3);
-    }
+  &[data-exiting] {
+    animation:
+      modal-rise-out var(--motion-duration-quick) var(--motion-ease-exit) both,
+      modal-fade-out var(--motion-duration-quick) var(--motion-ease-exit) both;
   }
 }
 
 @utility modal-panel {
   &[data-entering] {
-    animation: modal-sheet-in var(--md-sys-motion-duration-medium4)
-      var(--md-sys-motion-easing-emphasized-decelerate) both;
+    animation:
+      modal-sheet-in calc(var(--motion-duration-calm) * var(--motion-spatial-factor))
+        var(--motion-ease-settle) both,
+      modal-fade-in var(--motion-spring-fade-duration) var(--motion-spring-fade) both;
   }
 
   &[data-exiting] {
-    animation: modal-sheet-out var(--md-sys-motion-duration-short4)
-      var(--md-sys-motion-easing-emphasized-accelerate) both;
+    animation:
+      modal-sheet-out calc(var(--motion-duration-base) * var(--motion-spatial-factor))
+        var(--motion-ease-exit) both,
+      modal-fade-out var(--motion-duration-quick) var(--motion-ease-exit) both;
   }
 
   @variant medium {
-    /* At rest too, so the exit's clip has a shape to grow from. */
-    clip-path: inset(0 round var(--radius-xl));
-
     &[data-entering] {
-      animation: modal-dialog-in var(--md-sys-motion-duration-long2)
-        var(--md-sys-motion-easing-emphasized) both;
+      animation:
+        modal-rise-in var(--motion-spring-paper-duration) var(--motion-spring-paper) both,
+        modal-fade-in var(--motion-spring-fade-duration) var(--motion-spring-fade) both;
     }
 
     &[data-exiting] {
-      animation: modal-dialog-out var(--md-sys-motion-duration-short3)
-        var(--md-sys-motion-easing-emphasized-accelerate) both;
-    }
-
-    &[data-entering] > * {
-      animation: modal-content-in var(--md-sys-motion-duration-medium1) linear both;
-    }
-
-    &[data-exiting] > * {
-      animation: modal-fade-out var(--md-sys-motion-duration-short2) linear both;
-    }
-  }
-
-  /* Last, so it wins at every size: no travel, no clip, just a short fade. */
-  @media (prefers-reduced-motion: reduce) {
-    &[data-entering] {
-      animation: modal-fade-in var(--md-sys-motion-duration-short3) linear both;
-    }
-
-    &[data-exiting] {
-      animation: modal-fade-out var(--md-sys-motion-duration-short3) linear both;
-    }
-
-    &[data-entering] > *,
-    &[data-exiting] > * {
-      animation: none;
+      animation:
+        modal-rise-out var(--motion-duration-quick) var(--motion-ease-exit) both,
+        modal-fade-out var(--motion-duration-quick) var(--motion-ease-exit) both;
     }
   }
 }

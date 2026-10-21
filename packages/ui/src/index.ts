@@ -29,7 +29,7 @@ export {
   type FilterChipProps,
   type FilterChipsProps,
 } from "./components/filter-chips.tsx";
-export { Dialog, DialogTrigger, Heading, Modal } from "./components/modal.tsx";
+export { Dialog, DialogTrigger, Heading, Modal, type ModalProps } from "./components/modal.tsx";
 export {
   Menu,
   MenuItem,
@@ -70,8 +70,6 @@ export {
 export { TextField, type TextFieldProps } from "./components/text-field.tsx";
 export { ToastRegion, toasts, type ToastMessage } from "./components/toast.tsx";
 export { cn } from "./cn.ts";
-export { ICON_NAMES, type IconName } from "./icons/icon-names.ts";
-export { Icon, type IconProps } from "./icons/icon.tsx";
 export { ClippingsStackIllustration } from "./illustrations/clippings-stack.tsx";
 export { type IllustrationProps } from "./illustrations/illustration.tsx";
 export { LetterboxIllustration } from "./illustrations/letterbox.tsx";

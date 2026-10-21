@@ -29,21 +29,24 @@ export async function RelatedClippings({
   if (related.length === 0) return null;
 
   return (
-    <section aria-labelledby="related-heading" className="flex flex-col gap-2">
-      <h2 id="related-heading" className="typescale-title-md">
+    <section aria-labelledby="related-heading" className="flex flex-col gap-3">
+      <h2
+        id="related-heading"
+        className="typescale-label-sm tracking-widest text-ink-faint uppercase"
+      >
         Related
       </h2>
-      <ul className="flex flex-col">
+      <ul className="flex flex-col gap-2.5">
         {related.map((clipping) => (
           <li key={clipping.id}>
             <Link
               href={`/c/${clipping.id}`}
-              className="state-layer flex items-center gap-3 rounded-sm px-2 py-row-block focus-visible:outline-solid"
+              className="flex lift items-center gap-3 rounded-md paper px-3.5 py-3"
             >
               <Favicon url={clipping.url} />
               <span className="flex min-w-0 flex-col gap-row-gap">
                 <span className="truncate typescale-clipping-title">{clipping.title}</span>
-                <span className="typescale-label-sm font-mono text-on-surface-variant">
+                <span className="typescale-label-sm font-mono text-ink-faint">
                   {domainOf(clipping.url)}
                 </span>
               </span>

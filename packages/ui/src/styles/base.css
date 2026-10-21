@@ -6,9 +6,10 @@
 @layer base {
   :root {
     color-scheme: light dark;
-    background-color: var(--md-sys-color-surface);
-    color: var(--md-sys-color-on-surface);
-    font-family: var(--md-ref-typeface-plain, "Roboto Flex", system-ui, sans-serif);
+    background-color: var(--pg-ground);
+    color: var(--pg-ink);
+    font-family: var(--typeface-plain, "Geist"), system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
     /* Sticky bars must not hide the focused element (WCAG 2.4.11). */
     scroll-padding-top: var(--top-bar-height);
     -webkit-text-size-adjust: 100%;
@@ -22,40 +23,49 @@
     color-scheme: dark;
   }
 
-  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible,
-  :where([data-focus-visible]) {
-    outline: var(--md-sys-state-focus-indicator-thickness) solid var(--md-sys-color-secondary);
-    outline-offset: var(--md-sys-state-focus-indicator-outer-offset);
-    animation: focus-ring var(--md-sys-motion-duration-long4) var(--md-sys-motion-easing-emphasized);
-
-    @media (prefers-reduced-motion: reduce) {
-      animation: none;
-    }
+  /*
+   * The soft color fields the glass frosts over: the accent glowing from the top right, peach and
+   * sage below. Fixed to the viewport, so scrolling paper slides across them.
+   */
+  body {
+    background-color: var(--pg-ground);
+    background-image:
+      radial-gradient(36rem 36rem at 88% -8%, var(--backdrop-accent), transparent 70%),
+      radial-gradient(34rem 34rem at 12% 62%, var(--backdrop-peach), transparent 70%),
+      radial-gradient(40rem 40rem at 100% 105%, var(--backdrop-sage), transparent 70%);
+    background-attachment: fixed;
   }
 
   /*
-   * Text inputs match `:focus-visible` on a click too. The ring stays, but only keyboard focus
-   * (React Aria's `data-focus-visible`) plays the grow, so clicking into a field stays calm.
+   * Focus you can always see: a 2px ring in the accent's ink, 2px out, following the shape's
+   * radius. Keyboard focus only (React Aria's `data-focus-visible`, or `:focus-visible`).
    */
-  :where(input, textarea):focus-visible:not([data-focus-visible]) {
-    animation: none;
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible,
+  :where([data-focus-visible]) {
+    outline: var(--focus-ring-width) solid var(--pg-accent-ink);
+    outline-offset: var(--focus-ring-offset);
   }
-}
 
-/*
- * Material Web's focus ring: it grows to 8 px over the first quarter, then settles at 3 px.
- * `animation-timing-function` applies per segment, so both halves are emphasized. Outline width
- * doesn't affect layout.
- */
-@keyframes focus-ring {
-  0% {
-    outline-width: 0;
+  /*
+   * A dialog takes focus when it opens so the next Tab starts inside it; it isn't a control, so it
+   * shows no ring.
+   */
+  :where([role="dialog"], [role="alertdialog"]):focus-visible {
+    outline: none;
   }
-  25% {
-    outline-width: var(--md-sys-state-focus-indicator-active-thickness);
+
+  /*
+   * Lucide icons (`lucide-react`, which tags each with `.lucide`) draw at a calmer 1.75 stroke.
+   * A CSS property overrides the SVG's own `stroke-width` attribute. Size them with `size-*`.
+   */
+  svg.lucide {
+    flex: none;
+    stroke-width: 1.75;
   }
-  100% {
-    outline-width: var(--md-sys-state-focus-indicator-thickness);
+
+  /* Text inputs match `:focus-visible` on a click too; their field shows focus instead. */
+  :where(input, textarea):focus-visible:not([data-focus-visible]) {
+    outline: none;
   }
 }
 
@@ -87,6 +97,12 @@ body::before {
   }
 }
 
+@media (forced-colors: active) {
+  body {
+    background-image: none;
+  }
+}
+
 /*
  * Print: light colors whatever the theme (every color role is a `light-dark()` pair, so the
  * scheme alone flips them) and no grain. Navigation hides itself with `print:hidden`.
@@ -99,6 +115,10 @@ body::before {
 
   body::before {
     display: none;
+  }
+
+  body {
+    background-image: none;
   }
 }
 
@@ -119,7 +139,7 @@ body::before {
  * only while one runs, so page transitions added elsewhere keep the browser's defaults.
  * `appearanceTransitionFor` picks which change gets which. "reveal": the script clips the new view
  * into a growing circle over the old one, so both snapshots just sit still and opaque. "fade": a
- * crossfade on the default effects spring.
+ * slow crossfade, like evening light; colors swap and nothing moves.
  */
 :root[data-appearance-transition="reveal"]::view-transition-old(root),
 :root[data-appearance-transition="reveal"]::view-transition-new(root) {
@@ -128,6 +148,6 @@ body::before {
 }
 
 :root[data-appearance-transition="fade"]::view-transition-group(root) {
-  animation-duration: var(--md-sys-motion-spring-default-effects-duration);
-  animation-timing-function: var(--md-sys-motion-spring-default-effects);
+  animation-duration: var(--motion-duration-slow);
+  animation-timing-function: var(--motion-ease-swap);
 }

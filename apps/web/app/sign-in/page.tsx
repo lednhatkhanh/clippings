@@ -37,7 +37,7 @@ function GoogleButton({
       {oauthQuery ? <input type="hidden" name="oauth_query" value={oauthQuery} /> : null}
       <button
         type="submit"
-        className="state-layer inline-flex min-h-12 items-center justify-center rounded-full border border-outline px-6 typescale-label-lg text-primary"
+        className="inline-flex h-11 cursor-default items-center justify-center rounded-md accent-fill px-6 typescale-label-lg transition duration-quick ease-settle hover:brightness-105 active:translate-y-px active:duration-press"
       >
         {children}
       </button>
@@ -59,7 +59,7 @@ function SignInCard({
       <ClippingsStackIllustration className="h-auto w-60" />
       <h1 className="typescale-headline-sm">Your clippings, kept.</h1>
       {failed ? (
-        <p role="alert" className="typescale-body-md text-error">
+        <p role="alert" className="typescale-body-md text-danger">
           Couldn&apos;t sign you in. Try again.
         </p>
       ) : null}
@@ -83,10 +83,10 @@ function PrivateCard({
     <AuthCard>
       <LetterboxIllustration className="h-auto w-50" />
       <h1 className="typescale-headline-sm">This Clippings is private</h1>
-      <p className="typescale-body-md text-on-surface-variant">
+      <p className="typescale-body-md text-ink-muted">
         {email ? (
           <>
-            <span className="font-mono text-on-surface">{email}</span> isn&apos;t on the list.
+            <span className="font-mono text-ink">{email}</span> isn&apos;t on the list.
           </>
         ) : (
           "That account isn't on the list."

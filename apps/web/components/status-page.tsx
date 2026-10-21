@@ -21,11 +21,11 @@ export function StatusPage({
   return (
     <section
       role={isAlert ? "alert" : undefined}
-      className="mx-auto flex max-w-120 flex-col items-center gap-4 py-16 text-center"
+      className="mx-auto my-8 flex w-full max-w-120 flex-col items-center gap-4 rounded-xl paper px-6 py-12 text-center"
     >
       {illustration}
       <h1 className="typescale-headline-sm text-balance">{title}</h1>
-      <p className="typescale-body-lg text-pretty text-on-surface-variant">{children}</p>
+      <p className="typescale-body-lg text-pretty text-ink-muted">{children}</p>
       <div className="flex flex-wrap justify-center gap-2 pt-2">{actions}</div>
     </section>
   );

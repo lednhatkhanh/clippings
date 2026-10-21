@@ -1,4 +1,6 @@
 import { constructNow } from "date-fns";
+import { ChevronLeft, ExternalLink } from "lucide-react";
+import Link from "next/link";
 import { notFound, redirect, unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 
@@ -10,6 +12,7 @@ import { NoteEditor } from "@/components/clippings/note-editor.tsx";
 import { RelatedClippings } from "@/components/clippings/related-clippings.tsx";
 import { TagEditor } from "@/components/clippings/tag-editor.tsx";
 import { LoadError } from "@/components/load-error.tsx";
+import { PageHeader } from "@/components/page-header.tsx";
 import {
   PageTransition,
   RevealTransition,
@@ -20,7 +23,7 @@ import { domainOf } from "@/lib/clippings/rows.ts";
 import { getClippings } from "@/lib/clippings/service.ts";
 import { SOURCE_LABELS } from "@/lib/clippings/source-labels.ts";
 import { formatAbsoluteDate, type Clipping, type ClippingStatus } from "@clippings/shared";
-import { Disclosure, Icon, LinkButton } from "@clippings/ui";
+import { Disclosure, LinkButton } from "@clippings/ui";
 
 const STATUS_LABELS: Record<ClippingStatus, string> = {
   pending: "Pending: reading the page",
@@ -37,20 +40,22 @@ function RawMetadata({ clipping }: { clipping: Clipping }) {
     { term: "Enrichment", value: STATUS_LABELS[clipping.status] },
   ];
   return (
-    <Disclosure title="Details">
-      <dl className="flex flex-col">
-        {fields.map(({ term, value, mono }) => (
-          <div key={term} className="flex flex-col gap-1 py-2">
-            <dt className="typescale-label-md text-on-surface-variant">{term}</dt>
-            <dd
-              className={mono ? "typescale-body-md font-mono wrap-anywhere" : "typescale-body-md"}
-            >
-              {value}
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </Disclosure>
+    <div className="border-t border-line pt-1 print:hidden">
+      <Disclosure title="Details">
+        <dl className="flex flex-col">
+          {fields.map(({ term, value, mono }) => (
+            <div key={term} className="flex flex-col gap-1 py-2">
+              <dt className="typescale-label-md text-ink-faint">{term}</dt>
+              <dd
+                className={mono ? "typescale-body-md font-mono wrap-anywhere" : "typescale-body-md"}
+              >
+                {value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </Disclosure>
+    </div>
   );
 }
 
@@ -79,28 +84,36 @@ async function ClippingDetail({ params }: Pick<PageProps<"/c/[id]">, "params">) 
   const { clipping, savedOn } = loaded;
 
   return (
-    <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-3">
-        <h1 className="typescale-headline-sm text-balance wrap-anywhere">{clipping.title}</h1>
+    <div className="flex flex-col gap-5">
+      <header className="flex flex-col gap-2.5">
+        <h1 className="typescale-headline-sm text-balance wrap-anywhere medium:typescale-headline-md">
+          {clipping.title}
+        </h1>
         {/* On paper there is no link to follow, so the address itself goes under the title. */}
         <p className="hidden typescale-body-md font-mono wrap-anywhere print:block">
           {clipping.url}
         </p>
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 typescale-label-md text-on-surface-variant">
-          <Favicon url={clipping.url} />
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1.5 typescale-label-md text-ink-faint">
+          <Favicon url={clipping.url} size="inline" />
           <span className="font-mono">{domainOf(clipping.url)}</span>
           <span aria-hidden="true">·</span>
           <time dateTime={clipping.createdAt}>Saved {savedOn}</time>
-          <span className="ms-1 inline-flex h-6 items-center rounded-sm border border-outline px-2 typescale-label-sm">
+          <span className="inline-flex h-5.5 items-center rounded-sm border border-line-strong px-2 typescale-label-sm text-ink-muted">
             <span className="sr-only">Source:&nbsp;</span>
             {SOURCE_LABELS[clipping.source]}
           </span>
         </p>
       </header>
 
-      <div className="flex flex-wrap items-center gap-2 print:hidden">
-        <LinkButton variant="filled" href={clipping.url} target="_blank" rel="noopener noreferrer">
-          <Icon name="open_in_new" />
+      <div className="flex items-center gap-2 print:hidden">
+        <LinkButton
+          variant="filled"
+          href={clipping.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex-1 medium:flex-none"
+        >
+          <ExternalLink className="size-4.5" />
           Open original
           <span className="sr-only">(opens in a new tab)</span>
         </LinkButton>
@@ -109,7 +122,7 @@ async function ClippingDetail({ params }: Pick<PageProps<"/c/[id]">, "params">) 
 
       {clipping.status === "ready" ? (
         clipping.summary ? (
-          <p className="typescale-reading text-pretty">{clipping.summary}</p>
+          <p className="max-w-reading typescale-reading text-pretty">{clipping.summary}</p>
         ) : null
       ) : (
         <EnrichmentStatus clippingId={clipping.id} status={clipping.status} />
@@ -136,9 +149,10 @@ async function Related({ params }: Pick<PageProps<"/c/[id]">, "params">) {
 function DetailSkeleton() {
   return (
     <div aria-hidden="true" className="flex appear-delayed flex-col gap-4">
-      <div className="h-8 w-4/5 skeleton-pulse rounded-xs bg-surface-container-high" />
-      <div className="h-4 w-2/5 skeleton-pulse rounded-xs bg-surface-container-high" />
-      <div className="h-24 w-full skeleton-pulse rounded-xs bg-surface-container-high" />
+      <div className="h-8 w-4/5 skeleton-pulse rounded-xs bg-ground-sunk" />
+      <div className="h-4 w-2/5 skeleton-pulse rounded-xs bg-ground-sunk" />
+      <div className="h-11 w-full skeleton-pulse rounded-md bg-ground-sunk" />
+      <div className="h-24 w-full skeleton-pulse rounded-xs bg-ground-sunk" />
     </div>
   );
 }
@@ -146,13 +160,29 @@ function DetailSkeleton() {
 export default function ClippingPage({ params }: PageProps<"/c/[id]">) {
   return (
     <PageTransition>
-      <div className="flex flex-col gap-2 py-4">
+      <div className="mx-auto flex max-w-180 flex-col gap-4 pb-4">
+        {/* On a phone the glass header carries the way back; wider, the link below does. */}
+        <PageHeader
+          title="Clipping"
+          as="p"
+          compactOnly
+          start={
+            <Link
+              href="/"
+              transitionTypes={["nav-back"]}
+              aria-label="Back to clippings"
+              className="state-layer flex size-11 items-center justify-center rounded-md text-ink"
+            >
+              <ChevronLeft className="size-5" />
+            </Link>
+          }
+        />
         <LinkButton
           href="/"
           routerOptions={{ transitionTypes: ["nav-back"] }}
-          className="self-start print:hidden"
+          className="hidden self-start medium:inline-flex print:hidden"
         >
-          <Icon name="arrow_back" />
+          <ChevronLeft className="size-4.5" />
           Clippings
         </LinkButton>
         <Suspense
@@ -176,16 +206,11 @@ export default function ClippingPage({ params }: PageProps<"/c/[id]">) {
             </Suspense>
           </DetailSheet>
         </Suspense>
-        {/* Lined up with the sheet's text: the same padding, and the measure in the reading type. */}
-        <div className="mx-auto w-fit max-w-full px-6 pt-6 medium:px-12">
-          <div className="w-reading max-w-full typescale-reading">
-            <Suspense>
-              <RevealTransition>
-                <Related params={params} />
-              </RevealTransition>
-            </Suspense>
-          </div>
-        </div>
+        <Suspense>
+          <RevealTransition>
+            <Related params={params} />
+          </RevealTransition>
+        </Suspense>
       </div>
     </PageTransition>
   );

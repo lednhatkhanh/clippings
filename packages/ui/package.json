@@ -11,10 +11,8 @@
   },
   "scripts": {
     "generate": "tsx scripts/generate-theme.ts",
-    "build:icons": "tsx scripts/build-icons.ts",
     "check:generated": "tsx scripts/generate-theme.ts --check",
-    "check:icons": "tsx scripts/check-icons.ts",
-    "lint": "oxlint -c ../../.oxlintrc.json . && pnpm check:generated && pnpm check:icons",
+    "lint": "oxlint -c ../../.oxlintrc.json . && pnpm check:generated",
     "format:check": "oxfmt --check -c ../../.oxfmtrc.json .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
@@ -23,6 +21,7 @@
     "@clippings/shared": "workspace:*",
     "@material/material-color-utilities": "catalog:",
     "cn": "catalog:",
+    "lucide-react": "catalog:",
     "react-aria-components": "catalog:"
   },
   "devDependencies": {

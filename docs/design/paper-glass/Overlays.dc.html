@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Command palette, menu and toast</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;padding:0}
+input::placeholder{color:var(--ink-3);opacity:1}
+.pg{font-family:'Geist',system-ui,sans-serif;color:var(--ink);background:var(--ground);-webkit-font-smoothing:antialiased;font-size:14px;line-height:20px}
+.pg.light{--ground:#F2EDE3;--card:#FCFAF5;--card-2:#F7F2E8;--ink:#26221C;--ink-2:#544C40;--ink-3:#6B6253;--line:rgba(70,52,28,.12);--line-strong:rgba(70,52,28,.24);--glass-strong:rgba(252,250,245,.8);--glass-edge:rgba(255,255,255,.72);--glass-hi:rgba(255,255,255,.85);--danger:#A63A24;--scrim:rgba(46,34,18,.16);--blob-b:rgba(170,200,172,.55);--blob-c:rgba(236,190,150,.5);--kbd:rgba(70,52,28,.08);
+--shadow-paper:inset 0 1px 0 rgba(255,255,255,.7),0 0 0 1px rgba(80,60,30,.06),0 1px 1px rgba(60,40,20,.05),0 3px 6px -2px rgba(60,40,20,.07),0 12px 24px -8px rgba(60,40,20,.09);
+--shadow-float:inset 0 1px 0 var(--glass-hi),0 0 0 1px rgba(80,60,30,.08),0 4px 10px -2px rgba(60,40,20,.12),0 30px 60px -16px rgba(60,40,20,.38)}
+.pg.dark{--ground:#16140F;--card:#24201B;--card-2:#1F1C17;--ink:#EEE7DA;--ink-2:#C4BAA8;--ink-3:#9D9381;--line:rgba(255,240,210,.09);--line-strong:rgba(255,240,210,.18);--glass-strong:rgba(40,36,30,.78);--glass-edge:rgba(255,245,225,.11);--glass-hi:rgba(255,250,235,.08);--danger:#F0A08A;--scrim:rgba(0,0,0,.42);--blob-b:rgba(120,160,125,.12);--blob-c:rgba(210,140,100,.11);--kbd:rgba(255,240,210,.09);
+--shadow-paper:inset 0 1px 0 rgba(255,250,235,.05),0 0 0 1px rgba(255,240,210,.06),0 1px 1px rgba(0,0,0,.3),0 4px 8px -2px rgba(0,0,0,.28),0 14px 28px -10px rgba(0,0,0,.45);
+--shadow-float:inset 0 1px 0 var(--glass-hi),0 0 0 1px rgba(0,0,0,.35),0 4px 10px -2px rgba(0,0,0,.4),0 30px 60px -16px rgba(0,0,0,.75)}
+.light.accent-ochre{--accent:#E2AE1C;--accent-top:#F3CC4A;--on-accent:#3A2C00;--accent-soft:#F3E2A6;--on-accent-soft:#4A3A00;--accent-text:#7A5C00;--accent-ring:rgba(150,110,0,.22);--blob-a:rgba(244,206,90,.6)}
+.dark.accent-ochre{--accent:#E0B03A;--accent-top:#EEC65E;--on-accent:#271D00;--accent-soft:#3A3119;--on-accent-soft:#F2DA92;--accent-text:#EBC65C;--accent-ring:rgba(255,220,120,.25);--blob-a:rgba(224,176,58,.15)}
+.light.accent-terracotta{--accent:#BF5629;--accent-top:#D26B3E;--on-accent:#FFFFFF;--accent-soft:#F5D9CA;--on-accent-soft:#5A2008;--accent-text:#A3461E;--accent-ring:rgba(140,50,10,.25);--blob-a:rgba(235,160,120,.5)}
+.dark.accent-terracotta{--accent:#E8906A;--accent-top:#F2A784;--on-accent:#2D0F03;--accent-soft:#3E2519;--on-accent-soft:#F7CBB5;--accent-text:#F0A280;--accent-ring:rgba(255,190,160,.25);--blob-a:rgba(232,144,106,.14)}
+.light.accent-sage{--accent:#5A7656;--accent-top:#6C8A67;--on-accent:#FFFFFF;--accent-soft:#DCE6D4;--on-accent-soft:#22341E;--accent-text:#46603F;--accent-ring:rgba(40,70,35,.25);--blob-a:rgba(160,195,160,.55)}
+.dark.accent-sage{--accent:#A6C19C;--accent-top:#BCD3B2;--on-accent:#15240F;--accent-soft:#263124;--on-accent-soft:#CFE1C6;--accent-text:#AECBA4;--accent-ring:rgba(200,230,190,.22);--blob-a:rgba(166,193,156,.13)}
+.light.accent-ink{--accent:#3E5E8A;--accent-top:#4F709D;--on-accent:#FFFFFF;--accent-soft:#DCE4F0;--on-accent-soft:#162B4A;--accent-text:#385883;--accent-ring:rgba(30,50,90,.25);--blob-a:rgba(160,185,225,.5)}
+.dark.accent-ink{--accent:#A8C0E6;--accent-top:#BED0EF;--on-accent:#0F2240;--accent-soft:#222A3A;--on-accent-soft:#CFDCF2;--accent-text:#B0C7EA;--accent-ring:rgba(190,210,245,.22);--blob-a:rgba(168,192,230,.13)}
+.serif{font-family:'Fraunces',Georgia,serif;font-optical-sizing:auto}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.eyebrow{font-size:11px;line-height:14px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:500}
+.muted{color:var(--ink-2)}.faint{color:var(--ink-3)}
+.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.paper{background:linear-gradient(180deg,var(--card),var(--card-2));box-shadow:var(--shadow-paper);border-radius:16px}
+.float{background:var(--glass-strong);-webkit-backdrop-filter:blur(28px) saturate(170%);backdrop-filter:blur(28px) saturate(170%);border:1px solid var(--glass-edge);box-shadow:var(--shadow-float)}
+.opt{display:flex;align-items:center;gap:12px;height:44px;padding:0 12px;border-radius:12px;color:var(--ink);width:100%;box-sizing:border-box;text-align:left}
+.opt .faint{margin-left:auto}
+.opt.focused{background:var(--accent-soft);color:var(--on-accent-soft)}
+.opt.focused .faint{color:var(--on-accent-soft);opacity:.8}
+.fav{width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex:none;background:linear-gradient(180deg,var(--card),var(--card-2));box-shadow:var(--shadow-paper);font-family:'Fraunces',Georgia,serif;font-size:12px;font-weight:600;color:var(--ink-2)}
+.kbd{display:inline-flex;align-items:center;height:22px;padding:0 6px;border-radius:6px;background:var(--kbd);font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:var(--ink-3)}
+.mi{display:flex;align-items:center;gap:10px;height:38px;padding:0 10px;border-radius:10px;width:100%;box-sizing:border-box;text-align:left;color:var(--ink)}
+.mi.hover{background:var(--line)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:11px;font-size:14px;font-weight:500;white-space:nowrap}
+.blob{position:absolute;border-radius:50%;pointer-events:none}
+</style>
+</helmet>
+<div class="pg {{themeClass}}" style="position: relative; width: 1280px; height: 860px; overflow: hidden">
+
+<div class="blob" aria-hidden="true" style="top: -160px; right: 10%; width: 520px; height: 520px; background: radial-gradient(closest-side, var(--blob-a), transparent)"></div>
+<div class="blob" aria-hidden="true" style="top: 420px; left: 8%; width: 560px; height: 560px; background: radial-gradient(closest-side, var(--blob-c), transparent)"></div>
+<div class="blob" aria-hidden="true" style="bottom: -220px; right: -120px; width: 620px; height: 620px; background: radial-gradient(closest-side, var(--blob-b), transparent)"></div>
+
+<div aria-hidden="true" style="position: absolute; left: 300px; right: 120px; top: 40px; display: flex; flex-direction: column; gap: 10px">
+<div class="paper" style="height: 132px; padding: 16px 18px; box-sizing: border-box"><div class="serif" style="font-size: 18px; font-weight: 500">Designing websites to last</div><div class="mono faint" style="font-size: 12px; margin-top: 6px">jeffhuang.com · 2h ago</div></div>
+<div class="paper" style="height: 132px; padding: 16px 18px; box-sizing: border-box"><div class="serif" style="font-size: 18px; font-weight: 500">backdrop-filter</div><div class="mono faint" style="font-size: 12px; margin-top: 6px">developer.mozilla.org · Yesterday</div></div>
+<div class="paper" style="height: 132px; padding: 16px 18px; box-sizing: border-box"><div class="serif" style="font-size: 18px; font-weight: 500">Principles of calm technology</div><div class="mono faint" style="font-size: 12px; margin-top: 6px">calmtech.com · Mon</div></div>
+<div class="paper" style="height: 132px; padding: 16px 18px; box-sizing: border-box"><div class="serif" style="font-size: 18px; font-weight: 500">Lucide icons</div><div class="mono faint" style="font-size: 12px; margin-top: 6px">lucide.dev · 14 Oct</div></div>
+<div class="paper" style="height: 132px; padding: 16px 18px; box-sizing: border-box"><div class="serif" style="font-size: 18px; font-weight: 500">A beginner’s sourdough starter</div><div class="mono faint" style="font-size: 12px; margin-top: 6px">theperfectloaf.com · 9 Oct</div></div>
+</div>
+
+<div aria-hidden="true" style="position: absolute; inset: 0; background: var(--scrim); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px)"></div>
+
+<section role="dialog" aria-label="Command palette" class="float" style="position: absolute; left: 50%; top: 96px; width: 600px; margin-left: -300px; border-radius: 22px; overflow: hidden">
+<label style="display: flex; align-items: center; gap: 12px; height: 60px; padding: 0 18px; border-bottom: 1px solid var(--line); color: var(--ink-2)">
+<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+<input aria-label="Search or run a command" value="calm" style="flex: 1; border: 0; outline: 0; background: transparent; font-size: 17px; color: var(--ink)">
+<span class="kbd">esc</span>
+</label>
+<div role="listbox" aria-label="Results" style="padding: 8px; display: flex; flex-direction: column; gap: 2px">
+<div class="eyebrow" style="padding: 8px 12px 4px">Clippings</div>
+<div class="opt focused" role="option" aria-selected="true"><span class="fav" aria-hidden="true">C</span><span>Principles of <mark style="background: transparent; color: inherit; font-weight: 600; text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 3px">calm</mark> technology</span><span class="mono faint" style="font-size: 12px">calmtech.com</span></div>
+<div class="opt" role="option" aria-selected="false"><span class="fav" aria-hidden="true">S</span><span>Notes on <mark style="background: transparent; color: inherit; font-weight: 600; text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 3px">calm</mark> interfaces</span><span class="mono faint" style="font-size: 12px">[example.com]</span></div>
+<div class="eyebrow" style="padding: 12px 12px 4px">Actions</div>
+<div class="opt" role="option" aria-selected="false"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>Save a link<span class="kbd" style="margin-left: auto">N</span></div>
+<div class="opt" role="option" aria-selected="false"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>Switch to light mode</div>
+<div class="opt" role="option" aria-selected="false"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"></path><circle cx="7.5" cy="7.5" r=".5"></circle></svg>Go to Tags<span class="kbd" style="margin-left: auto">G T</span></div>
+</div>
+<div class="faint" style="display: flex; gap: 16px; padding: 10px 18px; border-top: 1px solid var(--line); font-size: 12px"><span><span class="kbd">↑↓</span> move</span><span><span class="kbd">↵</span> open</span><span style="margin-left: auto"><span class="kbd">⌘K</span> anywhere</span></div>
+</section>
+
+<div role="menu" aria-label="Clipping actions" class="float" style="position: absolute; right: 64px; top: 548px; width: 232px; box-sizing: border-box; padding: 6px; border-radius: 16px">
+<button class="mi hover" role="menuitem"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg>Open original</button>
+<button class="mi" role="menuitem"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>Copy link</button>
+<button class="mi" role="menuitem"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"></path><circle cx="7.5" cy="7.5" r=".5"></circle></svg>Edit tags</button>
+<div role="separator" style="height: 1px; margin: 6px 4px; background: var(--line)"></div>
+<button class="mi" role="menuitem" style="color: var(--danger)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>Delete</button>
+</div>
+
+<div role="status" class="float" style="position: absolute; left: 50%; bottom: 32px; width: 380px; margin-left: -190px; box-sizing: border-box; height: 56px; padding: 0 8px 0 18px; border-radius: 18px; display: flex; align-items: center; gap: 12px">
+<svg class="i" viewBox="0 0 24 24" style="color: var(--ink-2)" aria-hidden="true"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+<span style="flex: 1">Clipping deleted</span>
+<button class="btn" style="color: var(--accent-text); font-weight: 600">Undo</button>
+<button class="btn" aria-label="Dismiss" style="width: 36px; padding: 0; color: var(--ink-2)"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"mode":{"editor":"enum","options":["light","dark"],"default":"dark"},"accent":{"editor":"enum","options":["ochre","terracotta","sage","ink"],"default":"ochre"},"$preview":{"width":1280,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+const mode = this.props.mode ?? 'dark';
+const accent = this.props.accent ?? 'ochre';
+return { themeClass: mode + ' accent-' + accent };
+}
+}
+</script>
+</body>
+</html>

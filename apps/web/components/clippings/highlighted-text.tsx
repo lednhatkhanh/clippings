@@ -4,7 +4,10 @@ import type { TextSegment } from "@clippings/shared";
 export function HighlightedText({ segments }: { segments: TextSegment[] }) {
   return segments.map((segment, index) =>
     segment.match ? (
-      <mark key={index} className="rounded-xs bg-tertiary-container text-on-tertiary-container">
+      <mark
+        key={index}
+        className="bg-transparent font-semibold text-inherit underline decoration-accent decoration-2 underline-offset-3"
+      >
         {segment.text}
       </mark>
     ) : (

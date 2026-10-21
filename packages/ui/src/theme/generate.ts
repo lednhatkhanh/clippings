@@ -1,10 +1,6 @@
 import {
   Hct,
-  type DynamicColor,
-  DynamicScheme,
-  SchemeTonalSpot,
   TonalPalette,
-  Variant,
   argbFromHex,
   differenceDegrees,
   hexFromArgb,
@@ -15,10 +11,17 @@ import {
 import { DEFAULT_PALETTE, PALETTE_NAMES, type PaletteName } from "@clippings/shared";
 
 import {
-  CONTRAST_LEVELS,
+  ACCENT_SOFT_CHROMA,
+  ACCENT_TONES,
   CONTRAST_NAMES,
+  DANGER,
+  DARK_FILL_CHROMA,
+  DANGER_TONES,
+  LINE_ALPHAS,
   MODES,
+  NEUTRAL_TONES,
   PALETTES,
+  PAPER_CHROMA_SHARE,
   TAG_CHROMA,
   TAG_HUES,
   TAG_NAMES,
@@ -28,64 +31,38 @@ import {
   type TagName,
 } from "./palettes.ts";
 
-const WHITE = 0xffffffff;
+/**
+ * The color roles, in the order the CSS lists them. Ground is the page, paper the cards on it,
+ * glass the frosted layers that float above both. Roles with an alpha are 8-digit hex.
+ */
+export const ROLE_NAMES = [
+  "ground",
+  "ground-sunk",
+  "paper",
+  "paper-shade",
+  "ink",
+  "ink-muted",
+  "ink-faint",
+  "line",
+  "line-strong",
+  "edge",
+  "accent",
+  "accent-top",
+  "on-accent",
+  "accent-soft",
+  "on-accent-soft",
+  "accent-ink",
+  "danger",
+  "on-danger",
+  "danger-soft",
+  "on-danger-soft",
+  "glass",
+  "glass-strong",
+  "glass-edge",
+  "scrim",
+] as const;
 
-type ColorGetter = (scheme: DynamicScheme) => DynamicColor;
-
-const ROLE_TABLE = {
-  primary: (s) => s.colors.primary(),
-  "on-primary": (s) => s.colors.onPrimary(),
-  "primary-container": (s) => s.colors.primaryContainer(),
-  "on-primary-container": (s) => s.colors.onPrimaryContainer(),
-  secondary: (s) => s.colors.secondary(),
-  "on-secondary": (s) => s.colors.onSecondary(),
-  "secondary-container": (s) => s.colors.secondaryContainer(),
-  "on-secondary-container": (s) => s.colors.onSecondaryContainer(),
-  tertiary: (s) => s.colors.tertiary(),
-  "on-tertiary": (s) => s.colors.onTertiary(),
-  "tertiary-container": (s) => s.colors.tertiaryContainer(),
-  "on-tertiary-container": (s) => s.colors.onTertiaryContainer(),
-  error: (s) => s.colors.error(),
-  "on-error": (s) => s.colors.onError(),
-  "error-container": (s) => s.colors.errorContainer(),
-  "on-error-container": (s) => s.colors.onErrorContainer(),
-  background: (s) => s.colors.background(),
-  "on-background": (s) => s.colors.onBackground(),
-  surface: (s) => s.colors.surface(),
-  "on-surface": (s) => s.colors.onSurface(),
-  "surface-variant": (s) => s.colors.surfaceVariant(),
-  "on-surface-variant": (s) => s.colors.onSurfaceVariant(),
-  outline: (s) => s.colors.outline(),
-  "outline-variant": (s) => s.colors.outlineVariant(),
-  shadow: (s) => s.colors.shadow(),
-  scrim: (s) => s.colors.scrim(),
-  "inverse-surface": (s) => s.colors.inverseSurface(),
-  "inverse-on-surface": (s) => s.colors.inverseOnSurface(),
-  "inverse-primary": (s) => s.colors.inversePrimary(),
-  "primary-fixed": (s) => s.colors.primaryFixed(),
-  "on-primary-fixed": (s) => s.colors.onPrimaryFixed(),
-  "primary-fixed-dim": (s) => s.colors.primaryFixedDim(),
-  "on-primary-fixed-variant": (s) => s.colors.onPrimaryFixedVariant(),
-  "secondary-fixed": (s) => s.colors.secondaryFixed(),
-  "on-secondary-fixed": (s) => s.colors.onSecondaryFixed(),
-  "secondary-fixed-dim": (s) => s.colors.secondaryFixedDim(),
-  "on-secondary-fixed-variant": (s) => s.colors.onSecondaryFixedVariant(),
-  "tertiary-fixed": (s) => s.colors.tertiaryFixed(),
-  "on-tertiary-fixed": (s) => s.colors.onTertiaryFixed(),
-  "tertiary-fixed-dim": (s) => s.colors.tertiaryFixedDim(),
-  "on-tertiary-fixed-variant": (s) => s.colors.onTertiaryFixedVariant(),
-  "surface-dim": (s) => s.colors.surfaceDim(),
-  "surface-bright": (s) => s.colors.surfaceBright(),
-  "surface-container-lowest": (s) => s.colors.surfaceContainerLowest(),
-  "surface-container-low": (s) => s.colors.surfaceContainerLow(),
-  "surface-container": (s) => s.colors.surfaceContainer(),
-  "surface-container-high": (s) => s.colors.surfaceContainerHigh(),
-  "surface-container-highest": (s) => s.colors.surfaceContainerHighest(),
-  "surface-tint": (s) => s.colors.surfaceTint(),
-} satisfies Record<string, ColorGetter>;
-
-export type RoleName = keyof typeof ROLE_TABLE;
-export const ROLE_NAMES = Object.keys(ROLE_TABLE) as RoleName[];
+export type RoleName = (typeof ROLE_NAMES)[number];
 
 export interface TagColors {
   container: string;
@@ -149,42 +126,113 @@ const buildTags = (
   ) as Record<TagName, TagColors>;
 };
 
+/** A color by HCT. Tones may be fractional, which `TonalPalette` would round. */
+const hct = (hue: number, chroma: number, tone: number): string =>
+  hexFromArgb(Hct.from(hue, chroma, Math.min(100, Math.max(0, tone))).toInt());
+
+const withAlpha = (hex: string, alpha: number): string =>
+  `${hex}${Math.round(alpha * 255)
+    .toString(16)
+    .padStart(2, "0")}`;
+
+// WCAG 2.x relative luminance and contrast, to pick the readable text for a fill.
+const channel = (value: number) => {
+  const c = value / 255;
+  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+};
+const luminance = (hex: string) => {
+  const [r, g, b] = [1, 3, 5].map((i) => channel(Number.parseInt(hex.slice(i, i + 2), 16)));
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+};
+export const contrastRatio = (a: string, b: string): number => {
+  const [hi, lo] = [luminance(a), luminance(b)].toSorted((x, y) => y - x);
+  return (hi! + 0.05) / (lo! + 0.05);
+};
+
+/** Near-black text on a light fill, white on a dark one. */
+const DARK_TEXT_TONE = 10;
+
 const buildScheme = (
   palette: PaletteName,
   tagHues: Record<TagName, number>,
   contrast: ContrastName,
   mode: Mode,
 ): SchemeColors => {
-  const { seed, neutral } = PALETTES[palette];
-  const source = Hct.fromInt(argbFromHex(seed));
+  const { seed, fill, neutral } = PALETTES[palette];
+  const accent = Hct.fromInt(argbFromHex(seed));
+  const n = NEUTRAL_TONES[contrast][mode];
+  const lines = LINE_ALPHAS[contrast][mode];
+  const a = ACCENT_TONES[contrast][mode];
+  const d = DANGER_TONES[contrast][mode];
   const isDark = mode === "dark";
-  const contrastLevel = CONTRAST_LEVELS[contrast];
-  const base = new SchemeTonalSpot(source, isDark, contrastLevel, "2021");
-  const scheme = new DynamicScheme({
-    sourceColorHct: source,
-    variant: Variant.TONAL_SPOT,
-    contrastLevel,
-    isDark,
-    specVersion: "2021",
-    primaryPalette: base.primaryPalette,
-    secondaryPalette: base.secondaryPalette,
-    tertiaryPalette: base.tertiaryPalette,
-    neutralPalette: TonalPalette.fromHueAndChroma(neutral.hue, neutral.chroma),
-    neutralVariantPalette: TonalPalette.fromHueAndChroma(neutral.hue, neutral.chroma + 4),
-  });
 
-  // `surface-container-lowest` is tone 100 in light mode, which is #ffffff for every neutral
-  // palette. Paper is never white, so surfaces step down to tone 99 of the warm neutral.
-  const paperWhite = scheme.neutralPalette.tone(99);
-  const isSurface = (name: RoleName) => name.startsWith("surface") || name === "background";
+  const neutralColor = (tone: number) => hct(neutral.hue, neutral.chroma, tone);
+  const paperColor = (tone: number) => hct(neutral.hue, neutral.chroma * PAPER_CHROMA_SHARE, tone);
+  const fillChroma = isDark ? Math.min(accent.chroma, DARK_FILL_CHROMA) : accent.chroma;
+  const accentColor = (tone: number, chroma = fillChroma) => hct(accent.hue, chroma, tone);
 
-  const roles = Object.fromEntries(
-    ROLE_NAMES.map((name) => {
-      const argb = scheme.getArgb(ROLE_TABLE[name](scheme));
-      const clamped = !isDark && isSurface(name) && argb === WHITE ? paperWhite : argb;
-      return [name, hexFromArgb(clamped)];
-    }),
-  ) as Record<RoleName, string>;
+  // The fill carries whichever text reads better on it at standard contrast; higher levels move
+  // the fill away from that text rather than flipping it.
+  const baseFill = accentColor(fill[mode]);
+  const darkText = accentColor(DARK_TEXT_TONE, 8);
+  const textIsDark = contrastRatio(darkText, baseFill) >= contrastRatio("#ffffff", baseFill);
+  const fillTone = fill[mode] + (textIsDark ? a.fillShift : -a.fillShift);
+  const softChroma = Math.min(accent.chroma, ACCENT_SOFT_CHROMA[mode]);
+  const onAccent = textIsDark ? darkText : "#ffffff";
+
+  // The fill's gradient starts a little lighter at the top, but never so light that its label
+  // drops below the fill's own minimum: 4.5:1, 6:1 at high contrast.
+  const accentTop = () => {
+    const minimum = contrast === "high" ? 6 : 4.5;
+    for (let lift = isDark ? 6 : 7; lift > 0; lift -= 0.5) {
+      const top = accentColor(Math.min(96, fillTone + lift));
+      if (contrastRatio(onAccent, top) >= minimum) return top;
+    }
+    return accentColor(fillTone);
+  };
+  const ink = neutralColor(n.ink);
+  const paper = paperColor(n.paper);
+  const ground = neutralColor(n.ground);
+
+  // A control's boundary (a text field's edge, the selected segment): the faintest neutral that
+  // still stands 3:1 against paper and ground (WCAG 1.4.11), 4.5:1 at high contrast.
+  const edgeColor = () => {
+    const minimum = contrast === "high" ? 4.5 : 3;
+    for (let step = 0; step <= 100; step += 0.5) {
+      const edge = neutralColor(isDark ? n.paper + step : n.paper - step);
+      if (contrastRatio(edge, paper) >= minimum && contrastRatio(edge, ground) >= minimum) {
+        return edge;
+      }
+    }
+    return ink;
+  };
+
+  const roles: Record<RoleName, string> = {
+    ground,
+    "ground-sunk": neutralColor(n.groundSunk),
+    paper,
+    "paper-shade": paperColor(n.paperShade),
+    ink,
+    "ink-muted": neutralColor(n.inkMuted),
+    "ink-faint": neutralColor(n.inkFaint),
+    line: withAlpha(ink, lines.line),
+    "line-strong": withAlpha(ink, lines.strong),
+    edge: edgeColor(),
+    accent: accentColor(fillTone),
+    "accent-top": accentTop(),
+    "on-accent": onAccent,
+    "accent-soft": accentColor(a.soft, softChroma),
+    "on-accent-soft": accentColor(a.onSoft, softChroma),
+    "accent-ink": accentColor(a.ink),
+    danger: hct(DANGER.hue, DANGER.chroma[mode], d.fill),
+    "on-danger": hct(DANGER.hue, d.onFill === 100 ? 0 : 8, d.onFill),
+    "danger-soft": hct(DANGER.hue, 24, d.soft),
+    "on-danger-soft": hct(DANGER.hue, 24, d.onSoft),
+    glass: withAlpha(paper, isDark ? 0.6 : 0.62),
+    "glass-strong": withAlpha(paper, isDark ? 0.82 : 0.84),
+    "glass-edge": isDark ? withAlpha(ink, 0.1) : withAlpha("#ffffff", 0.72),
+    scrim: isDark ? withAlpha("#000000", 0.45) : withAlpha(neutralColor(10), 0.18),
+  };
 
   return { roles, tags: buildTags(tagHues, contrast, mode) };
 };
@@ -217,9 +265,7 @@ const kebab = (name: string) => name.replace(/[A-Z]/g, (letter) => `-${letter.to
 const declarations = (scheme: Record<Mode, SchemeColors>): string[] => {
   const lines: string[] = [];
   for (const role of ROLE_NAMES) {
-    lines.push(
-      `  --md-sys-color-${role}: ${lightDark(scheme.light.roles[role], scheme.dark.roles[role])};`,
-    );
+    lines.push(`  --pg-${role}: ${lightDark(scheme.light.roles[role], scheme.dark.roles[role])};`);
   }
   for (const tag of TAG_NAMES) {
     for (const part of ["container", "onContainer", "dot"] as const) {
@@ -239,16 +285,18 @@ const rule = (selectors: string[], scheme: Record<Mode, SchemeColors>, indent = 
 
 /**
  * The theme CSS is scoped to the active `data-palette`, so a settings page can't read another
- * palette's colors from it. This `:root` block holds each palette's primary and primary container
- * (standard contrast), always available as `--palette-<name>-primary[-container]`.
+ * palette's colors from it. This `:root` block holds each palette's accent fill and soft container
+ * (standard contrast), always available as `--palette-<name>-accent[-soft]`.
  */
 const swatchesRule = (theme: Theme): string => {
   const lines = PALETTE_NAMES.flatMap((palette) => {
     const { light, dark } = theme.palettes[palette].schemes.standard;
-    return (["primary", "primary-container"] as const).map(
-      (role) =>
-        `  --palette-${palette}-${role}: ${lightDark(light.roles[role], dark.roles[role])};`,
-    );
+    return [
+      `  --palette-${palette}-accent: ${lightDark(light.roles.accent, dark.roles.accent)};`,
+      `  --palette-${palette}-accent-top: ${lightDark(light.roles["accent-top"], dark.roles["accent-top"])};`,
+      `  --palette-${palette}-on-accent: ${lightDark(light.roles["on-accent"], dark.roles["on-accent"])};`,
+      `  --palette-${palette}-soft: ${lightDark(light.roles["accent-soft"], dark.roles["accent-soft"])};`,
+    ];
   });
   return [":root {", ...lines, "}"].join("\n");
 };

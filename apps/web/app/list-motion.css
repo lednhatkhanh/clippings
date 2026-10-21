@@ -1,8 +1,9 @@
 /*
- * List motion (research §3.3, §4.4; audit A24, A25). React's `<ViewTransition>` can't drive these:
- * React Aria renders a `GridList`'s rows from its collection store, whose updates commit outside
- * the Transition, so state drives CSS instead. Effects springs fade, the default spatial spring
- * moves; reduced motion zeroes the spatial factor (tokens.css), so rows then only fade.
+ * List motion. React's `<ViewTransition>` can't drive these: React Aria renders a `GridList`'s rows
+ * from its collection store, whose updates commit outside the Transition, so state drives CSS
+ * instead. Paper moves on the paper spring, fades on the effects easings, exits are quicker than
+ * entrances. Every distance is multiplied by `--motion-spatial-factor` (0 under reduced motion,
+ * tokens.css), so rows then only fade.
  */
 
 @keyframes row-fade-out {
@@ -17,32 +18,43 @@
   }
 }
 
-@keyframes row-collapse {
-  from {
-    grid-template-rows: 1fr;
+@keyframes row-slide-aside {
+  to {
+    translate: calc(16px * var(--motion-spatial-factor)) 0;
   }
+}
+
+@keyframes row-drop {
+  from {
+    translate: 0 calc(-8px * var(--motion-spatial-factor));
+  }
+}
+
+/* The gap between rows is each row's bottom margin, so it closes with the row. */
+@keyframes row-collapse {
   to {
     grid-template-rows: 0fr;
+    margin-bottom: 0;
   }
 }
 
 @keyframes row-expand {
   from {
     grid-template-rows: 0fr;
-  }
-  to {
-    grid-template-rows: 1fr;
+    margin-bottom: 0;
   }
 }
 
 /*
- * A row that is deleted fades out, then collapses so its neighbours close the gap; one that comes
- * back (Undo) opens its gap first, then fades in. `components/clippings/clipping-list.tsx` sets
- * `data-presence` and drops the row when `row-collapse` ends. The row is a one-track grid, so the
- * track's `fr` animates its height without measuring it. Its column is `minmax(0, 1fr)`: an
- * implicit `auto` one grows to the content's min-content width, a truncated title's full length.
+ * A row that is deleted fades out and slides 16px aside, then collapses so its neighbours close the
+ * gap; one that comes back (Undo) or is newly saved drops in: its gap opens on the paper spring and
+ * it fades in after 80 ms. `components/clippings/clipping-list.tsx` sets `data-presence` and drops
+ * the row once its last animation ends. The row is a one-track grid, so the track's `fr` animates
+ * its height without measuring it. Its column is `minmax(0, 1fr)`: an implicit `auto` one grows to
+ * the content's min-content width, a truncated title's full length.
  */
 @utility row-presence {
+  display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: 1fr;
 
@@ -56,20 +68,16 @@
 
   &[data-presence="leaving"] {
     animation:
-      row-fade-out var(--md-sys-motion-spring-fast-effects-duration)
-        var(--md-sys-motion-spring-fast-effects) both,
-      row-collapse var(--md-sys-motion-spring-default-spatial-duration)
-        var(--md-sys-motion-spring-default-spatial)
-        var(--md-sys-motion-spring-fast-effects-duration) both;
+      row-fade-out 120ms var(--motion-ease-exit) both,
+      row-slide-aside 160ms var(--motion-ease-exit) both,
+      row-collapse calc(260ms * var(--motion-spatial-factor)) var(--motion-ease-swap) 120ms both;
   }
 
-  &[data-presence="returning"] {
+  &:is([data-presence="returning"], [data-presence="entering"]) {
     animation:
-      row-expand var(--md-sys-motion-spring-default-spatial-duration)
-        var(--md-sys-motion-spring-default-spatial) both,
-      row-fade-in var(--md-sys-motion-spring-fast-effects-duration)
-        var(--md-sys-motion-spring-fast-effects)
-        var(--md-sys-motion-spring-default-spatial-duration) both;
+      row-expand var(--motion-spring-paper-duration) var(--motion-spring-paper) both,
+      row-drop var(--motion-spring-paper-duration) var(--motion-spring-paper) both,
+      row-fade-in 240ms var(--motion-ease-settle) 80ms both;
   }
 
   /*
@@ -92,19 +100,32 @@
   }
 }
 
+@keyframes status-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes status-rise {
+  from {
+    translate: 0 calc(6px * var(--motion-spatial-factor));
+  }
+}
+
 /*
- * A row whose status changed (`components/clippings/status-motion.tsx`): the sheet glides from its
- * old height to its new one while the new text fades in.
+ * A row whose status changed (`components/clippings/status-motion.tsx`), reading → ready: the
+ * paper glides from its old height to its new one on the paper spring while the new text eases in
+ * after 120 ms.
  */
 [data-status-changed] {
   overflow: clip;
-  animation: status-resize var(--md-sys-motion-spring-default-spatial-duration)
-    var(--md-sys-motion-spring-default-spatial);
+  animation: status-resize var(--motion-spring-paper-duration) var(--motion-spring-paper);
 }
 
 @utility status-content {
-  [data-status-changed] > & {
-    animation: row-fade-in var(--md-sys-motion-spring-default-effects-duration)
-      var(--md-sys-motion-spring-default-effects) both;
+  [data-status-changed] & {
+    animation:
+      status-fade-in var(--motion-duration-calm) var(--motion-ease-settle) 120ms both,
+      status-rise var(--motion-spring-paper-duration) var(--motion-spring-paper) 120ms both;
   }
 }

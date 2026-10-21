@@ -197,11 +197,8 @@ describe("applyAppearance", () => {
 });
 
 describe("appearanceTransitionFor", () => {
-  it("reveals light and dark", () => {
-    expect(appearanceTransitionFor("theme")).toBe("reveal");
-  });
-
-  it("crossfades palette and contrast", () => {
+  it("crossfades light and dark, palette and contrast", () => {
+    expect(appearanceTransitionFor("theme")).toBe("fade");
     expect(appearanceTransitionFor("palette")).toBe("fade");
     expect(appearanceTransitionFor("contrast")).toBe("fade");
   });
@@ -231,7 +228,7 @@ describe("transitionAppearance", () => {
 
   function stubBrowser({
     reduced,
-    tokens = { "--md-sys-motion-easing-emphasized-decelerate": " ease-in " },
+    tokens = { "--motion-ease-settle": " ease-in " },
   }: {
     reduced: boolean;
     tokens?: Record<string, string>;
@@ -271,7 +268,7 @@ describe("transitionAppearance", () => {
     const { root, animate, startViewTransition, finish } = stubBrowser({ reduced: false });
     const update = vi.fn();
 
-    transitionAppearance(update, { origin: { x: 10, y: 20 } });
+    transitionAppearance(update, { kind: "reveal", origin: { x: 10, y: 20 } });
     await Promise.resolve();
 
     expect(startViewTransition).toHaveBeenCalledOnce();
@@ -286,7 +283,7 @@ describe("transitionAppearance", () => {
     );
     expect(keyframes.clipPath[1]).toMatch(/ at 10px 20px\)$/);
     expect(options).toMatchObject({
-      duration: 400,
+      duration: 520,
       easing: "ease-in",
       pseudoElement: "::view-transition-new(root)",
     });
@@ -297,16 +294,26 @@ describe("transitionAppearance", () => {
     expect(root.attributes.has("data-appearance-transition")).toBe(false);
   });
 
-  it("reads the reveal's duration from the medium4 token", async () => {
+  it("reads the reveal's duration from the slow motion token", async () => {
     const { animate } = stubBrowser({
       reduced: false,
-      tokens: { "--md-sys-motion-duration-medium4": " 0.5s" },
+      tokens: { "--motion-duration-slow": " 0.5s" },
     });
 
     transitionAppearance(vi.fn(), { kind: "reveal" });
     await Promise.resolve();
 
     expect(animate.mock.calls[0]![1]).toMatchObject({ duration: 500 });
+  });
+
+  it("crossfades when no kind is given", async () => {
+    const { root, animate } = stubBrowser({ reduced: false });
+
+    transitionAppearance(vi.fn());
+    await Promise.resolve();
+
+    expect(root.attributes.get("data-appearance-transition")).toBe("fade");
+    expect(animate).not.toHaveBeenCalled();
   });
 
   it("crossfades a fade change without a reveal", async () => {

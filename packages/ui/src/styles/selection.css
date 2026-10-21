@@ -1,8 +1,9 @@
 /*
- * Selection and expand motion: what is selected moves into place, what expands grows. Spatial
- * springs carry position, size and clip; effects springs carry color and opacity. Under reduced
- * motion the spatial factor (tokens.css) zeroes every spatial duration, so indicators jump, pills
- * and checks fade in without growing, and heights change at once.
+ * Selection and expand motion: what is selected moves into place, what expands grows. Positions
+ * and sizes ride the springs (paper for rows and chips, snap for small parts, pop for the check);
+ * opacity and color ride the fade spring. Under reduced motion the spatial factor (tokens.css)
+ * zeroes every spring's duration, so indicators jump, the check fades in without growing, and
+ * heights change at once.
  */
 
 @keyframes selection-fade-in {
@@ -23,12 +24,28 @@
  */
 @utility tab-indicator {
   transition-property: translate, width;
-  transition-duration: var(--md-sys-motion-spring-default-spatial-duration);
-  transition-timing-function: var(--md-sys-motion-spring-default-spatial);
+  transition-duration: var(--motion-spring-snap-duration);
+  transition-timing-function: var(--motion-spring-snap);
 
   @media (prefers-reduced-motion: reduce) {
-    animation: selection-fade-in var(--md-sys-motion-spring-default-effects-duration)
-      var(--md-sys-motion-spring-default-effects);
+    animation: selection-fade-in var(--motion-spring-fade-duration) var(--motion-spring-fade);
+  }
+}
+
+/*
+ * The paper chip behind the selected segment of a `SegmentedButtons`, on `SelectionIndicator`: it
+ * slides and resizes to the new segment. Reduced motion fades the jumped chip in.
+ */
+@utility segment-indicator {
+  /* The edge marks the selected segment at 3:1 or more (WCAG 1.4.11), beyond the paper's shadow. */
+  outline: 1px solid var(--pg-edge);
+  outline-offset: -1px;
+  transition-property: translate, width, height;
+  transition-duration: var(--motion-spring-paper-duration);
+  transition-timing-function: var(--motion-spring-paper);
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: selection-fade-in var(--motion-spring-fade-duration) var(--motion-spring-fade);
   }
 }
 
@@ -40,52 +57,51 @@
   position: relative;
   height: var(--tab-panel-height);
   overflow-y: clip;
-  transition: height var(--md-sys-motion-spring-default-spatial-duration)
-    var(--md-sys-motion-spring-default-spatial);
+  transition: height var(--motion-spring-paper-duration) var(--motion-spring-paper);
 }
 
 /* A `TabPanel` inside `tab-panels`: crossfades, with the old panel lifted out of the flow. */
 @utility tab-panel {
   &[data-entering] {
-    animation: selection-fade-in var(--md-sys-motion-spring-default-effects-duration)
-      var(--md-sys-motion-spring-default-effects);
+    animation: selection-fade-in var(--motion-spring-fade-duration) var(--motion-spring-fade);
   }
 
   &[data-exiting] {
     position: absolute;
     inset-block-start: 0;
     inset-inline: 0;
-    animation: selection-fade-out var(--md-sys-motion-spring-default-effects-duration)
-      var(--md-sys-motion-spring-default-effects) forwards;
+    animation: selection-fade-out var(--motion-spring-fade-duration) var(--motion-spring-fade)
+      forwards;
   }
 }
 
-/* The navigation pill: grows from its centre when its link (`data-active`) becomes current. */
+/*
+ * The navigation highlight: grows from its centre when its link (`data-active`) becomes current.
+ * Its corners follow `--nav-indicator-radius` (default: `rounded-md`), which the element's own
+ * `rounded-*` class should match.
+ */
 @utility nav-indicator {
-  clip-path: inset(0 50% round var(--radius-full));
+  clip-path: inset(0 50% round var(--nav-indicator-radius, var(--shape-md)));
   opacity: 0;
   transition:
-    clip-path var(--md-sys-motion-spring-default-spatial-duration)
-      var(--md-sys-motion-spring-default-spatial),
-    opacity var(--md-sys-motion-spring-default-effects-duration)
-      var(--md-sys-motion-spring-default-effects);
+    clip-path var(--motion-spring-paper-duration) var(--motion-spring-paper),
+    opacity var(--motion-spring-fade-duration) var(--motion-spring-fade);
 
   [data-active] & {
-    clip-path: inset(0 round var(--radius-full));
+    clip-path: inset(0 round var(--nav-indicator-radius, var(--shape-md)));
     opacity: 1;
   }
 }
 
 /*
- * A check icon that pops in when it mounts: fade on default effects, scale from 0 on fast spatial,
- * from the corner where its text starts. No exit.
+ * A check icon that pops in when it mounts: fade on the fade spring, scale from 0 on the pop
+ * spring, from the corner where its text starts. No exit.
  */
 @utility check-pop {
   transform-origin: left bottom;
   transition:
-    opacity var(--md-sys-motion-spring-default-effects-duration)
-      var(--md-sys-motion-spring-default-effects),
-    scale var(--md-sys-motion-spring-fast-spatial-duration) var(--md-sys-motion-spring-fast-spatial);
+    opacity var(--motion-spring-fade-duration) var(--motion-spring-fade),
+    scale var(--motion-spring-pop-duration) var(--motion-spring-pop);
 
   &:dir(rtl) {
     transform-origin: right bottom;
@@ -104,6 +120,5 @@
 @utility disclosure-panel {
   height: var(--disclosure-panel-height);
   overflow-y: clip;
-  transition: height var(--md-sys-motion-spring-default-spatial-duration)
-    var(--md-sys-motion-spring-default-spatial);
+  transition: height var(--motion-spring-paper-duration) var(--motion-spring-paper);
 }

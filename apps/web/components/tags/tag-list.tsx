@@ -1,5 +1,6 @@
 "use client";
 
+import { Ellipsis, Merge, Palette, Pencil, Trash2 } from "lucide-react";
 import { useState, useTransition, type FormEvent } from "react";
 import { Button as AriaButton, Link } from "react-aria-components";
 import { useFormStatus } from "react-dom";
@@ -14,9 +15,9 @@ import { hrefWithTag, loadBrowseParams } from "@/lib/clippings/browse-params.ts"
 import { MAX_TAG_LENGTH, TAG_COLORS, type TagColor, type TagSummary } from "@clippings/shared";
 import {
   Button,
+  cn,
   Dialog,
   Heading,
-  Icon,
   Menu,
   MenuItem,
   MenuSeparator,
@@ -28,6 +29,19 @@ import {
   TextField,
   toasts,
 } from "@clippings/ui";
+
+/** A tag's chip in its container color, with the text color that sits on it. */
+const CHIP_COLORS: Record<TagColor, string> = {
+  none: "bg-ground-sunk text-ink-muted",
+  red: "bg-tag-red text-on-tag-red",
+  orange: "bg-tag-orange text-on-tag-orange",
+  amber: "bg-tag-amber text-on-tag-amber",
+  green: "bg-tag-green text-on-tag-green",
+  teal: "bg-tag-teal text-on-tag-teal",
+  blue: "bg-tag-blue text-on-tag-blue",
+  violet: "bg-tag-violet text-on-tag-violet",
+  pink: "bg-tag-pink text-on-tag-pink",
+};
 
 const countLabel = (count: number) => (count === 1 ? "clipping" : "clippings");
 
@@ -111,7 +125,7 @@ function ConfirmForm({
 
   return (
     <form action={confirm} className="flex flex-col gap-4">
-      <p className="typescale-body-md text-on-surface-variant">{children}</p>
+      <p className="typescale-body-md text-ink-muted">{children}</p>
       <div className="flex justify-end gap-2">
         <Button variant="text" slot="close">
           Cancel
@@ -192,16 +206,21 @@ function TagRow({ tag, others }: { tag: TagSummary; others: readonly TagSummary[
   }
 
   return (
-    <li className="flex items-center gap-3 py-1 ps-4 pe-1">
+    <li className="flex items-center gap-2 py-1 ps-1.5 pe-1.5">
       <Link
         href={hrefWithTag(loadBrowseParams(""), tag.name)}
-        className="state-layer -my-1 -ms-4 flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-sm ps-4 outline-secondary"
+        className="state-layer flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-md px-2.5"
       >
-        <TagDot color={tag.color} showNone />
-        <span className="min-w-0 flex-1 truncate typescale-body-lg text-on-surface">
-          {tag.name}
+        <span
+          className={cn(
+            "inline-flex min-h-6 max-w-full min-w-0 items-center gap-1.5 rounded-sm border border-transparent px-2 typescale-label-md forced-colors:border-solid",
+            CHIP_COLORS[tag.color],
+          )}
+        >
+          <TagDot color={tag.color} />
+          <span className="truncate">{tag.name}</span>
         </span>
-        <span className="typescale-body-md text-on-surface-variant tabular-nums">
+        <span className="ms-auto typescale-body-md text-ink-faint tabular-nums">
           {tag.clippingCount}
           <span className="sr-only"> {countLabel(tag.clippingCount)}</span>
         </span>
@@ -209,16 +228,16 @@ function TagRow({ tag, others }: { tag: TagSummary; others: readonly TagSummary[
       <MenuTrigger>
         <AriaButton
           aria-label={`Actions for ${tag.name}`}
-          className="state-layer flex size-12 shrink-0 items-center justify-center rounded-full text-on-surface-variant outline-secondary"
+          className="state-layer flex size-11 shrink-0 cursor-default items-center justify-center rounded-md text-ink-muted"
         >
-          <Icon name="more_vert" />
+          <Ellipsis className="size-5" />
         </AriaButton>
         <Menu aria-label={`Actions for ${tag.name}`}>
-          <MenuItem icon="edit" onAction={() => open({ kind: "rename" })}>
+          <MenuItem icon={Pencil} onAction={() => open({ kind: "rename" })}>
             Rename…
           </MenuItem>
           <SubmenuTrigger>
-            <MenuItem icon="palette">Color</MenuItem>
+            <MenuItem icon={Palette}>Color</MenuItem>
             <Menu
               aria-label="Color"
               selectionMode="single"
@@ -234,7 +253,7 @@ function TagRow({ tag, others }: { tag: TagSummary; others: readonly TagSummary[
             </Menu>
           </SubmenuTrigger>
           <SubmenuTrigger>
-            <MenuItem icon="merge" isDisabled={others.length === 0}>
+            <MenuItem icon={Merge} isDisabled={others.length === 0}>
               Merge into
             </MenuItem>
             <Menu aria-label="Merge into" items={others}>
@@ -250,7 +269,7 @@ function TagRow({ tag, others }: { tag: TagSummary; others: readonly TagSummary[
             </Menu>
           </SubmenuTrigger>
           <MenuSeparator />
-          <MenuItem icon="delete" onAction={() => open({ kind: "delete" })}>
+          <MenuItem icon={Trash2} isDanger onAction={() => open({ kind: "delete" })}>
             Delete…
           </MenuItem>
         </Menu>
@@ -265,7 +284,10 @@ function TagRow({ tag, others }: { tag: TagSummary; others: readonly TagSummary[
 /** The user's tags, each with its color, count and a menu to rename, recolor, merge or delete. */
 export function TagList({ tags }: { tags: readonly TagSummary[] }) {
   return (
-    <ul aria-label="Your tags" className="flex flex-col">
+    <ul
+      aria-label="Your tags"
+      className="flex flex-col divide-y divide-line rounded-xl paper p-1.5"
+    >
       {tags.map((tag) => (
         <TagRow key={tag.id} tag={tag} others={tags.filter((other) => other.id !== tag.id)} />
       ))}

@@ -11,23 +11,15 @@ export interface ProgressBarProps {
   className?: string;
 }
 
-/** A linear bar for work of unknown length: two bars chase each other across the track. */
+/** A linear bar for work of unknown length: one soft bar glides across the track. */
 export function ProgressBar({ label, className }: ProgressBarProps) {
   return (
     <AriaProgressBar
       aria-label={label}
       isIndeterminate
-      className={cn(
-        "progress-track block h-1 w-full overflow-hidden rounded-full bg-secondary-container",
-        className,
-      )}
+      className={cn("progress-track block h-1 w-full rounded-full bg-line", className)}
     >
-      <div className="progress-bar-primary">
-        <div className="h-full bg-primary" />
-      </div>
-      <div className="progress-bar-secondary">
-        <div className="h-full bg-primary" />
-      </div>
+      <div className="progress-glide bg-accent" />
     </AriaProgressBar>
   );
 }

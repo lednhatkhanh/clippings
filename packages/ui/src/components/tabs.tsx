@@ -24,8 +24,7 @@ export interface TabsProps extends Omit<AriaTabsProps, "className"> {
 }
 
 /**
- * M3 primary tabs: `Tabs` holds a `TabList` of `Tab`s and a `TabPanels` with one `TabPanel` per
- * tab `id`.
+ * Tabs: `Tabs` holds a `TabList` of `Tab`s and a `TabPanels` with one `TabPanel` per tab `id`.
  */
 export function Tabs({ className, ...props }: TabsProps) {
   return <AriaTabs {...props} className={cn("flex flex-col", className)} />;
@@ -34,7 +33,7 @@ export function Tabs({ className, ...props }: TabsProps) {
 export interface TabListProps<T extends object> extends Omit<AriaTabListProps<T>, "className"> {}
 
 export function TabList<T extends object>(props: TabListProps<T>) {
-  return <AriaTabList {...props} className="flex border-b border-outline-variant" />;
+  return <AriaTabList {...props} className="flex gap-1 border-b border-line" />;
 }
 
 export interface TabProps extends Omit<AriaTabProps, "className" | "children"> {
@@ -46,11 +45,11 @@ export function Tab({ children, ...props }: TabProps) {
   return (
     <AriaTab
       {...props}
-      className="state-layer flex min-h-12 flex-1 cursor-default items-stretch justify-center px-4 typescale-title-sm text-on-surface-variant transition-colors duration-effects-fast ease-effects-fast data-disabled:opacity-38 data-selected:text-primary data-selected:duration-effects data-selected:ease-effects"
+      className="flex min-h-11 flex-1 cursor-default items-stretch justify-center px-3 typescale-label-lg text-ink-muted transition-colors duration-quick ease-exit data-disabled:opacity-40 data-hovered:text-ink data-selected:text-ink data-selected:duration-base data-selected:ease-settle medium:min-h-10"
     >
       <div className="relative flex items-center">
         {children}
-        <SelectionIndicator className="absolute start-0 bottom-0 w-full tab-indicator rounded-t-full border-t-3 border-primary" />
+        <SelectionIndicator className="absolute start-0 -bottom-px h-0.5 w-full tab-indicator rounded-full bg-accent" />
       </div>
     </AriaTab>
   );

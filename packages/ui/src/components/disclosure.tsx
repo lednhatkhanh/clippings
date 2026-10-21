@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronDown } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   Button as AriaButton,
@@ -9,7 +10,6 @@ import {
 } from "react-aria-components";
 
 import { cn } from "../cn.ts";
-import { Icon } from "../icons/icon.tsx";
 
 export interface DisclosureProps {
   /** The trigger's text. */
@@ -29,11 +29,9 @@ export function Disclosure({ title, children, className }: DisclosureProps) {
       <Heading className="typescale-title-sm">
         <AriaButton
           slot="trigger"
-          className="state-layer flex min-h-12 w-full items-center gap-2 rounded-full ps-2 pe-4 text-start text-on-surface"
+          className="state-layer flex min-h-11 w-full items-center gap-2 rounded-md ps-2 pe-3 text-start text-ink"
         >
-          <span className="flex transition-transform duration-spatial-fast ease-spatial-fast group-data-expanded:rotate-90">
-            <Icon name="chevron_right" />
-          </span>
+          <ChevronDown className="size-4.5 -rotate-90 text-ink-muted transition-transform duration-snap ease-snap group-data-expanded:rotate-0 rtl:rotate-90 rtl:group-data-expanded:rotate-0" />
           {title}
         </AriaButton>
       </Heading>

@@ -2,11 +2,13 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 
 import { LoadError } from "@/components/load-error.tsx";
+import { PageHeader } from "@/components/page-header.tsx";
 import {
   PageTransition,
   RevealTransition,
   SkeletonTransition,
 } from "@/components/page-transition.tsx";
+import { TodayLabel } from "@/components/today-label.tsx";
 import { getSession, signInRedirect } from "@/lib/auth/session.ts";
 import { loadBrowseParams, toQueryString } from "@/lib/clippings/browse-params.ts";
 import { loadRows } from "@/lib/clippings/rows.ts";
@@ -39,15 +41,16 @@ async function Clippings({ searchParams }: { searchParams: SearchParams }) {
 }
 
 /**
- * The list of clippings under its heading and "New clipping": the home page, and what a share
- * opens over. `searchParams` holds the list's `?q=`, `source=` and `sort=`.
+ * The list of clippings under its header: the home page, and what a share opens over.
+ * `searchParams` holds the list's `?q=`, `source=` and `sort=`. "New clipping" shows only on a
+ * phone, where the navigation has no "New clipping" of its own.
  */
 export function ClippingsHome({ searchParams }: { searchParams: SearchParams }) {
   return (
     <PageTransition>
-      <div className="mx-auto max-w-180">
-        <div className="flex items-center justify-between gap-4 py-4">
-          <h1 className="typescale-headline-sm">Clippings</h1>
+      <div className="mx-auto flex max-w-220 flex-col gap-3 pb-4">
+        <PageHeader title="Clippings" eyebrow={<TodayLabel />} />
+        <div className="medium:hidden">
           <NewClippingDialog />
         </div>
         <Suspense

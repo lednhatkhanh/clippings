@@ -1,9 +1,10 @@
 "use client";
 
+import { Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { useOnline } from "@/components/online-status.tsx";
-import { Button, Icon } from "@clippings/ui";
+import { Button } from "@clippings/ui";
 
 import { useDeleteClipping } from "./deleted-clippings.tsx";
 
@@ -15,15 +16,16 @@ export function DeleteClippingButton({ clippingId }: { clippingId: string }) {
 
   return (
     <Button
-      variant="text"
+      variant="paper"
+      aria-label="Delete clipping"
       isDisabled={!online}
+      className="w-11"
       onPress={() => {
         deleteClipping(clippingId);
         router.push("/", { transitionTypes: ["nav-back"] });
       }}
     >
-      <Icon name="delete" />
-      Delete
+      <Trash2 className="size-4.5 text-danger" />
     </Button>
   );
 }

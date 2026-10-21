@@ -15,11 +15,20 @@ import { cn } from "../cn.ts";
 
 export { DialogTrigger };
 
+export interface ModalProps extends Omit<ModalOverlayProps, "className"> {
+  /**
+   * `dialog` (default): a bottom sheet on phones, centered from the medium size class up, with
+   * padding. `palette`: a wide panel near the top at every size and no padding, for a
+   * `CommandMenu`.
+   */
+  variant?: "dialog" | "palette";
+}
+
 /**
- * A dialog on a scrim: a bottom sheet on phones, centered from the medium size class up. Its motion
- * lives in `styles/modal.css`; children stay mounted until the exit animation ends.
+ * A float-glass dialog on a blurred scrim. Its motion lives in `styles/modal.css`; children stay
+ * mounted until the exit animation ends.
  */
-export function Modal({ children, ...props }: Omit<ModalOverlayProps, "className">) {
+export function Modal({ children, variant = "dialog", ...props }: ModalProps) {
   const scrimRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -31,7 +40,12 @@ export function Modal({ children, ...props }: Omit<ModalOverlayProps, "className
       // as long as the panel at every size, so that is when the panel lands. RAC's own Sheet does
       // this; the prop is `UNSTABLE_`, so a change to it lands here.
       UNSTABLE_deferUntilEntered
-      className="fixed inset-0 z-50 flex modal-scrim items-end justify-center bg-scrim/32 medium:items-center medium:p-6"
+      className={cn(
+        "fixed inset-0 z-50 flex modal-scrim justify-center bg-scrim",
+        variant === "palette"
+          ? "items-start p-4 pt-16 medium:pt-24"
+          : "items-end medium:items-center medium:p-6",
+      )}
     >
       {({ isEntering, state }) => (
         <>
@@ -40,7 +54,14 @@ export function Modal({ children, ...props }: Omit<ModalOverlayProps, "className
           ) : null}
           <AriaModal
             ref={panelRef}
-            className="max-h-dvh w-full max-w-130 modal-panel overflow-y-auto rounded-t-xl bg-surface-container-high p-6 text-on-surface medium:rounded-xl"
+            className={cn(
+              "w-full glass-float text-ink",
+              // The palette fits below the overlay's top padding and scrolls on a short screen
+              // (a phone held sideways), so its last commands and footer stay reachable.
+              variant === "palette"
+                ? "max-h-full max-w-150 modal-panel-float overflow-y-auto rounded-xl-increased"
+                : "max-h-dvh max-w-130 modal-panel overflow-y-auto rounded-t-xl-increased p-6 medium:rounded-xl-increased",
+            )}
           >
             {children}
           </AriaModal>
@@ -53,7 +74,7 @@ export function Modal({ children, ...props }: Omit<ModalOverlayProps, "className
 /**
  * While the modal enters, focus is still on the trigger, outside the overlay that handles Escape,
  * so an Escape pressed mid-enter would be lost and the dialog would finish opening. This closes it,
- * first pinning the pose the scrim, panel and content have reached so the exit leaves from there.
+ * first pinning the pose the scrim and panel have reached so the exit leaves from there.
  */
 function CloseOnEscape({
   scrimRef,
@@ -68,8 +89,7 @@ function CloseOnEscape({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
-      const panel = panelRef.current;
-      for (const element of [scrimRef.current, panel, ...(panel?.children ?? [])]) {
+      for (const element of [scrimRef.current, panelRef.current]) {
         if (element instanceof HTMLElement) pinPose(element);
       }
       onClose();
@@ -80,12 +100,12 @@ function CloseOnEscape({
   return null;
 }
 
-/** Writes an element's animated opacity, translate and clip inline, where its exit starts from. */
+/** Writes an element's animated opacity, translate and scale inline, where its exit starts from. */
 function pinPose(element: HTMLElement) {
-  const { opacity, translate, clipPath } = getComputedStyle(element);
+  const { opacity, translate, scale } = getComputedStyle(element);
   element.style.opacity = opacity;
   element.style.translate = translate;
-  element.style.clipPath = clipPath;
+  element.style.scale = scale;
 }
 
 export function Dialog({
@@ -97,7 +117,7 @@ export function Dialog({
 
 export function Heading({ children }: { children: string }) {
   return (
-    <AriaHeading slot="title" className="typescale-headline-sm">
+    <AriaHeading slot="title" className="typescale-headline-sm text-ink">
       {children}
     </AriaHeading>
   );

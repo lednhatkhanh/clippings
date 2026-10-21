@@ -51,7 +51,7 @@ const savedBadgeTimers = new Map<number, ReturnType<typeof setTimeout>>();
  */
 export async function flashSaved(tabId: number) {
   clearTimeout(savedBadgeTimers.get(tabId));
-  await setBadge(tabId, SAVED_BADGE, COLORS.primary, COLORS["on-primary"]);
+  await setBadge(tabId, SAVED_BADGE, COLORS.accent, COLORS["on-accent"]);
   savedBadgeTimers.set(
     tabId,
     setTimeout(() => {
@@ -71,7 +71,7 @@ export async function flashSaved(tabId: number) {
 /** The !, with what went wrong as the button's tooltip, until the tab loads another page. */
 export async function showError(tabId: number, title: string) {
   await Promise.all([
-    setBadge(tabId, ERROR_BADGE, COLORS.error, COLORS["on-error"]),
+    setBadge(tabId, ERROR_BADGE, COLORS.danger, COLORS["on-danger"]),
     browser.action.setTitle({ tabId, title }),
   ]);
 }
@@ -79,7 +79,7 @@ export async function showError(tabId: number, title: string) {
 /** The save waits for the browser to be back online. */
 export async function showQueued(tabId: number) {
   await Promise.all([
-    setBadge(tabId, QUEUED_BADGE, COLORS["secondary-container"], COLORS["on-secondary-container"]),
+    setBadge(tabId, QUEUED_BADGE, COLORS["accent-soft"], COLORS["on-accent-soft"]),
     browser.action.setTitle({
       tabId,
       title: "You're offline. Clippings will save this when you're back online.",

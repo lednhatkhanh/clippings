@@ -27,6 +27,7 @@
     "@upstash/qstash": "catalog:",
     "better-auth": "catalog:",
     "date-fns": "catalog:",
+    "lucide-react": "catalog:",
     "mcp-handler": "catalog:",
     "next": "catalog:",
     "nuqs": "catalog:",

@@ -4,6 +4,7 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 
 import { LoadError } from "@/components/load-error.tsx";
+import { PageHeader } from "@/components/page-header.tsx";
 import { PageTransition, RevealTransition } from "@/components/page-transition.tsx";
 import { AccountSettings } from "@/components/settings/account-settings.tsx";
 import { AppearanceSettings } from "@/components/settings/appearance-settings.tsx";
@@ -11,6 +12,7 @@ import {
   ConnectionsSettings,
   type ConnectionRow,
 } from "@/components/settings/connections-settings.tsx";
+import { KeyboardSettings } from "@/components/settings/keyboard-settings.tsx";
 import { clientDisplayName, getConnections } from "@/lib/auth/connections.ts";
 import { getSession, signInRedirect } from "@/lib/auth/session.ts";
 import { formatLastUsed } from "@/lib/format-date.ts";
@@ -53,7 +55,10 @@ async function SettingsTabs() {
       </TabList>
       <TabPanels>
         <TabPanel id="appearance">
-          <AppearanceSettings initial={appearance} />
+          <div className="flex flex-col gap-4">
+            <AppearanceSettings initial={appearance} />
+            <KeyboardSettings />
+          </div>
         </TabPanel>
         <TabPanel id="connections">
           <ConnectionsSettings connections={connections} />
@@ -69,8 +74,8 @@ async function SettingsTabs() {
 export default function SettingsPage() {
   return (
     <PageTransition>
-      <div className="mx-auto max-w-180">
-        <h1 className="py-4 typescale-headline-sm">Settings</h1>
+      <div className="mx-auto max-w-220">
+        <PageHeader title="Settings" eyebrow="Make it yours" />
         <Suspense fallback={null}>
           <RevealTransition>
             <SettingsTabs />

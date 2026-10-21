@@ -1,5 +1,6 @@
 "use client";
 
+import { Plus, Tag as TagIcon, X, Check } from "lucide-react";
 import { useState } from "react";
 import {
   Tag as AriaTag,
@@ -20,7 +21,6 @@ import {
 import { normalizeTagName, tagNameKey, type Tag, type TagColor } from "@clippings/shared";
 
 import { cn } from "../cn.ts";
-import { Icon } from "../icons/icon.tsx";
 
 const DOTS: Record<Exclude<TagColor, "none">, string> = {
   red: "bg-tag-red-dot",
@@ -31,6 +31,19 @@ const DOTS: Record<Exclude<TagColor, "none">, string> = {
   blue: "bg-tag-blue-dot",
   violet: "bg-tag-violet-dot",
   pink: "bg-tag-pink-dot",
+};
+
+/** A chip in each tag's container color, with the text color that sits on it. */
+const CHIP_COLORS: Record<TagColor, string> = {
+  none: "bg-ground-sunk text-ink-muted",
+  red: "bg-tag-red text-on-tag-red",
+  orange: "bg-tag-orange text-on-tag-orange",
+  amber: "bg-tag-amber text-on-tag-amber",
+  green: "bg-tag-green text-on-tag-green",
+  teal: "bg-tag-teal text-on-tag-teal",
+  blue: "bg-tag-blue text-on-tag-blue",
+  violet: "bg-tag-violet text-on-tag-violet",
+  pink: "bg-tag-pink text-on-tag-pink",
 };
 
 /** Each tag color as a person reads it, for a color picker. */
@@ -55,7 +68,7 @@ export function TagDot({ color, showNone = false }: { color: TagColor; showNone?
     return showNone ? (
       <span
         aria-hidden="true"
-        className="size-2 shrink-0 rounded-full border border-outline-variant bg-surface-container-low"
+        className="size-2 shrink-0 rounded-full border border-line-strong bg-paper"
       />
     ) : null;
   }
@@ -64,12 +77,12 @@ export function TagDot({ color, showNone = false }: { color: TagColor; showNone?
 
 // 24px tall at least (WCAG 2.5.8), and outlined, so forced colors still draw the chip's edge.
 const CHIP =
-  "state-layer inline-flex min-h-6 max-w-full items-center gap-1 rounded-sm border border-outline-variant px-2 typescale-label-md text-on-surface-variant data-focus-visible:outline-solid";
+  "state-layer inline-flex min-h-6 max-w-full items-center gap-1.5 rounded-sm border border-transparent px-2 typescale-label-md forced-colors:border-solid";
 
 /** A tag as a link, usually to the list filtered by it. */
 function TagChip({ tag, href }: { tag: Pick<Tag, "name" | "color">; href: string }) {
   return (
-    <Link href={href} className={CHIP}>
+    <Link href={href} className={cn(CHIP, CHIP_COLORS[tag.color])}>
       <TagDot color={tag.color} />
       <span className="truncate">{tag.name}</span>
     </Link>
@@ -126,7 +139,7 @@ export interface TagPickerProps {
 /**
  * Chooses tags: a combo box that offers the user's tags as they type and can create a new one,
  * then the chosen ones as removable chips. A chip added after it opens pops in on the
- * expressive spring; under reduced motion it only fades.
+ * pop spring; under reduced motion it only fades.
  */
 export function TagPicker({
   label,
@@ -195,7 +208,7 @@ export function TagPicker({
         isDisabled={isDisabled}
         className="flex flex-col gap-1"
       >
-        <Label className="typescale-label-md text-on-surface-variant">{label}</Label>
+        <Label className="typescale-label-md text-ink-muted">{label}</Label>
         <Input
           placeholder="Add a tag"
           maxLength={maxLength}
@@ -210,43 +223,42 @@ export function TagPicker({
               create(typed);
             }
           }}
-          className="min-h-14 rounded-xs border border-outline bg-surface-container-high px-4 py-3 typescale-body-lg text-on-surface placeholder:text-on-surface-variant data-disabled:opacity-38 data-focused:border-primary data-invalid:border-error"
+          className="min-h-11 rounded-lg field-indicator px-3.5 py-2.5 typescale-body-lg text-ink outline-none placeholder:text-ink-faint data-disabled:opacity-40"
         />
         {errorMessage ? (
-          <Text slot="errorMessage" className="typescale-body-sm text-error">
+          <Text slot="errorMessage" className="typescale-body-sm text-danger">
             {errorMessage}
           </Text>
         ) : null}
         <Popover
           offset={4}
-          className="max-h-72 w-(--trigger-width) overflow-y-auto rounded-xs bg-surface-container shadow-2 forced-colors:border forced-colors:border-solid"
+          className="max-h-72 w-(--trigger-width) menu-pop overflow-y-auto rounded-lg-increased glass-float p-1.5 text-ink"
         >
           <ListBox
             renderEmptyState={() => (
-              <p className="px-4 py-3 typescale-body-md text-on-surface-variant">
-                Type to create a tag
-              </p>
+              <p className="px-3 py-3 typescale-body-md text-ink-muted">Type to create a tag</p>
             )}
-            className="flex flex-col py-2 outline-none"
+            className="flex flex-col outline-none"
           >
             {(item: (typeof items)[number]) => (
               <ListBoxItem
                 id={item.id}
                 textValue={item.name}
-                className="state-layer flex min-h-12 cursor-default items-center gap-3 px-4 typescale-body-lg text-on-surface outline-none data-focused:bg-surface-container-highest forced-colors:data-focused:outline-solid"
+                className="flex min-h-11 cursor-default items-center gap-2.5 rounded-md px-2.5 typescale-label-lg text-ink transition-colors outline-none data-focused:bg-line medium:min-h-9.5 forced-colors:data-focused:outline-solid"
               >
                 {({ isSelected }) =>
                   item.id === CREATE_KEY ? (
                     <>
-                      <Icon name="add" className="text-xl text-on-surface-variant" />
+                      <Plus className="size-4.5 text-ink-muted" />
                       <span className="truncate">Create &ldquo;{item.name}&rdquo;</span>
                     </>
                   ) : (
                     <>
-                      <Icon
-                        name={isSelected ? "check" : "sell"}
-                        className="text-xl text-on-surface-variant"
-                      />
+                      {isSelected ? (
+                        <Check className="size-4.5 text-ink-muted" />
+                      ) : (
+                        <TagIcon className="size-4.5 text-ink-muted" />
+                      )}
                       <span className="min-w-0 flex-1 truncate">{item.name}</span>
                       <TagDot color={item.color} />
                     </>
@@ -275,6 +287,7 @@ export function TagPicker({
                 href={tagHref?.(tagName)}
                 className={cn(
                   CHIP,
+                  CHIP_COLORS[colorOf(tagName)],
                   "cursor-default",
                   isDisabled ? null : "pe-0",
                   initial.has(keyOf(tagName)) ? null : "tag-pop",
@@ -286,9 +299,9 @@ export function TagPicker({
                   <Button
                     slot="remove"
                     aria-label={`Remove ${tagName}`}
-                    className="state-layer flex size-6 shrink-0 items-center justify-center rounded-full"
+                    className="state-layer flex size-6 shrink-0 items-center justify-center rounded-sm"
                   >
-                    <Icon name="close" className="text-base" />
+                    <X className="size-3.5" />
                   </Button>
                 )}
               </AriaTag>

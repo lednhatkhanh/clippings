@@ -26,6 +26,9 @@ import {
 
 import { ClippingList } from "./clipping-list.tsx";
 import { fetchRows } from "./fetch-row.ts";
+import { newRowIds } from "./new-rows.ts";
+
+const NO_NEW_ROWS: ReadonlySet<string> = new Set();
 
 /** How long typing pauses before the query is searched. */
 const SEARCH_DEBOUNCE_MS = 200;
@@ -46,7 +49,7 @@ function NoResults({
       <h2 className="typescale-title-lg">
         {q ? <>No clippings match &ldquo;{q}&rdquo;</> : "No clippings match these filters"}
       </h2>
-      <p className="max-w-100 typescale-body-md text-on-surface-variant">
+      <p className="max-w-100 typescale-body-md text-ink-muted">
         {q && hasFilters
           ? "Try fewer words, or clear the filters."
           : q
@@ -112,8 +115,12 @@ export function ClippingsBrowser({
   const current = isServerPage ? initialPage : isLoading ? undefined : data;
 
   // The rows on screen: the latest that arrived, kept while the next ones load.
-  const [shown, setShown] = useState({ key, page: initialPage });
-  if (current && current !== shown.page) setShown({ key, page: current });
+  // Rows that arrived in the same list (a save refreshes it) drop in; another list has none new.
+  const [shown, setShown] = useState({ key, page: initialPage, newIds: NO_NEW_ROWS });
+  if (current && current !== shown.page) {
+    const newIds = key === shown.key ? newRowIds(shown.page.rows, current.rows) : NO_NEW_ROWS;
+    setShown({ key, page: current, newIds });
+  }
 
   const isStale = !current || query.trim() !== searchedQuery.trim();
   const shownParams = new URLSearchParams(shown.key);
@@ -123,13 +130,24 @@ export function ClippingsBrowser({
 
   return (
     <div className="flex flex-col gap-3">
-      <SearchField
-        id={SEARCH_INPUT_ID}
-        aria-label="Search your clippings"
-        placeholder="Search your clippings"
-        value={query}
-        onChange={changeQuery}
-      />
+      <div className="relative">
+        <SearchField
+          id={SEARCH_INPUT_ID}
+          aria-label="Search your clippings"
+          placeholder="Search your clippings"
+          value={query}
+          onChange={changeQuery}
+        />
+        {/* The one key hint besides ⌘K; it gives way to the clear button once there is a query. */}
+        {query ? null : (
+          <kbd
+            aria-hidden="true"
+            className="pointer-events-none absolute end-3 top-1/2 hidden h-5.5 -translate-y-1/2 items-center rounded-sm bg-line px-1.5 typescale-label-sm font-mono text-ink-faint pointer-fine:inline-flex"
+          >
+            /
+          </kbd>
+        )}
+      </div>
       {tags.length > 0 ? (
         // The tags filtered by, from a chip: deselecting one widens the list again.
         <FilterChips
@@ -175,7 +193,7 @@ export function ClippingsBrowser({
         ) : null}
       </div>
 
-      <output className="block min-h-5 typescale-label-md text-on-surface-variant">
+      <output className="block min-h-5 typescale-label-md text-ink-faint">
         {error && !current
           ? "Couldn't search. Check your connection and keep typing to try again."
           : shownQuery && rows.length >= SEARCH_RESULT_LIMIT
@@ -201,6 +219,7 @@ export function ClippingsBrowser({
             query={shown.key}
             initialRows={rows}
             initialCursor={shown.page.nextCursor}
+            newIds={shown.newIds}
           />
         )}
       </div>

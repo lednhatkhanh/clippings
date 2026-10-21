@@ -3,7 +3,7 @@ import { createCn } from "cn/config";
 import { TYPESCALE_NAMES } from "./tokens/typescale.ts";
 
 const RADIUS_STEPS = ["lg-increased", "xl-increased", "xxl"];
-const ELEVATIONS = ["0", "1", "2", "3", "4", "5", "card"];
+const ELEVATIONS = ["none", "paper", "lift", "press", "glass", "float", "accent", "well"];
 
 /**
  * The only class helper. Registers the vocabulary that isn't in Tailwind's default config, so

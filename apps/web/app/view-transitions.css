@@ -1,7 +1,8 @@
 /*
  * Navigation motion: the classes `components/page-transition.tsx` hands to React's
- * `<ViewTransition>`. Timings follow M3's transition patterns (top level, forward and backward,
- * container transform, skeleton loaders); see docs/research/2026-10-18-motion.md §3.1 and §4.4.
+ * `<ViewTransition>`. The glass frame (rail, tab bar, header) holds still and only the paper under
+ * it changes: between sections it fades and drifts 10px in the direction of the move, going deeper
+ * it slides a little, and a clipping's sheet grows out of its row on the paper spring.
  */
 
 @keyframes vt-fade-in {
@@ -16,21 +17,28 @@
   }
 }
 
-@keyframes vt-scale-in {
+/* Travel: `--vt-drift` and `--vt-x` carry the sign, and the spatial factor zeroes them. */
+@keyframes vt-drift-from {
   from {
-    scale: 0.92;
+    translate: 0 var(--vt-drift);
   }
 }
 
-@keyframes vt-slide-in {
-  from {
-    translate: var(--vt-slide) 0;
-  }
-}
-
-@keyframes vt-slide-out {
+@keyframes vt-drift-to {
   to {
-    translate: var(--vt-slide) 0;
+    translate: 0 var(--vt-drift);
+  }
+}
+
+@keyframes vt-slide-from {
+  from {
+    translate: var(--vt-x) 0;
+  }
+}
+
+@keyframes vt-slide-to {
+  to {
+    translate: var(--vt-x) 0;
   }
 }
 
@@ -48,134 +56,143 @@
 }
 
 /*
- * The header and the navigation don't move: page content slides and scales beneath them, and
- * the old snapshot is hidden so the two never show at once.
+ * The header and the navigation don't move: page content changes beneath them, and the old
+ * snapshot is hidden so the two never show at once.
+ *
+ * Not during an appearance change (a theme or palette switch): then the frame crossfades with the
+ * page, so the glass changes color with everything else instead of snapping.
  */
-::view-transition-group(app-header),
-::view-transition-group(app-nav) {
+:root:not([data-appearance-transition])::view-transition-group(app-header),
+:root:not([data-appearance-transition])::view-transition-group(app-nav) {
   animation: none;
   z-index: 1;
 }
 
-::view-transition-old(app-header),
-::view-transition-old(app-nav) {
+:root:not([data-appearance-transition])::view-transition-old(app-header),
+:root:not([data-appearance-transition])::view-transition-old(app-nav) {
   display: none;
 }
 
-::view-transition-new(app-header),
-::view-transition-new(app-nav) {
+:root:not([data-appearance-transition])::view-transition-new(app-header),
+:root:not([data-appearance-transition])::view-transition-new(app-nav) {
   animation: none;
 }
 
 /*
- * Top level (Clippings, Tags, Settings): the old page fades out over the first 35% of 300 ms,
- * then the new one fades in while it scales from 0.92. Nothing slides.
+ * Between sections: the old paper fades out in 120 ms (ease-exit) while drifting 10px over 160,
+ * then the new paper fades in over 220 ms after a 90 ms beat and drifts back on the paper spring.
+ * Lower in the rail drifts up, higher drifts down.
  */
-::view-transition-old(.fade-through-out) {
-  animation: 105ms var(--md-sys-motion-easing-standard-accelerate) both vt-fade-out;
+::view-transition-old(.drift-out-up),
+::view-transition-old(.drift-out-down) {
+  animation:
+    120ms var(--motion-ease-exit) both vt-fade-out,
+    160ms var(--motion-ease-exit) both vt-drift-to;
 }
 
-::view-transition-new(.fade-through-in) {
+::view-transition-new(.drift-in-up),
+::view-transition-new(.drift-in-down) {
   animation:
-    195ms var(--md-sys-motion-easing-emphasized-decelerate) 105ms both vt-fade-in,
-    var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized) both vt-scale-in;
+    220ms var(--motion-ease-settle) 90ms both vt-fade-in,
+    340ms var(--motion-spring-paper) 90ms both vt-drift-from;
+}
+
+::view-transition-old(.drift-out-up),
+::view-transition-new(.drift-in-down) {
+  --vt-drift: calc(-10px * var(--motion-spatial-factor, 1));
+}
+
+::view-transition-old(.drift-out-down),
+::view-transition-new(.drift-in-up) {
+  --vt-drift: calc(10px * var(--motion-spatial-factor, 1));
 }
 
 /*
- * Forward and backward (shared axis x): 30 px along the axis with the same fade-through, 450 ms
- * emphasized. Forward leaves to the left and arrives from the right; back mirrors it.
+ * Going deeper and back: the page slides along the x axis. Forward leaves a little to the left
+ * and arrives from the right, 36px on the paper spring; back mirrors it.
  */
-::view-transition-old(.nav-forward),
-::view-transition-old(.nav-back) {
+::view-transition-old(.slide-out-forward),
+::view-transition-old(.slide-out-back) {
   animation:
-    158ms var(--md-sys-motion-easing-standard-accelerate) both vt-fade-out,
-    var(--md-sys-motion-duration-long1) var(--md-sys-motion-easing-emphasized) both vt-slide-out;
+    160ms var(--motion-ease-exit) both vt-fade-out,
+    var(--motion-duration-calm) var(--motion-spring-paper) both vt-slide-to;
 }
 
-::view-transition-new(.nav-forward),
-::view-transition-new(.nav-back) {
+::view-transition-new(.slide-in-forward),
+::view-transition-new(.slide-in-back) {
   animation:
-    292ms var(--md-sys-motion-easing-emphasized-decelerate) 158ms both vt-fade-in,
-    var(--md-sys-motion-duration-long1) var(--md-sys-motion-easing-emphasized) both vt-slide-in;
+    260ms var(--motion-ease-settle) 40ms both vt-fade-in,
+    var(--motion-duration-calm) var(--motion-spring-paper) 40ms both vt-slide-from;
 }
 
-::view-transition-old(.nav-forward),
-::view-transition-new(.nav-back) {
-  --vt-slide: -30px;
+::view-transition-old(.slide-out-forward),
+::view-transition-new(.slide-in-back) {
+  --vt-x: calc(-24px * var(--motion-spatial-factor, 1));
 }
 
-::view-transition-new(.nav-forward),
-::view-transition-old(.nav-back) {
-  --vt-slide: 30px;
+::view-transition-new(.slide-in-forward),
+::view-transition-old(.slide-out-back) {
+  --vt-x: calc(36px * var(--motion-spatial-factor, 1));
 }
 
 /*
- * Container transform: the list row's sheet grows into the detail sheet, 500 ms emphasized, and
- * shrinks back in 400 ms. The incoming snapshot fades in over the first quarter, on top.
+ * Container transform: the list row's sheet grows into the detail sheet and shrinks back, 380 ms
+ * on the paper spring either way. The sheet's body holds until 140 ms, then the two snapshots
+ * cross-fade linearly so they always add up to one.
  */
-::view-transition-group(.morph-in) {
-  animation-duration: var(--md-sys-motion-duration-long2);
-  animation-timing-function: var(--md-sys-motion-easing-emphasized);
-}
-
+::view-transition-group(.morph-in),
 ::view-transition-group(.morph-back) {
-  animation-duration: var(--md-sys-motion-duration-medium4);
-  animation-timing-function: var(--md-sys-motion-easing-emphasized);
+  animation-duration: var(--motion-duration-calm);
+  animation-timing-function: var(--motion-spring-paper);
 }
 
-::view-transition-old(.morph-in) {
-  animation: var(--md-sys-motion-duration-short3) linear both vt-fade-out;
-}
-
-::view-transition-new(.morph-in) {
-  animation: var(--md-sys-motion-duration-short3) linear both vt-fade-in;
-}
-
+::view-transition-old(.morph-in),
 ::view-transition-old(.morph-back) {
-  animation: var(--md-sys-motion-duration-short2) linear both vt-fade-out;
+  animation: 240ms linear 140ms both vt-fade-out;
 }
 
+::view-transition-new(.morph-in),
 ::view-transition-new(.morph-back) {
-  animation: var(--md-sys-motion-duration-short2) linear both vt-fade-in;
+  animation: 240ms linear 140ms both vt-fade-in;
 }
 
 /*
- * Suspense reveals: the skeleton fades out over 150 ms while the content fades in over 210 ms. The
- * content doesn't wait, since some boundaries (Settings, Related) have no skeleton to wait for.
+ * Suspense reveals: the skeleton fades out over 120 ms while the content fades in over 220 ms.
+ * The content doesn't wait, since some boundaries (Settings, Related) have no skeleton to wait for.
  */
 ::view-transition-old(.skeleton-out) {
-  animation: var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard-accelerate)
-    both vt-fade-out;
+  animation: 120ms var(--motion-ease-exit) both vt-fade-out;
 }
 
 ::view-transition-new(.content-in) {
-  animation: 210ms var(--md-sys-motion-easing-standard-decelerate) both vt-fade-in;
+  animation: 220ms var(--motion-ease-settle) both vt-fade-in;
 }
 
 /*
- * Reduced motion: no group geometry, and slides, scales and morphs become 150 ms crossfades.
- * Suspense reveals are fades already, so they stay.
+ * Reduced motion: every page change is a 140 ms cross-fade. Nothing travels and the sheet's
+ * geometry jumps. Suspense reveals are fades already, so they stay.
  */
 @media (prefers-reduced-motion: reduce) {
-  ::view-transition-group(*),
   ::view-transition-group(.morph-in),
   ::view-transition-group(.morph-back) {
     animation-duration: 0s;
   }
 
-  ::view-transition-old(.fade-through-out),
-  ::view-transition-old(.nav-forward),
-  ::view-transition-old(.nav-back),
+  ::view-transition-old(.drift-out-up),
+  ::view-transition-old(.drift-out-down),
+  ::view-transition-old(.slide-out-forward),
+  ::view-transition-old(.slide-out-back),
   ::view-transition-old(.morph-in),
   ::view-transition-old(.morph-back) {
-    animation: var(--md-sys-motion-duration-short3) linear both vt-fade-out;
+    animation: 140ms linear both vt-fade-out;
   }
 
-  ::view-transition-new(.fade-through-in),
-  ::view-transition-new(.nav-forward),
-  ::view-transition-new(.nav-back),
+  ::view-transition-new(.drift-in-up),
+  ::view-transition-new(.drift-in-down),
+  ::view-transition-new(.slide-in-forward),
+  ::view-transition-new(.slide-in-back),
   ::view-transition-new(.morph-in),
   ::view-transition-new(.morph-back) {
-    animation: var(--md-sys-motion-duration-short3) linear both vt-fade-in;
+    animation: 140ms linear both vt-fade-in;
   }
 }

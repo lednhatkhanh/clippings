@@ -1,8 +1,9 @@
+import { ExternalLink } from "lucide-react";
 import { Suspense, use, useState } from "react";
 import { browser, type Browser } from "wxt/browser";
 
 import { LOOKUP_PERMISSIONS, SHOW_SAVED_KEY, showsSavedPages } from "@/lib/settings.ts";
-import { Button, Icon, Segment, SegmentedButtons } from "@clippings/ui";
+import { Button, Segment, SegmentedButtons } from "@clippings/ui";
 
 /** Read before React renders, and read with `use`. */
 const loading = Promise.all([showsSavedPages(), browser.commands.getAll()]);
@@ -41,11 +42,11 @@ function ShowSavedSetting({ initial }: { initial: boolean }) {
   }
 
   return (
-    <section aria-labelledby="show-saved" className="flex flex-col gap-3">
-      <h2 id="show-saved" className="typescale-title-md">
+    <section aria-labelledby="show-saved" className="flex flex-col gap-3 rounded-lg paper p-5">
+      <h2 id="show-saved" className="typescale-title-lg">
         Show when a page is already saved
       </h2>
-      <p className="typescale-body-md text-on-surface-variant">
+      <p className="typescale-body-md text-ink-muted">
         The toolbar icon fills in on pages you&apos;ve saved. To know, Clippings checks each page
         you open with your account. While this is off, Clippings only hears about the pages you
         save.
@@ -60,7 +61,7 @@ function ShowSavedSetting({ initial }: { initial: boolean }) {
         <Segment id="on">On</Segment>
       </SegmentedButtons>
       {problem && (
-        <p role="alert" className="typescale-body-sm text-error">
+        <p role="alert" className="typescale-body-sm text-danger">
           {problem}
         </p>
       )}
@@ -70,8 +71,8 @@ function ShowSavedSetting({ initial }: { initial: boolean }) {
 
 function Shortcuts({ commands }: { commands: Browser.commands.Command[] }) {
   return (
-    <section aria-labelledby="shortcuts" className="flex flex-col gap-3">
-      <h2 id="shortcuts" className="typescale-title-md">
+    <section aria-labelledby="shortcuts" className="flex flex-col gap-3 rounded-lg paper p-5">
+      <h2 id="shortcuts" className="typescale-title-lg">
         Keyboard shortcuts
       </h2>
       <dl className="flex flex-col gap-2">
@@ -80,20 +81,20 @@ function Shortcuts({ commands }: { commands: Browser.commands.Command[] }) {
             <dt className="typescale-body-md">
               {SHORTCUT_NAMES[command.name ?? ""] ?? command.description}
             </dt>
-            <dd className="typescale-label-lg text-on-surface-variant">
+            <dd className="typescale-label-lg font-mono text-ink-muted">
               {command.shortcut || "Not set"}
             </dd>
           </div>
         ))}
       </dl>
       <Button
-        variant="tonal"
+        variant="outlined"
         className="self-start"
         // Chrome's own page: an extension can open it in a tab, though not link to it.
         onPress={() => void browser.tabs.create({ url: "chrome://extensions/shortcuts" })}
       >
         Change shortcuts
-        <Icon name="open_in_new" />
+        <ExternalLink className="size-4.5" />
       </Button>
     </section>
   );
@@ -111,7 +112,7 @@ function Loaded() {
 
 export function Options() {
   return (
-    <main className="mx-auto flex max-w-xl flex-col gap-8 p-6">
+    <main className="mx-auto flex max-w-xl flex-col gap-6 p-6">
       <h1 className="typescale-headline-sm">Clippings settings</h1>
       <Suspense>
         <Loaded />

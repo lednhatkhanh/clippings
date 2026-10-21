@@ -8,7 +8,7 @@ export const metadata: Metadata = { title: "Not found · Clippings" };
 /** Any address the app doesn't have. It renders without the app shell, so it needs no session. */
 export default function NotFound() {
   return (
-    <main className="min-h-dvh bg-surface px-4 text-on-surface">
+    <main className="flex min-h-dvh items-center justify-center px-4 text-ink">
       <StatusPage
         illustration={<ClippingsStackIllustration className="h-auto w-50" />}
         title="This page isn't in the scrapbook."
