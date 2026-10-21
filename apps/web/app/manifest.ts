@@ -40,14 +40,14 @@ export default function manifest(): MetadataRoute.Manifest {
     ],
     screenshots: [
       {
-        src: "/screenshots/narrow.png",
+        src: "/screenshots/narrow-paper.png",
         sizes: "780x1688",
         type: "image/png",
         form_factor: "narrow",
         label: "Your clippings on a phone",
       },
       {
-        src: "/screenshots/wide.png",
+        src: "/screenshots/wide-paper.png",
         sizes: "1440x900",
         type: "image/png",
         form_factor: "wide",
