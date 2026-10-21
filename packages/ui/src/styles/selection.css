@@ -51,12 +51,13 @@
 
 /*
  * RAC's `TabPanels`: grows or shrinks to the new panel. Only the block axis clips, so focus rings
- * at the sides still show.
+ * at the sides still show, and the bottom clips 2rem out, so the paper shadow under the last card
+ * (it reaches 28px) still shows too.
  */
 @utility tab-panels {
   position: relative;
   height: var(--tab-panel-height);
-  overflow-y: clip;
+  clip-path: inset(0 -100vmax -2rem);
   transition: height var(--motion-spring-paper-duration) var(--motion-spring-paper);
 }
 
