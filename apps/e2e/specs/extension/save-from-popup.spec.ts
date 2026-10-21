@@ -17,9 +17,13 @@ const ARTICLE = `${BASE_URL}/e2e-article`;
  * The context's page whose address matches, once it is there. Not the next `page` event: the
  * extension's welcome page opens on install and may be the next one.
  */
-function pageAt(context: BrowserContext, matches: (url: string) => boolean): Promise<Page> {
-  return test.step(
-    "wait for the page",
+function pageAt(
+  context: BrowserContext,
+  what: string,
+  matches: (url: string) => boolean,
+): Promise<Page> {
+  return base.step(
+    `wait for ${what}`,
     async () => {
       await expect
         .poll(() => context.pages().some((candidate) => matches(candidate.url())))
@@ -86,7 +90,7 @@ const test = base.extend<{
           await serviceWorker.evaluate(async (url) => {
             await chrome.windows.create({ url, type: "popup" });
           }, address);
-          return pageAt(context, (url) => url === address);
+          return pageAt(context, "the popup", (url) => url === address);
         },
         { box: true },
       ),
@@ -108,19 +112,18 @@ test.describe("the extension", () => {
     // `chrome.identity.launchWebAuthFlow` one, which Playwright sees as a page of the context.
     await test.step("allow the connection on the consent page", async () => {
       await popup.getByRole("button", { name: "Sign in" }).click();
-      const consent = await pageAt(context, (url) => url.startsWith(`${BASE_URL}/connect?`));
+      const consent = await pageAt(context, "the consent page", (url) =>
+        url.startsWith(`${BASE_URL}/connect?`),
+      );
       await expect(consent.getByText(user.email)).toBeVisible();
       await expect(consent.getByText("the Clippings extension")).toBeVisible();
       await consent.getByRole("button", { name: "Allow" }).click();
     });
 
     // The authorization code goes back to the extension, which trades it for tokens and saves.
-    await test.step("the popup saves the page", async () => {
-      await expect(popup.getByRole("heading", { name: "Saved" })).toBeVisible();
-    });
+    await expect(popup.getByRole("heading", { name: "Saved" })).toBeVisible();
 
-    // Saved for this user, by the extension, in the web app's list.
-    await test.step("the clipping is in the user's list", async () => {
+    await test.step("the web app lists it for this user, saved by the extension", async () => {
       await expect
         .poll(async () => (await clippings.listClippings(user.id, {})).items.map((c) => c.source))
         .toEqual(["extension"]);
@@ -147,7 +150,9 @@ test.describe("the extension", () => {
         async () => {
           const popup = await openPopup();
           await popup.getByRole("button", { name: "Sign in" }).click();
-          const consent = await pageAt(context, (url) => url.startsWith(`${BASE_URL}/connect?`));
+          const consent = await pageAt(context, "the consent page", (url) =>
+            url.startsWith(`${BASE_URL}/connect?`),
+          );
           await expect(consent.getByRole("button", { name: "Deny" })).toBeVisible();
           await beforeDeny?.();
           await consent.getByRole("button", { name: "Deny" }).click();

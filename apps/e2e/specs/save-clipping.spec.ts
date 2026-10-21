@@ -5,12 +5,18 @@ import { expect, test } from "../support/fixtures.ts";
 /** The loopback address the page fetcher refuses, so nothing here reaches the internet. */
 const PAGE = "http://127.0.0.1:9/article";
 
-async function openNewClipping(page: Page) {
-  await page.goto("/");
-  await page.getByRole("button", { name: "New clipping" }).click();
-  const dialog = page.getByRole("dialog", { name: "New clipping" });
-  await expect(dialog).toBeVisible();
-  return dialog;
+function openNewClipping(page: Page) {
+  return test.step(
+    "open New clipping",
+    async () => {
+      await page.goto("/");
+      await page.getByRole("button", { name: "New clipping" }).click();
+      const dialog = page.getByRole("dialog", { name: "New clipping" });
+      await expect(dialog).toBeVisible();
+      return dialog;
+    },
+    { box: true },
+  );
 }
 
 test.describe("saving a clipping", () => {
