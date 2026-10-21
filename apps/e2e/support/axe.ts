@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import type { Page } from "@playwright/test";
+import { test, type Page } from "@playwright/test";
 
 /** WCAG 2.0 and 2.1, levels A and AA: the bar the app holds itself to. */
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
@@ -21,13 +21,19 @@ const SETTLE_ANIMATIONS = `Promise.all(
  * The accessibility violations axe finds on the page as it is now, reduced to what a failure needs
  * to show: the rule, its impact and the elements it hit.
  */
-export async function wcagViolations(page: Page) {
-  await page.evaluate(SETTLE_ANIMATIONS);
-  const { violations } = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
-  return violations.map(({ id, impact, help, nodes }) => ({
-    id,
-    impact,
-    help,
-    targets: nodes.map((node) => node.target.join(" ")),
-  }));
+export function wcagViolations(page: Page) {
+  return test.step(
+    "scan with axe",
+    async () => {
+      await page.evaluate(SETTLE_ANIMATIONS);
+      const { violations } = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+      return violations.map(({ id, impact, help, nodes }) => ({
+        id,
+        impact,
+        help,
+        targets: nodes.map((node) => node.target.join(" ")),
+      }));
+    },
+    { box: true },
+  );
 }
