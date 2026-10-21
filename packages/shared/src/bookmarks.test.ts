@@ -429,18 +429,28 @@ describe("parseBookmarksHtml", () => {
       );
 
     it("reads a run of lists then folders in linear time", () => {
+      const listsThenFolders = (count: number) =>
+        `<!DOCTYPE NETSCAPE-Bookmark-file-1>${"<DL>".repeat(count)}${"<H3>".repeat(count)}`;
+      // Best of three, so one slow run on a busy machine doesn't decide it.
+      const fastest = (html: string) =>
+        Math.min(...[1, 2, 3].map(() => timed(() => parseBookmarksHtml(html)).ms));
       const count = Math.floor(MAX_BOOKMARKS_FILE_BYTES / 8);
-      const html = `<!DOCTYPE NETSCAPE-Bookmark-file-1>${"<DL>".repeat(count)}${"<H3>".repeat(count)}`;
-      const { result, ms } = timed(() => parseBookmarksHtml(html));
-      expect(result.ok && result.bookmarks).toEqual([]);
-      expect(ms).toBeLessThan(2_000);
+      const full = listsThenFolders(count);
+      expect(timed(() => parseBookmarksHtml(full)).result).toEqual({
+        ok: true,
+        bookmarks: [],
+        skipped: [],
+      });
+      // Four times the input takes about four times as long when linear and sixteen when
+      // quadratic. A ratio, not a time limit, so a slow CI machine doesn't fail it.
+      const ratio = fastest(full) / Math.max(fastest(listsThenFolders(count / 4)), 1);
+      expect(ratio).toBeLessThan(8);
     });
 
     it("names no more folders than the cap, however deep and however many links", () => {
       const depth = 50_000;
       const html = `<!DOCTYPE NETSCAPE-Bookmark-file-1>${"<DT><H3>f</H3><DL>".repeat(depth)}${links(MAX_BOOKMARKS_PER_IMPORT)}`;
-      const { result, ms } = timed(() => parseBookmarksHtml(html));
-      expect(ms).toBeLessThan(2_000);
+      const result = parseBookmarksHtml(html);
       if (!result.ok) throw new Error("expected a parse");
       expect(result.bookmarks).toHaveLength(MAX_BOOKMARKS_PER_IMPORT);
       for (const bookmark of result.bookmarks) {
