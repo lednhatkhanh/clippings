@@ -1,7 +1,13 @@
 import { TYPESCALE_NAMES, TYPESCALE_ROLES, type TypescaleName } from "./typescale.ts";
 
 const rem = (px: number) => `${px / 16}rem`;
-const prop = (name: TypescaleName, part: string) => `--md-sys-typescale-${name}-${part}`;
+const prop = (name: TypescaleName, part: string) => `--typescale-${name}-${part}`;
+
+/** Each family's stack: the app's loaded font (`--typeface-*`, set by next/font), then fallbacks. */
+const FAMILIES = {
+  brand: 'var(--typeface-brand, "Fraunces"), Georgia, serif',
+  plain: 'var(--typeface-plain, "Geist"), system-ui, sans-serif',
+} as const;
 
 /**
  * `typescale.css`: the role properties, their medium/compact overrides, and one `typescale-*`
@@ -16,9 +22,8 @@ export const renderTypescaleCss = (): string => {
 
   for (const name of TYPESCALE_NAMES) {
     const role = TYPESCALE_ROLES[name];
-    const family = role.family === "brand" ? "--md-ref-typeface-brand" : "--md-ref-typeface-plain";
     base.push(
-      `  ${prop(name, "font")}: var(${family});`,
+      `  ${prop(name, "font")}: ${FAMILIES[role.family]};`,
       `  ${prop(name, "size")}: ${rem(role.size)};`,
       `  ${prop(name, "line-height")}: ${rem(role.lineHeight)};`,
       `  ${prop(name, "tracking")}: ${rem(role.tracking)};`,

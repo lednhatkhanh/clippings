@@ -17,6 +17,8 @@ export interface ClippingRowData {
   /** ISO 8601, for the `<time>` element. */
   dateTime: string;
   status: ClippingStatus;
+  /** The page's summary once it has been read, shown under the title when there's no snippet. */
+  summary: string | null;
   tags: Tag[];
   /** Where it matched, when the row is a search result. */
   highlights?: SearchHighlights;
@@ -50,6 +52,7 @@ export function toRow(
     dateLabel: formatClippingDate(clipping.createdAt, now),
     dateTime: clipping.createdAt,
     status: clipping.status,
+    summary: clipping.summary,
     tags: clipping.tags,
   };
 }

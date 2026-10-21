@@ -1,8 +1,9 @@
+import { Check } from "lucide-react";
 import { Suspense, use, useState, type ReactNode } from "react";
 import { browser, type Browser } from "wxt/browser";
 
 import { ask, SIGN_IN_PROBLEMS, type SignInProblem } from "@/lib/messages.ts";
-import { Button, ClippingsStackIllustration, Icon } from "@clippings/ui";
+import { Button, ClippingsStackIllustration } from "@clippings/ui";
 
 /** Where Chrome lets the user choose the extension's keyboard shortcuts. */
 const SHORTCUTS_PAGE = "chrome://extensions/shortcuts";
@@ -23,15 +24,15 @@ const loadingStatus = ask({ type: "status" });
 
 function Step({ number, title, children }: { number: number; title: string; children: ReactNode }) {
   return (
-    <li className="flex gap-4">
+    <li className="flex gap-4 rounded-lg paper p-5">
       <span
         aria-hidden
-        className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary-container typescale-label-lg text-on-primary-container"
+        className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-soft typescale-label-lg text-on-accent-soft"
       >
         {number}
       </span>
       <div className="flex flex-col gap-2">
-        <h2 className="typescale-title-md">{title}</h2>
+        <h2 className="typescale-title-lg">{title}</h2>
         {children}
       </div>
     </li>
@@ -43,11 +44,11 @@ function Shortcuts() {
   if (commands.length === 0) {
     return (
       <>
-        <p className="typescale-body-md text-on-surface-variant">
+        <p className="typescale-body-md text-ink-muted">
           Choose a keyboard shortcut to save the page you&apos;re on without reaching for the mouse.
         </p>
         <Button
-          variant="tonal"
+          variant="outlined"
           className="self-start"
           onPress={() => void browser.tabs.create({ url: SHORTCUTS_PAGE })}
         >
@@ -60,10 +61,10 @@ function Shortcuts() {
     <ul className="flex flex-col gap-2">
       {commands.map((command) => (
         <li key={command.name} className="flex items-center gap-3 typescale-body-md">
-          <kbd className="rounded-sm bg-surface-container-high px-2 py-0.5 typescale-label-lg font-mono">
+          <kbd className="rounded-sm bg-ground-sunk px-2 py-0.5 typescale-label-lg font-mono">
             {command.shortcut}
           </kbd>
-          <span className="text-on-surface-variant">
+          <span className="text-ink-muted">
             {command.name === OPEN_POPUP
               ? "saves the page you're on"
               : (command.description ?? command.name)}
@@ -92,8 +93,8 @@ function SignIn() {
   if (signedIn) {
     return (
       <output className="flex items-center gap-2 typescale-body-md">
-        <span className="inline-flex text-primary">
-          <Icon name="check" />
+        <span className="inline-flex text-accent-ink">
+          <Check className="size-5" />
         </span>
         You&apos;re signed in. Pages you save show up in Clippings.
       </output>
@@ -102,11 +103,11 @@ function SignIn() {
   return (
     <>
       {problem ? (
-        <p role="alert" className="typescale-body-md text-error">
+        <p role="alert" className="typescale-body-md text-danger">
           {SIGN_IN_PROBLEMS[problem]}
         </p>
       ) : (
-        <p className="typescale-body-md text-on-surface-variant">
+        <p className="typescale-body-md text-ink-muted">
           Use the Google account you use for Clippings.
         </p>
       )}
@@ -123,14 +124,14 @@ export function Onboarding() {
       <header className="flex flex-col items-start gap-4">
         <ClippingsStackIllustration />
         <h1 className="typescale-headline-md">Clippings is ready</h1>
-        <p className="typescale-body-lg text-on-surface-variant">
+        <p className="typescale-body-lg text-ink-muted">
           Save the page you&apos;re on, with a note and tags, in one click. Three things to get
           going:
         </p>
       </header>
-      <ol className="flex flex-col gap-8">
+      <ol className="flex flex-col gap-4">
         <Step number={1} title="Pin it to the toolbar">
-          <p className="typescale-body-md text-on-surface-variant">
+          <p className="typescale-body-md text-ink-muted">
             Click the puzzle-piece Extensions button at the right of Chrome&apos;s toolbar, then the
             pin next to Clippings. Its button stays in the toolbar, one click from any page.
           </p>

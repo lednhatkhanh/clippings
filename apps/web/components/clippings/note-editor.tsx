@@ -7,10 +7,10 @@ import { useOnline } from "@/components/online-status.tsx";
 import { MAX_NOTE_LENGTH } from "@clippings/shared";
 import { TextField } from "@clippings/ui";
 
+import { SaveStatus, type SaveState } from "./save-status.tsx";
+
 /** Typing pauses this long before the note is saved; leaving the field saves at once. */
 const AUTOSAVE_AFTER_MS = 400;
-
-type SaveState = "idle" | "saving" | "saved" | "failed";
 
 const STATUS_TEXT: Record<SaveState, string> = {
   idle: "",
@@ -103,10 +103,7 @@ export function NoteEditor({ clippingId, note }: { clippingId: string; note: str
           else event.continuePropagation();
         }}
       />
-      {/* An <output> is a polite live region, so the status is announced without moving focus. */}
-      <output aria-live="polite" className="min-h-4 typescale-label-sm text-on-surface-variant">
-        {STATUS_TEXT[state]}
-      </output>
+      <SaveStatus state={state} text={STATUS_TEXT[state]} />
     </div>
   );
 }

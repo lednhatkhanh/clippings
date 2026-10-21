@@ -20,56 +20,38 @@
 }
 
 @theme inline {
+  /*
+   * Colors. Ground is the page and ground-sunk the wells cut into it (tracks, skeletons); paper is
+   * a card's face, paper-shade its lower edge. Ink is text: muted for supporting text, faint for
+   * meta. Line divides, line-strong outlines a chip; edge is a control's boundary, 3:1 or more. The accent fills (`bg-accent
+   * text-on-accent`), tints (`bg-accent-soft text-on-accent-soft`) and writes (`text-accent-ink`:
+   * links, the focus ring). Danger is destructive. Glass is for the floating layers only.
+   */
   --color-*: initial;
-  --color-primary: var(--md-sys-color-primary);
-  --color-on-primary: var(--md-sys-color-on-primary);
-  --color-primary-container: var(--md-sys-color-primary-container);
-  --color-on-primary-container: var(--md-sys-color-on-primary-container);
-  --color-secondary: var(--md-sys-color-secondary);
-  --color-on-secondary: var(--md-sys-color-on-secondary);
-  --color-secondary-container: var(--md-sys-color-secondary-container);
-  --color-on-secondary-container: var(--md-sys-color-on-secondary-container);
-  --color-tertiary: var(--md-sys-color-tertiary);
-  --color-on-tertiary: var(--md-sys-color-on-tertiary);
-  --color-tertiary-container: var(--md-sys-color-tertiary-container);
-  --color-on-tertiary-container: var(--md-sys-color-on-tertiary-container);
-  --color-error: var(--md-sys-color-error);
-  --color-on-error: var(--md-sys-color-on-error);
-  --color-error-container: var(--md-sys-color-error-container);
-  --color-on-error-container: var(--md-sys-color-on-error-container);
-  --color-background: var(--md-sys-color-background);
-  --color-on-background: var(--md-sys-color-on-background);
-  --color-surface: var(--md-sys-color-surface);
-  --color-on-surface: var(--md-sys-color-on-surface);
-  --color-surface-variant: var(--md-sys-color-surface-variant);
-  --color-on-surface-variant: var(--md-sys-color-on-surface-variant);
-  --color-outline: var(--md-sys-color-outline);
-  --color-outline-variant: var(--md-sys-color-outline-variant);
-  --color-shadow: var(--md-sys-color-shadow);
-  --color-scrim: var(--md-sys-color-scrim);
-  --color-inverse-surface: var(--md-sys-color-inverse-surface);
-  --color-inverse-on-surface: var(--md-sys-color-inverse-on-surface);
-  --color-inverse-primary: var(--md-sys-color-inverse-primary);
-  --color-primary-fixed: var(--md-sys-color-primary-fixed);
-  --color-on-primary-fixed: var(--md-sys-color-on-primary-fixed);
-  --color-primary-fixed-dim: var(--md-sys-color-primary-fixed-dim);
-  --color-on-primary-fixed-variant: var(--md-sys-color-on-primary-fixed-variant);
-  --color-secondary-fixed: var(--md-sys-color-secondary-fixed);
-  --color-on-secondary-fixed: var(--md-sys-color-on-secondary-fixed);
-  --color-secondary-fixed-dim: var(--md-sys-color-secondary-fixed-dim);
-  --color-on-secondary-fixed-variant: var(--md-sys-color-on-secondary-fixed-variant);
-  --color-tertiary-fixed: var(--md-sys-color-tertiary-fixed);
-  --color-on-tertiary-fixed: var(--md-sys-color-on-tertiary-fixed);
-  --color-tertiary-fixed-dim: var(--md-sys-color-tertiary-fixed-dim);
-  --color-on-tertiary-fixed-variant: var(--md-sys-color-on-tertiary-fixed-variant);
-  --color-surface-dim: var(--md-sys-color-surface-dim);
-  --color-surface-bright: var(--md-sys-color-surface-bright);
-  --color-surface-container-lowest: var(--md-sys-color-surface-container-lowest);
-  --color-surface-container-low: var(--md-sys-color-surface-container-low);
-  --color-surface-container: var(--md-sys-color-surface-container);
-  --color-surface-container-high: var(--md-sys-color-surface-container-high);
-  --color-surface-container-highest: var(--md-sys-color-surface-container-highest);
-  --color-surface-tint: var(--md-sys-color-surface-tint);
+  --color-ground: var(--pg-ground);
+  --color-ground-sunk: var(--pg-ground-sunk);
+  --color-paper: var(--pg-paper);
+  --color-paper-shade: var(--pg-paper-shade);
+  --color-ink: var(--pg-ink);
+  --color-ink-muted: var(--pg-ink-muted);
+  --color-ink-faint: var(--pg-ink-faint);
+  --color-line: var(--pg-line);
+  --color-line-strong: var(--pg-line-strong);
+  --color-edge: var(--pg-edge);
+  --color-accent: var(--pg-accent);
+  --color-accent-top: var(--pg-accent-top);
+  --color-on-accent: var(--pg-on-accent);
+  --color-accent-soft: var(--pg-accent-soft);
+  --color-on-accent-soft: var(--pg-on-accent-soft);
+  --color-accent-ink: var(--pg-accent-ink);
+  --color-danger: var(--pg-danger);
+  --color-on-danger: var(--pg-on-danger);
+  --color-danger-soft: var(--pg-danger-soft);
+  --color-on-danger-soft: var(--pg-on-danger-soft);
+  --color-glass: var(--pg-glass);
+  --color-glass-strong: var(--pg-glass-strong);
+  --color-glass-edge: var(--pg-glass-edge);
+  --color-scrim: var(--pg-scrim);
 
   /* Tag colors: `bg-tag-red text-on-tag-red`, with `bg-tag-red-dot` for the 8px dot */
   --color-tag-red: var(--tag-red-container);
@@ -97,99 +79,92 @@
   --color-on-tag-pink: var(--tag-pink-on-container);
   --color-tag-pink-dot: var(--tag-pink-dot);
 
-  /* Palette swatches for the settings page: `bg-palette-ochre`, `bg-palette-ochre-container` */
-  --color-palette-olive: var(--palette-olive-primary);
-  --color-palette-olive-container: var(--palette-olive-primary-container);
-  --color-palette-ochre: var(--palette-ochre-primary);
-  --color-palette-ochre-container: var(--palette-ochre-primary-container);
-  --color-palette-terracotta: var(--palette-terracotta-primary);
-  --color-palette-terracotta-container: var(--palette-terracotta-primary-container);
-  --color-palette-ink: var(--palette-ink-primary);
-  --color-palette-ink-container: var(--palette-ink-primary-container);
+  /*
+   * Accent swatches for the settings page, whatever palette is active: `bg-palette-ochre` (the
+   * fill), `from-palette-ochre-top`, `text-on-palette-ochre`, `bg-palette-ochre-soft`.
+   */
+  --color-palette-olive: var(--palette-olive-accent);
+  --color-palette-olive-top: var(--palette-olive-accent-top);
+  --color-on-palette-olive: var(--palette-olive-on-accent);
+  --color-palette-olive-soft: var(--palette-olive-soft);
+  --color-palette-ochre: var(--palette-ochre-accent);
+  --color-palette-ochre-top: var(--palette-ochre-accent-top);
+  --color-on-palette-ochre: var(--palette-ochre-on-accent);
+  --color-palette-ochre-soft: var(--palette-ochre-soft);
+  --color-palette-terracotta: var(--palette-terracotta-accent);
+  --color-palette-terracotta-top: var(--palette-terracotta-accent-top);
+  --color-on-palette-terracotta: var(--palette-terracotta-on-accent);
+  --color-palette-terracotta-soft: var(--palette-terracotta-soft);
+  --color-palette-ink: var(--palette-ink-accent);
+  --color-palette-ink-top: var(--palette-ink-accent-top);
+  --color-on-palette-ink: var(--palette-ink-on-accent);
+  --color-palette-ink-soft: var(--palette-ink-soft);
 
   --font-*: initial;
-  --font-serif: var(--md-ref-typeface-brand, "Literata", Georgia, serif);
-  --font-sans: var(--md-ref-typeface-plain, "Roboto Flex", system-ui, sans-serif);
-  --font-mono: var(--md-ref-typeface-mono, "Roboto Mono", ui-monospace, monospace);
+  --font-serif: var(--typeface-brand, "Fraunces"), Georgia, serif;
+  --font-sans: var(--typeface-plain, "Geist"), system-ui, sans-serif;
+  --font-mono: var(--typeface-mono, "Geist Mono"), ui-monospace, monospace;
 
-  --spacing-row-block: var(--md-sys-density-row-block);
-  --spacing-row-gap: var(--md-sys-density-row-gap);
+  --spacing-row-block: var(--density-row-block);
+  --spacing-row-gap: var(--density-row-gap);
 
   --radius-*: initial;
-  --radius-none: var(--md-sys-shape-corner-none);
-  --radius-xs: var(--md-sys-shape-corner-extra-small);
-  --radius-sm: var(--md-sys-shape-corner-small);
-  --radius-md: var(--md-sys-shape-corner-medium);
-  --radius-lg: var(--md-sys-shape-corner-large);
-  --radius-lg-increased: var(--md-sys-shape-corner-large-increased);
-  --radius-xl: var(--md-sys-shape-corner-extra-large);
-  --radius-xl-increased: var(--md-sys-shape-corner-extra-large-increased);
-  --radius-xxl: var(--md-sys-shape-corner-extra-extra-large);
-  --radius-full: var(--md-sys-shape-corner-full);
+  --radius-none: var(--shape-none);
+  --radius-xs: var(--shape-xs);
+  --radius-sm: var(--shape-sm);
+  --radius-md: var(--shape-md);
+  --radius-lg: var(--shape-lg);
+  --radius-lg-increased: var(--shape-lg-increased);
+  --radius-xl: var(--shape-xl);
+  --radius-xl-increased: var(--shape-xl-increased);
+  --radius-xxl: var(--shape-xxl);
+  --radius-full: var(--shape-full);
 
+  /* `shadow-paper` for cards, `shadow-lift` under a hovering pointer, `shadow-float` for menus. */
   --shadow-*: initial;
-  --shadow-0: var(--md-sys-elevation-shadow-0);
-  --shadow-1: var(--md-sys-elevation-shadow-1);
-  --shadow-card: var(--md-sys-elevation-shadow-card);
-  --shadow-2: var(--md-sys-elevation-shadow-2);
-  --shadow-3: var(--md-sys-elevation-shadow-3);
-  --shadow-4: var(--md-sys-elevation-shadow-4);
-  --shadow-5: var(--md-sys-elevation-shadow-5);
-
-  --ease-*: initial;
-  --ease-standard: var(--md-sys-motion-easing-standard);
-  --ease-standard-decelerate: var(--md-sys-motion-easing-standard-decelerate);
-  --ease-standard-accelerate: var(--md-sys-motion-easing-standard-accelerate);
-  --ease-emphasized: var(--md-sys-motion-easing-emphasized);
-  --ease-emphasized-decelerate: var(--md-sys-motion-easing-emphasized-decelerate);
-  --ease-emphasized-accelerate: var(--md-sys-motion-easing-emphasized-accelerate);
+  --shadow-none: 0 0 #0000;
+  --shadow-paper: var(--elevation-paper);
+  --shadow-lift: var(--elevation-lift);
+  --shadow-press: var(--elevation-press);
+  --shadow-glass: var(--elevation-glass);
+  --shadow-float: var(--elevation-float);
+  --shadow-accent: var(--elevation-accent);
+  --shadow-well: var(--elevation-well);
 
   /*
-   * Springs, each curve paired with its duration: `transition-transform ease-spatial-fast
-   * duration-spatial-fast`, `transition-colors ease-effects duration-effects`. Spatial is for
-   * position, size, rotation and corners; effects for color and opacity. Fast suits small
-   * components, default panes, slow full-screen motion.
+   * Easing. `ease-settle` for entrances and state, `ease-exit` for leaving, `ease-swap` for a
+   * change in place. Springs, each paired with its duration: `transition-transform ease-paper
+   * duration-paper`. Paper for sheets and rows, snap for small parts, pop for the two pops, fade
+   * for color and opacity.
    */
-  --ease-spatial-fast: var(--md-sys-motion-spring-fast-spatial);
-  --ease-spatial: var(--md-sys-motion-spring-default-spatial);
-  --ease-spatial-slow: var(--md-sys-motion-spring-slow-spatial);
-  --ease-effects-fast: var(--md-sys-motion-spring-fast-effects);
-  --ease-effects: var(--md-sys-motion-spring-default-effects);
-  --ease-effects-slow: var(--md-sys-motion-spring-slow-effects);
+  --ease-*: initial;
+  --ease-settle: var(--motion-ease-settle);
+  --ease-exit: var(--motion-ease-exit);
+  --ease-swap: var(--motion-ease-swap);
+  --ease-paper: var(--motion-spring-paper);
+  --ease-snap: var(--motion-spring-snap);
+  --ease-pop: var(--motion-spring-pop);
+  --ease-fade: var(--motion-spring-fade);
 
   --transition-duration-*: initial;
-  --transition-duration-spatial-fast: var(--md-sys-motion-spring-fast-spatial-duration);
-  --transition-duration-spatial: var(--md-sys-motion-spring-default-spatial-duration);
-  --transition-duration-spatial-slow: var(--md-sys-motion-spring-slow-spatial-duration);
-  --transition-duration-effects-fast: var(--md-sys-motion-spring-fast-effects-duration);
-  --transition-duration-effects: var(--md-sys-motion-spring-default-effects-duration);
-  --transition-duration-effects-slow: var(--md-sys-motion-spring-slow-effects-duration);
-  /* M3's fixed durations, for the easing-based transitions */
-  --transition-duration-short1: var(--md-sys-motion-duration-short1);
-  --transition-duration-short2: var(--md-sys-motion-duration-short2);
-  --transition-duration-short3: var(--md-sys-motion-duration-short3);
-  --transition-duration-short4: var(--md-sys-motion-duration-short4);
-  --transition-duration-medium1: var(--md-sys-motion-duration-medium1);
-  --transition-duration-medium2: var(--md-sys-motion-duration-medium2);
-  --transition-duration-medium3: var(--md-sys-motion-duration-medium3);
-  --transition-duration-medium4: var(--md-sys-motion-duration-medium4);
-  --transition-duration-long1: var(--md-sys-motion-duration-long1);
-  --transition-duration-long2: var(--md-sys-motion-duration-long2);
-  --transition-duration-long3: var(--md-sys-motion-duration-long3);
-  --transition-duration-long4: var(--md-sys-motion-duration-long4);
-  --transition-duration-extra-long1: var(--md-sys-motion-duration-extra-long1);
-  --transition-duration-extra-long2: var(--md-sys-motion-duration-extra-long2);
-  --transition-duration-extra-long3: var(--md-sys-motion-duration-extra-long3);
-  --transition-duration-extra-long4: var(--md-sys-motion-duration-extra-long4);
+  --transition-duration-press: var(--motion-duration-press);
+  --transition-duration-quick: var(--motion-duration-quick);
+  --transition-duration-base: var(--motion-duration-base);
+  --transition-duration-calm: var(--motion-duration-calm);
+  --transition-duration-slow: var(--motion-duration-slow);
+  --transition-duration-paper: var(--motion-spring-paper-duration);
+  --transition-duration-snap: var(--motion-spring-snap-duration);
+  --transition-duration-pop: var(--motion-spring-pop-duration);
+  --transition-duration-fade: var(--motion-spring-fade-duration);
 
-  /* What a bare `transition` or `transition-colors` uses: the default effects spring. */
-  --default-transition-duration: var(--md-sys-motion-spring-default-effects-duration);
-  --default-transition-timing-function: var(--md-sys-motion-spring-default-effects);
+  /* What a bare `transition` or `transition-colors` uses. */
+  --default-transition-duration: var(--motion-duration-quick);
+  --default-transition-timing-function: var(--motion-ease-settle);
 
   /* The reading measure: never wider, so lines stay easy to follow (WCAG 1.4.8). */
   --container-reading: 66ch;
 
-  /* M3 window size classes: medium 600, expanded 840, large 1200, extra-large 1600 */
+  /* Window size classes: medium 600, expanded 840, large 1200, extra-large 1600 */
   --breakpoint-*: initial;
   --breakpoint-medium: 37.5rem;
   --breakpoint-expanded: 52.5rem;
@@ -198,19 +173,114 @@
 }
 
 /*
- * State layers for interactive surfaces, driven by React Aria's `data-*` state attributes so
- * touch and keyboard behave like hover. Apply with `state-layer`. Material Web's timing: hover
- * and focus sit on `::before` and change almost at once (15 ms); press sits on `::after`, fading
- * in over 105 ms and out over 375 ms so even a quick tap shows. The plain `:hover` fallback (for
- * non-RAC elements such as `next/link`) applies only where the pointer can hover, because touch
- * browsers keep `:hover` after a tap. Opacity only, so reduced motion keeps it.
+ * Paper: a card's face, a gentle gradient down to its shade, on the paper shadow. Radius stays the
+ * caller's. Forced colors draws a plain border instead.
+ */
+@utility paper {
+  background-color: var(--pg-paper);
+  background-image: linear-gradient(180deg, var(--pg-paper), var(--pg-paper-shade));
+  box-shadow: var(--elevation-paper);
+
+  @media (forced-colors: active) {
+    border: 1px solid CanvasText;
+  }
+}
+
+/*
+ * Paper that answers the pointer: it lifts 2px on hover and sinks 1px on press, from React Aria's
+ * `data-hovered`/`data-pressed` or plain `:hover`/`:active`. Reduced motion keeps the shadows and
+ * drops the movement.
+ */
+@utility lift {
+  transition-property: translate, box-shadow;
+  transition-duration: var(--motion-duration-quick);
+  transition-timing-function: var(--motion-ease-settle);
+
+  &[data-hovered] {
+    translate: 0 calc(-2px * var(--motion-spatial-factor));
+    box-shadow: var(--elevation-lift);
+  }
+  @media (hover: hover) {
+    &:hover {
+      translate: 0 calc(-2px * var(--motion-spatial-factor));
+      box-shadow: var(--elevation-lift);
+    }
+  }
+  &[data-pressed],
+  &:active {
+    translate: 0 calc(1px * var(--motion-spatial-factor));
+    box-shadow: var(--elevation-press);
+    transition-duration: var(--motion-duration-press);
+  }
+}
+
+/*
+ * Glass: a frosted frame that stays put (rail, header, tab bar). `glass-float` is denser and
+ * floats higher, for menus, dialogs and toasts. Without backdrop blur, or when the reader asks for
+ * less transparency, both turn to solid paper.
+ */
+@utility glass {
+  background-color: var(--pg-glass);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  border: 1px solid var(--pg-glass-edge);
+  box-shadow: var(--elevation-glass);
+
+  @supports not (backdrop-filter: blur(1px)) {
+    background-color: var(--pg-paper);
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    background-color: var(--pg-paper);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  @media (forced-colors: active) {
+    border-color: CanvasText;
+  }
+}
+
+@utility glass-float {
+  background-color: var(--pg-glass-strong);
+  -webkit-backdrop-filter: var(--glass-float-filter);
+  backdrop-filter: var(--glass-float-filter);
+  border: 1px solid var(--pg-glass-edge);
+  box-shadow: var(--elevation-float);
+
+  @supports not (backdrop-filter: blur(1px)) {
+    background-color: var(--pg-paper);
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    background-color: var(--pg-paper);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  @media (forced-colors: active) {
+    border-color: CanvasText;
+  }
+}
+
+/* The accent fill: a soft top-down gradient with a highlight and a glow. Text is `on-accent`. */
+@utility accent-fill {
+  background-color: var(--pg-accent);
+  background-image: linear-gradient(180deg, var(--pg-accent-top), var(--pg-accent));
+  color: var(--pg-on-accent);
+  box-shadow: var(--elevation-accent);
+
+  @media (forced-colors: active) {
+    border: 1px solid ButtonText;
+  }
+}
+
+/*
+ * State tints for quiet controls (text buttons, menu items, nav links), driven by React Aria's
+ * `data-*` attributes so touch and keyboard behave like hover. Ink at a low alpha on `::before`,
+ * so it works on any background and reduced motion keeps it. The plain `:hover` fallback applies
+ * only where the pointer can hover, because touch browsers keep `:hover` after a tap.
  */
 @utility state-layer {
   position: relative;
   isolation: isolate;
-
-  &::before,
-  &::after {
+  &::before {
     content: "";
     position: absolute;
     inset: 0;
@@ -219,70 +289,57 @@
     background: currentColor;
     opacity: 0;
     pointer-events: none;
+    transition: opacity var(--motion-duration-quick) var(--motion-ease-settle);
   }
-
-  &::before {
-    transition: opacity var(--md-sys-state-layer-hover-duration) linear;
-  }
-
-  &::after {
-    transition: opacity var(--md-sys-state-layer-press-out-duration) linear;
-  }
-
   &[data-hovered]::before {
-    opacity: var(--md-sys-state-hover-state-layer-opacity);
+    opacity: var(--state-hover-opacity);
   }
-
   @media (hover: hover) {
     &:hover::before {
-      opacity: var(--md-sys-state-hover-state-layer-opacity);
+      opacity: var(--state-hover-opacity);
     }
   }
-
-  &[data-focus-visible]::before,
-  &:focus-visible::before {
-    opacity: var(--md-sys-state-focus-state-layer-opacity);
+  &[data-pressed]::before,
+  &:active::before {
+    opacity: var(--state-press-opacity);
+    transition-duration: var(--motion-duration-press);
   }
-
-  &[data-pressed]::after,
-  &:active::after {
-    opacity: var(--md-sys-state-pressed-state-layer-opacity);
-    transition-duration: var(--md-sys-state-layer-press-in-duration);
-  }
-
   &[data-dragging]::before {
-    opacity: var(--md-sys-state-dragged-state-layer-opacity);
+    opacity: var(--state-press-opacity);
   }
-
   @media (forced-colors: active) {
-    &::before,
-    &::after {
+    &::before {
       display: none;
     }
   }
 }
 
 /*
- * A text field's indicator: 1 px of border at rest, thickened to 2 px on focus by an inset ring,
- * so the layout never shifts. Colors and the ring move on the fast effects spring.
+ * A text field: a well pressed into the paper, with a hairline edge. On focus the edge turns to the
+ * accent's ink and a soft ring grows around it, so the layout never shifts.
  */
 @utility field-indicator {
-  border: 1px solid var(--md-sys-color-outline);
+  background-color: var(--field-well);
+  border: 1px solid var(--pg-edge);
+  box-shadow: var(--elevation-well);
   transition-property: border-color, box-shadow;
-  transition-duration: var(--md-sys-motion-spring-fast-effects-duration);
-  transition-timing-function: var(--md-sys-motion-spring-fast-effects);
-
-  &[data-focused] {
-    border-color: var(--md-sys-color-primary);
-    box-shadow: inset 0 0 0 1px var(--md-sys-color-primary);
+  transition-duration: var(--motion-duration-quick);
+  transition-timing-function: var(--motion-ease-settle);
+  &[data-focused],
+  &[data-focus-within] {
+    border-color: var(--pg-accent-ink);
+    box-shadow:
+      var(--elevation-well),
+      0 0 0 3px color-mix(in oklab, var(--pg-accent) 30%, transparent);
   }
-
   &[data-invalid] {
-    border-color: var(--md-sys-color-error);
+    border-color: var(--pg-danger);
   }
-
-  &[data-invalid][data-focused] {
-    box-shadow: inset 0 0 0 1px var(--md-sys-color-error);
+  &[data-invalid][data-focused],
+  &[data-invalid][data-focus-within] {
+    box-shadow:
+      var(--elevation-well),
+      0 0 0 3px color-mix(in oklab, var(--pg-danger) 25%, transparent);
   }
 }
 
@@ -292,59 +349,52 @@
 }
 
 /*
- * A newly added tag chip pops in: scale on the expressive fast spatial spring, one of the two
- * places the expressive scheme is used, and opacity on fast effects. Reduced motion zeroes the
- * spatial duration, so it only fades.
+ * The two pops: a newly added tag chip, and the "Saved" check. Scale from 0.6 on the pop spring,
+ * opacity on the fade spring. Reduced motion zeroes the spring's duration, so they only fade.
  */
-@keyframes tag-pop-scale {
+@keyframes pop-scale {
   from {
     scale: 0.6;
   }
 }
-
-@keyframes tag-pop-fade {
+@keyframes pop-fade {
   from {
     opacity: 0;
   }
 }
-
 @utility tag-pop {
   animation:
-    tag-pop-scale var(--md-sys-motion-expressive-spring-fast-spatial-duration)
-      var(--md-sys-motion-expressive-spring-fast-spatial),
-    tag-pop-fade var(--md-sys-motion-spring-fast-effects-duration)
-      var(--md-sys-motion-spring-fast-effects);
+    pop-scale var(--motion-spring-pop-duration) var(--motion-spring-pop),
+    pop-fade var(--motion-spring-fade-duration) var(--motion-spring-fade);
 }
-
-/*
- * The extension's "Saved" check pops in: scale on the expressive default spatial spring, the
- * other place the expressive scheme is used, and opacity on default effects. Reduced motion zeroes
- * the spatial duration, so it only fades.
- */
 @utility saved-pop {
   animation:
-    tag-pop-scale var(--md-sys-motion-expressive-spring-default-spatial-duration)
-      var(--md-sys-motion-expressive-spring-default-spatial),
-    tag-pop-fade var(--md-sys-motion-spring-default-effects-duration)
-      var(--md-sys-motion-spring-default-effects);
+    pop-scale var(--motion-spring-pop-duration) var(--motion-spring-pop),
+    pop-fade var(--motion-spring-fade-duration) var(--motion-spring-fade);
 }
 
 /*
- * A menu grows from where it meets its trigger (React Aria's `--trigger-anchor-point`): scale
- * 0.8 → 1 on the fast spatial spring and opacity on fast effects, as Compose's dropdown menu does,
- * and leaves the same way. Reduced motion zeroes the spatial duration, so it only fades.
+ * A menu or popover grows from where it meets its trigger (React Aria's `--trigger-anchor-point`):
+ * scale 0.95 → 1 on the paper spring as its glass sharpens in, and leaves faster on the exit
+ * easing. Reduced motion zeroes the spring, so it only fades.
  */
 @utility menu-pop {
   transform-origin: var(--trigger-anchor-point);
   transition:
-    scale var(--md-sys-motion-spring-fast-spatial-duration) var(--md-sys-motion-spring-fast-spatial),
-    opacity var(--md-sys-motion-spring-fast-effects-duration)
-      var(--md-sys-motion-spring-fast-effects);
-
-  &[data-entering],
-  &[data-exiting] {
-    scale: 0.8;
+    scale var(--motion-spring-paper-duration) var(--motion-spring-paper),
+    translate var(--motion-spring-paper-duration) var(--motion-spring-paper),
+    opacity 180ms var(--motion-ease-settle);
+  &[data-entering] {
+    scale: 0.95;
+    translate: 0 calc(-6px * var(--motion-spatial-factor));
     opacity: 0;
+  }
+  &[data-exiting] {
+    scale: 0.97;
+    opacity: 0;
+    transition:
+      scale 140ms var(--motion-ease-exit),
+      opacity 140ms var(--motion-ease-exit);
   }
 }
 
@@ -357,7 +407,6 @@
     opacity: 1;
   }
 }
-
 @utility appear-delayed {
   opacity: 0;
   animation: appear 1ms linear 150ms forwards;
@@ -369,150 +418,58 @@
     opacity: 0.5;
   }
 }
-
 @utility skeleton-pulse {
-  animation: skeleton-pulse 2s var(--ease-standard) infinite;
+  animation: skeleton-pulse 2s var(--motion-ease-swap) infinite;
 }
 
 /*
- * An indeterminate progress bar: Material Web's two bars, ported from MDC's linear progress
- * (Apache-2.0, research A11). Each bar spans the track and runs its own 2 s loop of translate and
- * scaleX keyframes, transform only, so it keeps moving while the main thread is busy. Reduced
- * motion leaves both parked; the secondary bar then shows as a still segment at the start.
+ * The indeterminate progress bar: one soft bar gliding across its track, slowly. Put
+ * `progress-track` on the track and `progress-glide` on the bar. The keyframes move rightwards, so
+ * a right-to-left page mirrors the track. Reduced motion holds the bar still across the track.
  */
-@keyframes progress-primary-translate {
-  0% {
-    transform: translateX(0);
+@keyframes progress-glide {
+  from {
+    translate: -100% 0;
   }
-  20% {
-    animation-timing-function: cubic-bezier(0.5, 0, 0.701732, 0.495819);
-    transform: translateX(0);
-  }
-  59.15% {
-    animation-timing-function: cubic-bezier(0.302435, 0.381352, 0.55, 0.956352);
-    transform: translateX(83.67142%);
-  }
-  100% {
-    transform: translateX(200.611057%);
+  to {
+    translate: 280% 0;
   }
 }
-
-@keyframes progress-primary-scale {
-  0% {
-    transform: scaleX(0.08);
-  }
-  36.65% {
-    animation-timing-function: cubic-bezier(0.334731, 0.12482, 0.785844, 1);
-    transform: scaleX(0.08);
-  }
-  69.15% {
-    animation-timing-function: cubic-bezier(0.06, 0.11, 0.6, 1);
-    transform: scaleX(0.661479);
-  }
-  100% {
-    transform: scaleX(0.08);
-  }
-}
-
-@keyframes progress-secondary-translate {
-  0% {
-    animation-timing-function: cubic-bezier(0.15, 0, 0.515058, 0.409685);
-    transform: translateX(0);
-  }
-  25% {
-    animation-timing-function: cubic-bezier(0.31033, 0.284058, 0.8, 0.733712);
-    transform: translateX(37.651913%);
-  }
-  48.35% {
-    animation-timing-function: cubic-bezier(0.4, 0.627035, 0.6, 0.902026);
-    transform: translateX(84.386165%);
-  }
-  100% {
-    transform: translateX(160.277782%);
-  }
-}
-
-@keyframes progress-secondary-scale {
-  0% {
-    animation-timing-function: cubic-bezier(0.205028, 0.057051, 0.57661, 0.453971);
-    transform: scaleX(0.08);
-  }
-  19.15% {
-    animation-timing-function: cubic-bezier(0.152313, 0.196432, 0.648374, 1.004315);
-    transform: scaleX(0.457104);
-  }
-  44.15% {
-    animation-timing-function: cubic-bezier(0.257759, -0.003163, 0.211762, 1.38179);
-    transform: scaleX(0.72796);
-  }
-  100% {
-    transform: scaleX(0.08);
-  }
-}
-
-/* The track. The keyframes move rightwards, so a right-to-left page mirrors it. */
 @utility progress-track {
   position: relative;
+  overflow: hidden;
 
   &:dir(rtl) {
     scale: -1 1;
   }
 }
-
-/* One of the two bars: it travels across the track, and its one child, the fill, scales. */
-@utility progress-bar-primary {
+@utility progress-glide {
   position: absolute;
   inset-block: 0;
-  left: -145.166611%;
-  width: 100%;
-  animation: progress-primary-translate 2s linear infinite;
-
-  & > * {
-    animation: progress-primary-scale 2s linear infinite;
-  }
+  inset-inline-start: 0;
+  width: 36%;
+  border-radius: inherit;
+  animation: progress-glide 1.6s var(--motion-ease-swap) infinite;
 
   @media (prefers-reduced-motion: reduce) {
-    &,
-    & > * {
-      animation: none;
-    }
-  }
-}
-
-@utility progress-bar-secondary {
-  position: absolute;
-  inset-block: 0;
-  left: -54.888891%;
-  width: 100%;
-  animation: progress-secondary-translate 2s linear infinite;
-
-  & > * {
-    animation: progress-secondary-scale 2s linear infinite;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    &,
-    & > * {
-      animation: none;
-    }
+    width: 100%;
+    opacity: 0.5;
+    animation: none;
   }
 }
 
 /*
- * A toast as it appears: it fades in on fast effects and grows from 0.8 on fast spatial, as
- * Compose's snackbar does. `@starting-style`, not a view transition: deleting from the detail page
- * navigates and adds a toast in the same tick, and a second transition would cut the navigation's
- * short. Reduced motion zeroes the spatial spring, so it only fades.
+ * A toast as it appears: it rises 16px on the paper spring as it fades in. `@starting-style`, not
+ * a view transition: deleting from the detail page navigates and adds a toast in the same tick,
+ * and a second transition would cut the navigation's short. Reduced motion only fades.
  */
 @utility toast-enter {
-  transform-origin: bottom;
   transition:
-    opacity var(--md-sys-motion-spring-fast-effects-duration)
-      var(--md-sys-motion-spring-fast-effects),
-    scale var(--md-sys-motion-spring-fast-spatial-duration) var(--md-sys-motion-spring-fast-spatial);
+    opacity 200ms var(--motion-ease-settle),
+    translate var(--motion-spring-paper-duration) var(--motion-spring-paper);
 
   @starting-style {
     opacity: 0;
-    scale: 0.8;
+    translate: 0 calc(16px * var(--motion-spatial-factor));
   }
 }

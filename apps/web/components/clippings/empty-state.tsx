@@ -8,7 +8,7 @@ export function EmptyState() {
       <SkipLaunchParam name="search" />
       <NotebookIllustration className="h-auto w-50" />
       <h2 className="typescale-title-lg">Nothing clipped yet</h2>
-      <p className="max-w-100 typescale-body-md text-on-surface-variant">
+      <p className="max-w-100 typescale-body-md text-ink-muted">
         Save a page with the extension, ask Claude to clip something, or drop a link here.
       </p>
     </section>

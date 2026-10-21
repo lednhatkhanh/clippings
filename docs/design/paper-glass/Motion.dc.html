@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Motion</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}
+.pg{font-family:'Geist',system-ui,sans-serif;color:var(--ink);background:var(--ground);-webkit-font-smoothing:antialiased;font-size:14px;line-height:20px;
+--ease-settle:cubic-bezier(.22,1,.36,1);--ease-exit:cubic-bezier(.4,0,1,1);--ease-swap:cubic-bezier(.65,0,.35,1);
+--spring-paper:linear(0,.06 2.5%,.22 6%,.45 11%,.66 17%,.82 24%,.92 32%,.98 41%,1.008 52%,1.01 62%,1.003 76%,1);
+--spring-pop:linear(0,.18 5%,.52 12%,.86 21%,1.06 31%,1.1 38%,1.06 47%,1.01 58%,.99 70%,1);
+--t-press:90ms;--t-quick:160ms;--t-base:240ms;--t-calm:380ms;--t-slow:520ms}
+.pg.light{--ground:#F2EDE3;--ground-sunk:#E8E1D2;--card:#FCFAF5;--card-2:#F7F2E8;--ink:#26221C;--ink-2:#544C40;--ink-3:#6B6253;--line:rgba(70,52,28,.12);--line-strong:rgba(70,52,28,.24);--glass:rgba(250,247,240,.62);--glass-strong:rgba(252,250,245,.82);--glass-edge:rgba(255,255,255,.72);--glass-hi:rgba(255,255,255,.85);--field:rgba(255,255,255,.55);--field-inset:rgba(60,40,20,.10);--danger:#A63A24;--scrim:rgba(46,34,18,.16);--blob-b:rgba(170,200,172,.55);--blob-c:rgba(236,190,150,.5);
+--shadow-paper:inset 0 1px 0 rgba(255,255,255,.7),0 0 0 1px rgba(80,60,30,.06),0 1px 1px rgba(60,40,20,.05),0 3px 6px -2px rgba(60,40,20,.07),0 12px 24px -8px rgba(60,40,20,.09);
+--shadow-lift:inset 0 1px 0 rgba(255,255,255,.8),0 0 0 1px rgba(80,60,30,.07),0 2px 2px rgba(60,40,20,.05),0 8px 14px -4px rgba(60,40,20,.10),0 22px 40px -12px rgba(60,40,20,.16);
+--shadow-press:inset 0 1px 2px rgba(60,40,20,.10),0 0 0 1px rgba(80,60,30,.08);
+--shadow-float:inset 0 1px 0 var(--glass-hi),0 0 0 1px rgba(80,60,30,.08),0 4px 10px -2px rgba(60,40,20,.12),0 30px 60px -16px rgba(60,40,20,.38)}
+.pg.dark{--ground:#16140F;--ground-sunk:#0F0E0B;--card:#24201B;--card-2:#1F1C17;--ink:#EEE7DA;--ink-2:#C4BAA8;--ink-3:#9D9381;--line:rgba(255,240,210,.09);--line-strong:rgba(255,240,210,.18);--glass:rgba(34,31,26,.6);--glass-strong:rgba(40,36,30,.8);--glass-edge:rgba(255,245,225,.10);--glass-hi:rgba(255,250,235,.07);--field:rgba(0,0,0,.24);--field-inset:rgba(0,0,0,.4);--danger:#F0A08A;--scrim:rgba(0,0,0,.42);--blob-b:rgba(120,160,125,.12);--blob-c:rgba(210,140,100,.11);
+--shadow-paper:inset 0 1px 0 rgba(255,250,235,.05),0 0 0 1px rgba(255,240,210,.06),0 1px 1px rgba(0,0,0,.3),0 4px 8px -2px rgba(0,0,0,.28),0 14px 28px -10px rgba(0,0,0,.45);
+--shadow-lift:inset 0 1px 0 rgba(255,250,235,.07),0 0 0 1px rgba(255,240,210,.09),0 2px 2px rgba(0,0,0,.3),0 10px 18px -4px rgba(0,0,0,.4),0 26px 44px -12px rgba(0,0,0,.6);
+--shadow-press:inset 0 1px 2px rgba(0,0,0,.4),0 0 0 1px rgba(255,240,210,.08);
+--shadow-float:inset 0 1px 0 var(--glass-hi),0 0 0 1px rgba(0,0,0,.35),0 4px 10px -2px rgba(0,0,0,.4),0 30px 60px -16px rgba(0,0,0,.75)}
+.light.accent-ochre{--accent:#E2AE1C;--accent-top:#F3CC4A;--on-accent:#3A2C00;--accent-soft:#F3E2A6;--on-accent-soft:#4A3A00;--accent-text:#7A5C00;--accent-ring:rgba(150,110,0,.22);--accent-glow:rgba(150,105,0,.42);--blob-a:rgba(244,206,90,.6)}
+.dark.accent-ochre{--accent:#E0B03A;--accent-top:#EEC65E;--on-accent:#271D00;--accent-soft:#3A3119;--on-accent-soft:#F2DA92;--accent-text:#EBC65C;--accent-ring:rgba(255,220,120,.25);--accent-glow:rgba(0,0,0,.5);--blob-a:rgba(224,176,58,.15)}
+.light.accent-terracotta{--accent:#BF5629;--accent-top:#D26B3E;--on-accent:#FFFFFF;--accent-soft:#F5D9CA;--on-accent-soft:#5A2008;--accent-text:#A3461E;--accent-ring:rgba(140,50,10,.25);--accent-glow:rgba(150,60,20,.4);--blob-a:rgba(235,160,120,.5)}
+.dark.accent-terracotta{--accent:#E8906A;--accent-top:#F2A784;--on-accent:#2D0F03;--accent-soft:#3E2519;--on-accent-soft:#F7CBB5;--accent-text:#F0A280;--accent-ring:rgba(255,190,160,.25);--accent-glow:rgba(0,0,0,.5);--blob-a:rgba(232,144,106,.14)}
+.light.accent-sage{--accent:#5A7656;--accent-top:#6C8A67;--on-accent:#FFFFFF;--accent-soft:#DCE6D4;--on-accent-soft:#22341E;--accent-text:#46603F;--accent-ring:rgba(40,70,35,.25);--accent-glow:rgba(40,70,35,.35);--blob-a:rgba(160,195,160,.55)}
+.dark.accent-sage{--accent:#A6C19C;--accent-top:#BCD3B2;--on-accent:#15240F;--accent-soft:#263124;--on-accent-soft:#CFE1C6;--accent-text:#AECBA4;--accent-ring:rgba(200,230,190,.22);--accent-glow:rgba(0,0,0,.5);--blob-a:rgba(166,193,156,.13)}
+.light.accent-ink{--accent:#3E5E8A;--accent-top:#4F709D;--on-accent:#FFFFFF;--accent-soft:#DCE4F0;--on-accent-soft:#162B4A;--accent-text:#385883;--accent-ring:rgba(30,50,90,.25);--accent-glow:rgba(30,50,90,.35);--blob-a:rgba(160,185,225,.5)}
+.dark.accent-ink{--accent:#A8C0E6;--accent-top:#BED0EF;--on-accent:#0F2240;--accent-soft:#222A3A;--on-accent-soft:#CFDCF2;--accent-text:#B0C7EA;--accent-ring:rgba(190,210,245,.22);--accent-glow:rgba(0,0,0,.5);--blob-a:rgba(168,192,230,.13)}
+.light .t-green{--tag-bg:#DDE9D6;--tag-fg:#234A1F}.dark .t-green{--tag-bg:#233222;--tag-fg:#BFDDB4}
+.light .t-amber{--tag-bg:#F4E4B5;--tag-fg:#5B4300}.dark .t-amber{--tag-bg:#3A3119;--tag-fg:#F0D58A}
+.serif{font-family:'Fraunces',Georgia,serif;font-optical-sizing:auto}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.eyebrow{font-size:11px;line-height:14px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:500;margin:0}
+.muted{color:var(--ink-2)}.faint{color:var(--ink-3)}
+.cap{font-family:'Geist Mono',ui-monospace,monospace;font-size:10.5px;line-height:14px;color:var(--ink-3)}
+.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.i-sm{width:14px;height:14px}
+.paper{background:linear-gradient(180deg,var(--card),var(--card-2));box-shadow:var(--shadow-paper);border-radius:16px}
+.float{background:var(--glass-strong);-webkit-backdrop-filter:blur(28px) saturate(170%);backdrop-filter:blur(28px) saturate(170%);border:1px solid var(--glass-edge);box-shadow:var(--shadow-float)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:11px;font-size:13px;font-weight:500;white-space:nowrap;box-sizing:border-box}
+.btn-filled{background:linear-gradient(180deg,var(--accent-top),var(--accent));color:var(--on-accent);box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 0 0 1px var(--accent-ring),0 1px 2px rgba(0,0,0,.12),0 8px 18px -8px var(--accent-glow)}
+.btn-paper{background:linear-gradient(180deg,var(--card),var(--card-2));box-shadow:var(--shadow-paper);color:var(--ink)}
+.btn-quiet{color:var(--ink-2)}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:8px;font-size:12px;font-weight:500;background:var(--tag-bg);color:var(--tag-fg)}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.75}
+
+.demo{position:relative;display:flex;flex-direction:column;border-radius:24px;overflow:hidden;box-shadow:inset 0 0 0 1px var(--line);background:var(--ground)}
+.demo-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 18px 0}
+.stage{position:relative;flex:1;margin:12px;border-radius:16px;overflow:hidden;background:var(--ground-sunk);box-shadow:inset 0 1px 2px var(--field-inset)}
+.spec{padding:0 18px 16px;display:flex;flex-wrap:wrap;gap:4px 12px}
+.play{height:32px;padding:0 12px;border-radius:10px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:6px;background:var(--accent-soft);color:var(--on-accent-soft);flex:none}
+.play:active{transform:scale(.97)}
+
+.lift{transition:transform var(--t-quick) var(--ease-settle),box-shadow var(--t-quick) var(--ease-settle)}
+.lift:hover{transform:translateY(-2px);box-shadow:var(--shadow-lift)}
+.lift:active{transform:translateY(1px) scale(.99);box-shadow:var(--shadow-press);transition-duration:var(--t-press)}
+.press{transition:transform var(--t-press) var(--ease-settle),filter var(--t-quick) ease}
+.press:hover{filter:brightness(1.05)}
+.press:active{transform:translateY(1px) scale(.97);filter:brightness(.96)}
+
+.menu{position:absolute;left:18px;top:64px;width:200px;padding:6px;border-radius:14px;box-sizing:border-box;transform-origin:16px -8px;opacity:0;transform:translateY(-6px) scale(.95);-webkit-backdrop-filter:blur(0) saturate(100%);backdrop-filter:blur(0) saturate(100%);pointer-events:none;transition:opacity 140ms var(--ease-exit),transform 140ms var(--ease-exit),backdrop-filter 140ms var(--ease-exit),-webkit-backdrop-filter 140ms var(--ease-exit)}
+.menu.open{opacity:1;transform:none;-webkit-backdrop-filter:blur(28px) saturate(170%);backdrop-filter:blur(28px) saturate(170%);pointer-events:auto;transition:opacity 180ms var(--ease-settle),transform var(--t-base) var(--spring-paper),backdrop-filter var(--t-base) var(--ease-settle),-webkit-backdrop-filter var(--t-base) var(--ease-settle)}
+.mi{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:9px;font-size:13px;opacity:0;transform:translateY(-3px);transition:opacity 100ms ease,transform 100ms ease}
+.menu.open .mi{opacity:1;transform:none;transition:opacity 200ms var(--ease-settle),transform 260ms var(--ease-settle)}
+.menu.open .mi:nth-child(2){transition-delay:25ms}.menu.open .mi:nth-child(3){transition-delay:50ms}.menu.open .mi:nth-child(4){transition-delay:75ms}
+
+.scrim{position:absolute;inset:0;background:var(--scrim);opacity:0;-webkit-backdrop-filter:blur(0);backdrop-filter:blur(0);pointer-events:none;transition:opacity 160ms var(--ease-exit),backdrop-filter 160ms var(--ease-exit)}
+.scrim.open{opacity:1;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);transition:opacity 220ms var(--ease-settle),backdrop-filter 300ms var(--ease-settle)}
+.dialog{position:absolute;left:50%;top:50%;width:250px;margin:-66px 0 0 -125px;padding:16px;border-radius:18px;box-sizing:border-box;opacity:0;transform:translateY(14px) scale(.97);pointer-events:none;transition:opacity 140ms var(--ease-exit),transform 160ms var(--ease-exit)}
+.dialog.open{opacity:1;transform:none;pointer-events:auto;transition:opacity 220ms var(--ease-settle),transform var(--t-calm) var(--spring-paper)}
+
+.toast{position:absolute;left:50%;bottom:16px;width:260px;margin-left:-130px;height:46px;padding:0 6px 0 14px;border-radius:15px;box-sizing:border-box;display:flex;align-items:center;gap:10px;font-size:13px;opacity:0;transform:translateY(20px) scale(.98);transition:opacity 160ms var(--ease-exit),transform 200ms var(--ease-exit)}
+.toast.open{opacity:1;transform:none;transition:opacity 200ms var(--ease-settle),transform var(--t-calm) var(--spring-paper)}
+
+.sheet{position:absolute;left:16px;top:118px;width:calc(100% - 32px);height:52px;border-radius:14px;box-sizing:border-box;padding:0 14px;display:flex;flex-direction:column;justify-content:center;transition:top var(--t-calm) var(--spring-paper),left var(--t-calm) var(--spring-paper),width var(--t-calm) var(--spring-paper),height var(--t-calm) var(--spring-paper),border-radius var(--t-calm) var(--spring-paper),padding var(--t-calm) var(--spring-paper),box-shadow var(--t-calm) var(--ease-settle);z-index:2}
+.sheet .st{font-size:15px;line-height:20px;transition:font-size var(--t-calm) var(--spring-paper),line-height var(--t-calm) var(--spring-paper)}
+.sheet .more{opacity:0;max-height:0;overflow:hidden;transition:opacity 120ms ease,max-height var(--t-calm) var(--spring-paper)}
+.sheet.open{top:10px;left:10px;width:calc(100% - 20px);height:calc(100% - 20px);border-radius:20px;padding:18px;justify-content:flex-start;box-shadow:var(--shadow-lift)}
+.sheet.open .st{font-size:22px;line-height:28px}
+.sheet.open .more{opacity:1;max-height:200px;transition:opacity 260ms var(--ease-settle) 140ms,max-height var(--t-calm) var(--spring-paper)}
+.ghost-row{position:absolute;left:16px;right:16px;height:52px;border-radius:14px;transition:opacity 160ms var(--ease-exit),transform 220ms var(--ease-exit)}
+.ghosts.out .ghost-row{opacity:0;transform:scale(.98)}
+.ghosts .ghost-row{transition:opacity 240ms var(--ease-settle) 120ms,transform 300ms var(--ease-settle) 120ms}
+
+.rowwrap{display:grid;grid-template-rows:1fr;opacity:1;transition:grid-template-rows var(--t-calm) var(--spring-paper),opacity 220ms var(--ease-settle) 80ms,transform var(--t-calm) var(--spring-paper)}
+.rowwrap > div{min-height:0;overflow:hidden}
+.rowwrap.gone{grid-template-rows:0fr;opacity:0;transform:translateY(-6px) scale(.98);transition:opacity 120ms var(--ease-exit),transform 160ms var(--ease-exit),grid-template-rows 260ms var(--ease-swap) 100ms}
+.rowwrap.del.gone{transform:translateX(16px)}
+
+.indet{height:4px;border-radius:2px;background:var(--line);overflow:hidden;position:relative}
+.indet span{position:absolute;top:0;bottom:0;width:36%;border-radius:2px;background:var(--accent);animation:glide 1.6s var(--ease-swap) infinite}
+@keyframes glide{0%{left:-36%}100%{left:100%}}
+.swap-a,.swap-b{transition:opacity 200ms var(--ease-exit),transform 200ms var(--ease-exit)}
+.swap-a.hide{opacity:0;transform:translateY(-4px)}
+.swap-b{opacity:0;transform:translateY(6px)}
+.swap-b.show{opacity:1;transform:none;transition:opacity 320ms var(--ease-settle) 120ms,transform 420ms var(--spring-paper) 120ms}
+
+.themecard{transition:background-color var(--t-slow) var(--ease-swap),color var(--t-slow) var(--ease-swap),box-shadow var(--t-slow) var(--ease-swap)}
+.themecard *{transition:background-color var(--t-slow) var(--ease-swap),color var(--t-slow) var(--ease-swap),box-shadow var(--t-slow) var(--ease-swap),border-color var(--t-slow) var(--ease-swap)}
+
+.check{width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(180deg,var(--accent-top),var(--accent));color:var(--on-accent);transform:scale(.4);opacity:0;transition:transform 120ms var(--ease-exit),opacity 120ms var(--ease-exit)}
+.check.on{transform:none;opacity:1;transition:transform 420ms var(--spring-pop),opacity 120ms ease}
+.newchip{display:inline-flex;transform:scale(.6);opacity:0;transition:transform 120ms var(--ease-exit),opacity 120ms var(--ease-exit)}
+.newchip.on{transform:none;opacity:1;transition:transform 420ms var(--spring-pop) 60ms,opacity 140ms ease 60ms}
+
+.curve{display:flex;flex-direction:column;gap:8px;padding:14px;border-radius:18px}
+.curve svg{width:100%;height:76px}
+.curve path.c{fill:none;stroke:var(--accent-text);stroke-width:2.2;stroke-linecap:round}
+.curve path.g{fill:none;stroke:var(--line-strong);stroke-width:1;stroke-dasharray:3 3}
+
+.rm .lift,.rm .lift:hover,.rm .lift:active,.rm .press:active{transform:none !important}
+.rm .anim,.rm .anim *{transition-property:opacity !important;transition-duration:120ms !important;transition-delay:0s !important;transition-timing-function:linear !important}
+.rm .menu,.rm .dialog,.rm .toast,.rm .mi,.rm .swap-a,.rm .swap-b,.rm .rowwrap,.rm .check,.rm .newchip,.rm .ghost-row{transform:none !important}
+.rm .indet span{animation:none;left:0;width:100%;opacity:.5}
+.blob{position:absolute;border-radius:50%;pointer-events:none}
+</style>
+</helmet>
+<div class="pg {{themeClass}}" style="position: relative; width: 1440px; height: 1580px; overflow: hidden; box-sizing: border-box; padding: 48px; display: flex; flex-direction: column; gap: 24px">
+<div class="blob" aria-hidden="true" style="top: -200px; right: 10%; width: 640px; height: 640px; background: radial-gradient(closest-side, var(--blob-a), transparent)"></div>
+<div class="blob" aria-hidden="true" style="bottom: -260px; left: -160px; width: 700px; height: 700px; background: radial-gradient(closest-side, var(--blob-b), transparent)"></div>
+
+<header style="position: relative; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 24px">
+<div style="max-width: 820px">
+<div class="eyebrow">Motion</div>
+<h1 class="serif" style="margin: 6px 0 0; font-size: 44px; line-height: 50px; font-weight: 500; letter-spacing: -.02em">Settle, don’t bounce</h1>
+<p class="muted" style="margin: 10px 0 0; font-size: 15px; line-height: 23px">Paper moves like paper: it slides and settles with weight, never springs back. Glass appears where you asked for it, sharpening into focus as it grows from its trigger. Exits are always quicker than entrances. Only two small moments are allowed a pop: a saved check and a new tag. Press Play on any card; hover and press the cards in the first one.</p>
+</div>
+<button class="play" onClick="{{toggleRm}}" aria-pressed="{{rm}}" style="height: 40px; padding: 0 16px; font-size: 13px"><svg class="i i-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>{{rmLabel}}</button>
+</header>
+
+<section aria-label="Curves and durations" style="position: relative; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px">
+<div class="paper curve">
+<svg viewBox="0 0 100 60" preserveAspectRatio="none" aria-hidden="true"><path class="g" d="M0 8H100"></path><path class="c" d="M0 58C22 58 25 8 100 8"></path></svg>
+<div><div style="font-weight: 600">Settle</div><div class="cap">ease-settle · .22 1 .36 1</div><div class="faint" style="font-size: 12px; margin-top: 2px">Entrances, hover, state</div></div>
+</div>
+<div class="paper curve">
+<svg viewBox="0 0 100 60" preserveAspectRatio="none" aria-hidden="true"><path class="g" d="M0 8H100"></path><path class="c" d="M0 58C40 58 100 40 100 8"></path></svg>
+<div><div style="font-weight: 600">Exit</div><div class="cap">ease-exit · .4 0 1 1</div><div class="faint" style="font-size: 12px; margin-top: 2px">Leaving, ~60% of the enter</div></div>
+</div>
+<div class="paper curve">
+<svg viewBox="0 0 100 60" preserveAspectRatio="none" aria-hidden="true"><path class="g" d="M0 8H100"></path><path class="c" d="M0 58C15 58 24 4 42 7.4C55 9 70 8 100 8"></path></svg>
+<div><div style="font-weight: 600">Paper spring</div><div class="cap">damping .92 · 1% over</div><div class="faint" style="font-size: 12px; margin-top: 2px">Sheets, dialogs, toasts, rows</div></div>
+</div>
+<div class="paper curve">
+<svg viewBox="0 0 100 60" preserveAspectRatio="none" aria-hidden="true"><path class="g" d="M0 8H100"></path><path class="c" d="M0 58C12 58 20 -2 38 3C50 6 58 10 70 8.5C80 7.5 90 8 100 8"></path></svg>
+<div><div style="font-weight: 600">Pop spring</div><div class="cap">damping .62 · 10% over</div><div class="faint" style="font-size: 12px; margin-top: 2px">Saved check, new tag only</div></div>
+</div>
+<div class="paper curve" style="gap: 10px">
+<div style="display: flex; flex-direction: column; gap: 7px; padding-top: 2px">
+<div style="display: flex; align-items: center; gap: 8px"><span style="height: 6px; width: 17%; border-radius: 3px; background: var(--accent)"></span><span class="cap">90 press</span></div>
+<div style="display: flex; align-items: center; gap: 8px"><span style="height: 6px; width: 31%; border-radius: 3px; background: var(--accent)"></span><span class="cap">160 quick</span></div>
+<div style="display: flex; align-items: center; gap: 8px"><span style="height: 6px; width: 46%; border-radius: 3px; background: var(--accent)"></span><span class="cap">240 base</span></div>
+<div style="display: flex; align-items: center; gap: 8px"><span style="height: 6px; width: 73%; border-radius: 3px; background: var(--accent)"></span><span class="cap">380 calm</span></div>
+</div>
+<div><div style="font-weight: 600">Durations</div><div class="faint" style="font-size: 12px">520 slow, theme change only</div></div>
+</div>
+</section>
+
+<div class="anim" style="position: relative; flex: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 16px">
+
+<article class="demo">
+<div class="demo-head"><div><h2 class="serif" style="margin: 0; font-size: 18px; font-weight: 500">Hover and press</h2><p class="faint" style="margin: 2px 0 0; font-size: 12px">Paper lifts 2px; a press sinks 1px</p></div><span class="cap" style="padding-top: 6px">try it</span></div>
+<div class="stage" style="display: flex; flex-direction: column; justify-content: center; gap: 12px; padding: 18px">
+<button class="paper lift" style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; text-align: left; border-radius: 14px"><span class="serif" style="font-size: 15px; font-weight: 500">Designing websites to last</span><span class="mono faint" style="margin-left: auto; font-size: 11px">2h ago</span></button>
+<div style="display: flex; gap: 8px"><button class="btn btn-filled press">Save a link</button><button class="btn btn-paper press">Cancel</button></div>
+</div>
+<div class="spec"><span class="cap">[data-hovered] 160 settle</span><span class="cap">[data-pressed] 90</span></div>
+</article>
+
+<article class="demo">
+<div class="demo-head"><div><h2 class="serif" style="margin: 0; font-size: 18px; font-weight: 500">Menu</h2><p class="faint" style="margin: 2px 0 0; font-size: 12px">Grows from its trigger, glass sharpens in</p></div><button class="play" onClick="{{toggleMenu}}">Play</button></div>
+<div class="stage">
+<div aria-hidden="true" style="position: absolute; left: 18px; right: 18px; top: 96px; display: flex; flex-direction: column; gap: 8px"><div class="paper" style="height: 40px; border-radius: 12px"></div><div class="paper" style="height: 40px; border-radius: 12px"></div></div>
+<button class="btn btn-paper" onClick="{{toggleMenu}}" style="position: absolute; left: 18px; top: 18px; width: 36px; padding: 0" aria-label="More actions" aria-expanded="{{menuOpen}}"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></button>
+<div class="{{menuCls}}" role="menu">
+<div class="mi" role="menuitem"><svg class="i i-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg>Open original</div>
+<div class="mi" role="menuitem"><svg class="i i-sm" viewBox="0 0 24 24" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>Copy link</div>
+<div class="mi" role="menuitem"><svg class="i i-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"></path><circle cx="7.5" cy="7.5" r=".5"></circle></svg>Edit tags</div>
+<div class="mi" role="menuitem" style="color: var(--danger)"><svg class="i i-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>Delete</div>
+</div>
+</div>
+<div class="spec"><span class="cap">in 240 paper · scale .95→1 · blur 0→28</span><span class="cap">items 25ms apart</span><span class="cap">out 140 exit</span></div>
+</article>
+
+<article class="demo">
+<div class="demo-head"><div><h2 class="serif" style="margin: 0; font-size: 18px; font-weight: 500">Dialog</h2><p class="faint" style="margin: 2px 0 0; font-size: 12px">The page softens; the dialog rises into place</p></div><button class="play" onClick="{{toggleDialog}}">Play</button></div>
+<div class="stage">
+<div aria-hidden="true" style="position: absolute; inset: 16px; display: flex; flex-direction: column; gap: 8px"><div class="paper" style="height: 44px; border-radius: 12px"></div><div class="paper" style="height: 44px; border-radius: 12px"></div><div class="paper" style="height: 44px; border-radius: 12px"></div></div>
+<div class="{{scrimCls}}" aria-hidden="true"></div>
+<div class="{{dialogCls}}" role="alertdialog" aria-label="Delete this clipping?">
+<div class="serif" style="font-size: 16px; font-weight: 500">Delete this clipping?</div>
+<p class="muted" style="margin: 4px 0 12px; font-size: 12px; line-height: 17px">It moves to Deleted for 30 days.</p>
+<div style="display: flex; justify-content: flex-end; gap: 6px"><button class="btn btn-quiet" onClick="{{toggleDialog}}" style="height: 32px">Cancel</button><button class="btn" onClick="{{toggleDialog}}" style="height: 32px; background: var(--danger); color: var(--card)">Delete</button></div>
+</div>
+</div>
+<div class="spec"><span class="cap">scrim 220 · blur 0→3</span><span class="cap">panel 380 paper · y 14→0 · scale .97→1</span><span class="cap">out 160 exit</span></div>
+</article>
+
+<article class="demo">
+<div class="demo-head"><div><h2 class="serif" style="margin: 0; font-size: 18px; font-weight: 500">Row → clipping</h2><p class="faint" style="margin: 2px 0 0; font-size: 12px">The row’s paper becomes the page’s sheet</p></div><button class="play" onClick="{{toggleSheet}}">{{sheetLabel}}</button></div>
+<div class="stage">
+<div class="{{ghostCls}}" aria-hidden="true"><div class="ghost-row paper" style="top: 14px"></div><div class="ghost-row paper" style="top: 66px"></div><div class="ghost-row paper" style="top: 182px"></div></div>
+<div class="{{sheetCls}}">
+<span class="serif st" style="font-weight: 500">Principles of calm technology</span>
+<span class="mono faint" style="font-size: 11px">calmtech.com · Mon</span>
+<div class="more"><p class="serif" style="margin: 10px 0 10px; font-size: 13px; line-height: 20px">Technology should ask for as little attention as it can.</p><span class="chip t-green"><span class="dot"></span>design</span></div>
+</div>
+</div>
+<div class="spec"><span class="cap">view-transition-name: sheet</span><span class="cap">morph 380 paper</span><span class="cap">body fades in after 140</span></div>
+</article>
+
+<article class="demo">
+<div class="demo-head"><div><h2 class="serif" style="margin: 0; font-size: 18px; font-weight: 500">Add and delete</h2><p class="faint" style="margin: 2px 0 0; font-size: 12px">New paper drops in; deleted paper slides away</p></div><span style="display: flex; gap: 6px"><button class="play" onClick="{{toggleAdd}}">Add</button><button class="play" onClick="{{toggleDel}}">{{delLabel}}</button></span></div>
+<div class="stage" style="padding: 12px 14px; display: flex; flex-direction: column">
+<div class="{{addCls}}"><div><div class="paper" style="height: 40px; border-radius: 12px; display: flex; align-items: center; padding: 0 12px; margin-bottom: 8px"><span class="serif" style="font-size: 14px; font-weight: 500">Lucide icons</span><span class="mono faint" style="margin-left: auto; font-size: 11px">now</span></div></div></div>
+<div class="rowwrap"><div><div class="paper" style="height: 40px; border-radius: 12px; display: flex; align-items: center; padding: 0 12px; margin-bottom: 8px"><span class="serif" style="font-size: 14px; font-weight: 500">Designing websites to last</span></div></div></div>
+<div class="{{delCls}}"><div><div class="paper" style="height: 40px; border-radius: 12px; display: flex; align-items: center; padding: 0 12px; margin-bottom: 8px"><span class="serif" style="font-size: 14px; font-weight: 500">backdrop-filter</span></div></div></div>
+<div class="rowwrap"><div><div class="paper" style="height: 40px; border-radius: 12px; display: flex; align-items: center; padding: 0 12px"><span class="serif" style="font-size: 14px; font-weight: 500">Calm technology</span></div></div></div>
+</div>
+<div class="spec"><span class="cap">enter 380 paper · fade after 80</span><span class="cap">delete: fade 120, then close 260</span></div>
+</article>
+
+<article class="demo">
+<div class="demo-head"><div><h2 class="serif" style="margin: 0; font-size: 18px; font-weight: 500">Reading → ready</h2><p class="faint" style="margin: 2px 0 0; font-size: 12px">A slow glide while waiting; the summary eases in</p></div><button class="play" onClick="{{toggleReady}}">{{readyLabel}}</button></div>
+<div class="stage" style="padding: 16px">
+<div class="paper" style="padding: 14px; border-radius: 14px; position: relative; min-height: 112px; box-sizing: border-box">
+<div class="serif" style="font-size: 15px; font-weight: 500">GridList – React Aria</div>
+<div class="mono faint" style="font-size: 11px">react-spectrum.adobe.com</div>
+<div class="{{swapACls}}" style="position: absolute; left: 14px; right: 14px; top: 66px"><div class="faint" style="font-size: 11px; margin-bottom: 6px">Reading the page…</div><div class="indet" aria-hidden="true"><span></span></div></div>
+<p class="{{swapBCls}}" style="margin: 10px 0 0; font-size: 12px; line-height: 18px; color: var(--ink-2)">A list with rows you can select, move through with arrow keys, and act on.</p>
+</div>
+</div>
+<div class="spec"><span class="cap">glide 1.6s swap · loop</span><span class="cap">out 200 · in 420 paper after 120</span></div>
+</article>
+
+<article class="demo">
+<div class="demo-head"><div><h2 class="serif" style="margin: 0; font-size: 18px; font-weight: 500">Toast</h2><p class="faint" style="margin: 2px 0 0; font-size: 12px">Rises from the bottom, sinks when done</p></div><button class="play" onClick="{{toggleToast}}">Play</button></div>
+<div class="stage">
+<div aria-hidden="true" style="position: absolute; inset: 16px 16px auto; display: flex; flex-direction: column; gap: 8px"><div class="paper" style="height: 44px; border-radius: 12px"></div><div class="paper" style="height: 44px; border-radius: 12px"></div></div>
+<div class="{{toastCls}}" role="status"><span style="flex: 1">Clipping deleted</span><button class="btn" onClick="{{toggleToast}}" style="height: 32px; color: var(--accent-text); font-weight: 600">Undo</button></div>
+</div>
+<div class="spec"><span class="cap">in 380 paper · y 20→0</span><span class="cap">out 200 exit · stays 6s, pauses on hover</span></div>
+</article>
+
+<article class="demo">
+<div class="demo-head"><div><h2 class="serif" style="margin: 0; font-size: 18px; font-weight: 500">Light ↔ dark</h2><p class="faint" style="margin: 2px 0 0; font-size: 12px">A slow cross-fade, like evening light</p></div><button class="play" onClick="{{toggleTheme}}">Switch</button></div>
+<div class="stage" style="padding: 16px; display: flex">
+<div class="{{themeCardCls}}" style="flex: 1; border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 8px; background: var(--ground); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line)">
+<div class="paper" style="padding: 10px 12px; border-radius: 12px"><div class="serif" style="font-size: 14px; font-weight: 500">Designing websites to last</div><div class="mono faint" style="font-size: 11px">jeffhuang.com</div></div>
+<div style="display: flex; gap: 6px"><span class="btn btn-filled" style="height: 30px">Save</span><span class="chip t-amber"><span class="dot"></span>reading</span></div>
+</div>
+</div>
+<div class="spec"><span class="cap">520 swap · colours only, nothing moves</span><span class="cap">accent change 240</span></div>
+</article>
+
+<article class="demo">
+<div class="demo-head"><div><h2 class="serif" style="margin: 0; font-size: 18px; font-weight: 500">The two pops</h2><p class="faint" style="margin: 2px 0 0; font-size: 12px">Saved note check, newly added tag</p></div><button class="play" onClick="{{toggleSaved}}">Play</button></div>
+<div class="stage" style="padding: 16px; display: flex; flex-direction: column; gap: 14px; justify-content: center">
+<div style="display: flex; align-items: center; gap: 10px"><span class="paper" style="flex: 1; padding: 10px 12px; border-radius: 12px; font-size: 13px">Good framing for the settings page.</span><span class="{{checkCls}}" aria-label="Saved"><svg class="i i-sm" viewBox="0 0 24 24" style="stroke-width: 3" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></span></div>
+<div style="display: flex; gap: 6px; align-items: center"><span class="chip t-green"><span class="dot"></span>design</span><span class="{{chipCls}}"><span class="chip t-amber"><span class="dot"></span>reading</span></span></div>
+</div>
+<div class="spec"><span class="cap">420 pop · scale .4→1</span><span class="cap">nothing else pops</span></div>
+</article>
+
+</div>
+
+<footer class="paper" style="position: relative; padding: 16px 20px; border-radius: 18px; display: flex; flex-wrap: wrap; gap: 8px 32px; font-size: 13px; line-height: 19px">
+<span><strong style="font-weight: 600">Reduced motion:</strong> <span class="muted">no movement or scale; everything becomes a 120ms fade, the reading glide holds still, and page morphs become cross-fades.</span></span>
+<span><strong style="font-weight: 600">Under the hood:</strong> <span class="muted">React Aria’s <span class="mono">[data-entering]</span> / <span class="mono">[data-exiting]</span> on Popover, Modal and Toast; View Transitions for pages; CSS <span class="mono">linear()</span> for springs.</span></span>
+</footer>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"mode":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"enum","options":["ochre","terracotta","sage","ink"],"default":"ochre"},"$preview":{"width":1440,"height":1580}}'>
+class Component extends DCLogic {
+renderVals() {
+const s = this.state || {};
+const mode = this.props.mode ?? 'light';
+const accent = this.props.accent ?? 'ochre';
+const flip = (key) => () => this.setState({ [key]: !s[key] });
+const otherMode = mode === 'light' ? 'dark' : 'light';
+return {
+themeClass: mode + ' accent-' + accent + (s.rm ? ' rm' : ''),
+rm: !!s.rm,
+rmLabel: s.rm ? 'Reduced motion: on' : 'Reduced motion: off',
+toggleRm: flip('rm'),
+menuOpen: !!s.menu,
+menuCls: 'menu float' + (s.menu ? ' open' : ''),
+toggleMenu: flip('menu'),
+scrimCls: 'scrim' + (s.dialog ? ' open' : ''),
+dialogCls: 'dialog float' + (s.dialog ? ' open' : ''),
+toggleDialog: flip('dialog'),
+toastCls: 'toast float' + (s.toast ? ' open' : ''),
+toggleToast: flip('toast'),
+sheetCls: 'sheet paper' + (s.sheet ? ' open' : ''),
+ghostCls: 'ghosts' + (s.sheet ? ' out' : ''),
+sheetLabel: s.sheet ? 'Back' : 'Open',
+toggleSheet: flip('sheet'),
+addCls: 'rowwrap' + (s.added ? '' : ' gone'),
+toggleAdd: flip('added'),
+delCls: 'rowwrap del' + (s.deleted ? ' gone' : ''),
+delLabel: s.deleted ? 'Undo' : 'Delete',
+toggleDel: flip('deleted'),
+swapACls: 'swap-a' + (s.ready ? ' hide' : ''),
+swapBCls: 'swap-b' + (s.ready ? ' show' : ''),
+readyLabel: s.ready ? 'Reset' : 'Finish',
+toggleReady: flip('ready'),
+themeCardCls: 'themecard pg ' + (s.themed ? otherMode : mode) + ' accent-' + accent,
+toggleTheme: flip('themed'),
+checkCls: 'check' + (s.saved ? ' on' : ''),
+chipCls: 'newchip' + (s.saved ? ' on' : ''),
+toggleSaved: flip('saved')
+};
+}
+}
+</script>
+</body>
+</html>

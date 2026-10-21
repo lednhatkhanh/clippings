@@ -17,13 +17,15 @@ import { fetchRow, POLL_EVERY_MS } from "./fetch-row.ts";
 import { HighlightedText } from "./highlighted-text.tsx";
 import { StatusMotion } from "./status-motion.tsx";
 
-/** The last animation of a row's leaving and returning motion (`app/list-motion.css`). */
-const ROW_SETTLED_BY = new Set(["row-collapse", "row-fade-in"]);
+/** Whether every animation on an element has finished: a row settles on its last one. */
+const hasSettled = (element: Element) =>
+  element.getAnimations().every((animation) => animation.playState === "finished");
 
 function ClippingRow({
   row: initialRow,
   tagHref,
   presence,
+  isNew,
   onSettle,
 }: {
   row: ClippingRowData;
@@ -31,11 +33,14 @@ function ClippingRow({
   tagHref: (tag: string) => string;
   /** Set while a deleted row leaves or an undone one returns. */
   presence: Exclude<RowPresence, "gone"> | undefined;
+  /** Saved while this list was on screen: it drops in once. */
+  isNew: boolean;
   /** Its leaving or returning motion has finished. */
   onSettle: () => void;
 }) {
   const [row, setRow] = useState(initialRow);
   const [retrying, setRetrying] = useState(false);
+  const [entering, setEntering] = useState(isNew);
   const online = useOnline();
 
   // A pending row asks for itself until enrichment has finished, then shows the result in place.
@@ -59,47 +64,50 @@ function ClippingRow({
       id={row.id}
       textValue={row.title}
       href={`/c/${row.id}`}
-      className="@container state-layer grid row-presence rounded-sm border-b border-outline-variant px-2 data-focus-visible:outline-solid"
-      // CSS animates a deleted or undone row (`app/list-motion.css` says why not a view
-      // transition), and the list drops the row once its last animation ends.
-      data-presence={presence}
+      className="group @container mb-2.5 row-presence rounded-lg"
+      // CSS animates a row that is deleted, undone or new (`app/list-motion.css` says why not a
+      // view transition), and the list drops the row once its last animation ends.
+      data-presence={presence ?? (entering ? "entering" : undefined)}
       onAnimationEnd={(event) => {
-        if (event.target === event.currentTarget && ROW_SETTLED_BY.has(event.animationName)) {
-          onSettle();
-        }
+        if (event.target !== event.currentTarget || !hasSettled(event.currentTarget)) return;
+        if (presence) onSettle();
+        else setEntering(false);
       }}
     >
-      {/* The row's sheet morphs into the detail page's, and back. */}
+      {/* The row's paper morphs into the detail page's sheet, and back. */}
       <SheetTransition clippingId={row.id} direction="back">
         <StatusMotion
           status={row.status}
-          className="flex items-start gap-3 py-row-block @lg:items-center"
+          className="relative flex lift items-start gap-3.5 rounded-lg paper px-4 py-row-block"
         >
           <Favicon url={row.url} />
           <div className="flex min-w-0 flex-1 status-content flex-col gap-row-gap">
             <span className="truncate typescale-clipping-title">
               {row.highlights ? <HighlightedText segments={row.highlights.title} /> : row.title}
             </span>
-            <span className="flex flex-wrap gap-x-2 typescale-label-sm font-mono text-on-surface-variant">
+            <span className="flex flex-wrap items-center gap-x-1.5 typescale-label-sm font-mono text-ink-faint">
               <span>{row.domain}</span>
+              <span aria-hidden="true">·</span>
               <time dateTime={row.dateTime}>{row.dateLabel}</time>
             </span>
-            <TagChips aria-label="Tags" tags={row.tags} href={tagHref} className="mt-1" />
             {row.highlights?.snippet ? (
-              <span className="line-clamp-2 typescale-body-md text-on-surface-variant">
+              <span className="line-clamp-2 typescale-body-md text-ink-muted">
                 <HighlightedText segments={row.highlights.snippet} />
               </span>
+            ) : row.summary ? (
+              <span className="line-clamp-2 typescale-body-md text-ink-muted">{row.summary}</span>
             ) : null}
+            <TagChips aria-label="Tags" tags={row.tags} href={tagHref} className="mt-1" />
             {row.status === "pending" ? (
-              <div className="flex flex-col gap-1 pt-1 @lg:max-w-xs">
-                <span aria-hidden="true" className="typescale-label-sm text-on-surface-variant">
+              <div className="flex flex-col gap-1.5 pt-1 @lg:max-w-xs">
+                <span aria-hidden="true" className="typescale-label-sm text-ink-faint">
                   Reading the page…
                 </span>
                 <ProgressBar label="Reading the page" />
               </div>
             ) : null}
             {row.status === "failed" ? (
-              <div className="flex flex-wrap items-center gap-x-3 typescale-body-sm text-on-surface-variant">
+              <div className="flex flex-wrap items-center gap-x-3 typescale-body-sm text-ink-muted">
                 <span>Couldn&apos;t read this page. Your link and note are saved.</span>
                 <Button variant="text" onPress={retry} isPending={retrying} isDisabled={!online}>
                   Retry
@@ -107,6 +115,16 @@ function ClippingRow({
               </div>
             ) : null}
           </div>
+          {/* A quiet hint on the keyboard-focused row only; touch has no keyboard. */}
+          <span
+            aria-hidden="true"
+            className="absolute end-4 bottom-3 hidden items-center gap-1.5 rounded-xs bg-paper ps-1 typescale-label-sm text-ink-faint group-data-focus-visible:pointer-fine:inline-flex"
+          >
+            <kbd className="inline-flex h-5.5 items-center rounded-sm bg-ground-sunk px-1.5 font-mono text-ink-muted">
+              ↵
+            </kbd>
+            Open
+          </span>
         </StatusMotion>
       </SheetTransition>
     </GridListItem>
@@ -122,10 +140,13 @@ export function ClippingList({
   query,
   initialRows,
   initialCursor,
+  newIds,
 }: {
   query: string;
   initialRows: ClippingRowData[];
   initialCursor: string | null;
+  /** Rows saved while this list was on screen, which drop in. */
+  newIds: ReadonlySet<string>;
 }) {
   const [rows, setRows] = useState(initialRows);
   const [cursor, setCursor] = useState(initialCursor);
@@ -163,6 +184,7 @@ export function ClippingList({
                 row={row}
                 tagHref={tagHref}
                 presence={rowPresence === "gone" ? undefined : rowPresence}
+                isNew={newIds.has(row.id)}
                 onSettle={() => settle(row.id)}
               />
             );
@@ -172,7 +194,7 @@ export function ClippingList({
         ) : null}
       </GridList>
       {failed ? (
-        <div role="alert" className="flex items-center gap-3 py-3 typescale-body-md text-error">
+        <div role="alert" className="flex items-center gap-3 py-3 typescale-body-md text-danger">
           <span>Couldn&apos;t load more clippings.</span>
           <Button variant="text" onPress={loadMore}>
             Retry

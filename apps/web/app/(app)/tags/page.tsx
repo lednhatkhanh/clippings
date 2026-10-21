@@ -3,6 +3,7 @@ import { Suspense } from "react";
 
 import { ListSkeleton } from "@/components/clippings/list-skeleton.tsx";
 import { LoadError } from "@/components/load-error.tsx";
+import { PageHeader } from "@/components/page-header.tsx";
 import {
   PageTransition,
   RevealTransition,
@@ -32,8 +33,8 @@ async function Tags() {
 export default function TagsPage() {
   return (
     <PageTransition>
-      <div className="mx-auto max-w-180">
-        <h1 className="py-4 typescale-headline-sm">Tags</h1>
+      <div className="mx-auto max-w-220">
+        <PageHeader title="Tags" eyebrow="Your library" />
         <Suspense
           fallback={
             <SkeletonTransition>

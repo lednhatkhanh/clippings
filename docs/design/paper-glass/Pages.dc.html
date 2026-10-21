@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Page transitions</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}
+.pg{font-family:'Geist',system-ui,sans-serif;color:var(--ink);background:var(--ground);-webkit-font-smoothing:antialiased;font-size:14px;line-height:20px;
+--ease-settle:cubic-bezier(.22,1,.36,1);--ease-exit:cubic-bezier(.4,0,1,1);--ease-swap:cubic-bezier(.65,0,.35,1);
+--spring-paper:linear(0,.06 2.5%,.22 6%,.45 11%,.66 17%,.82 24%,.92 32%,.98 41%,1.008 52%,1.01 62%,1.003 76%,1)}
+.pg.light{--ground:#F2EDE3;--ground-sunk:#E8E1D2;--card:#FCFAF5;--card-2:#F7F2E8;--ink:#26221C;--ink-2:#544C40;--ink-3:#6B6253;--line:rgba(70,52,28,.12);--line-strong:rgba(70,52,28,.24);--glass:rgba(250,247,240,.62);--glass-edge:rgba(255,255,255,.72);--glass-hi:rgba(255,255,255,.85);--field-inset:rgba(60,40,20,.10);--blob-b:rgba(170,200,172,.55);--blob-c:rgba(236,190,150,.5);
+--shadow-paper:inset 0 1px 0 rgba(255,255,255,.7),0 0 0 1px rgba(80,60,30,.06),0 1px 1px rgba(60,40,20,.05),0 3px 6px -2px rgba(60,40,20,.07),0 12px 24px -8px rgba(60,40,20,.09);
+--shadow-glass:inset 0 1px 0 var(--glass-hi),0 1px 2px rgba(60,40,20,.08),0 16px 36px -12px rgba(60,40,20,.26)}
+.pg.dark{--ground:#16140F;--ground-sunk:#0F0E0B;--card:#24201B;--card-2:#1F1C17;--ink:#EEE7DA;--ink-2:#C4BAA8;--ink-3:#9D9381;--line:rgba(255,240,210,.09);--line-strong:rgba(255,240,210,.18);--glass:rgba(34,31,26,.6);--glass-edge:rgba(255,245,225,.10);--glass-hi:rgba(255,250,235,.07);--field-inset:rgba(0,0,0,.4);--blob-b:rgba(120,160,125,.12);--blob-c:rgba(210,140,100,.11);
+--shadow-paper:inset 0 1px 0 rgba(255,250,235,.05),0 0 0 1px rgba(255,240,210,.06),0 1px 1px rgba(0,0,0,.3),0 4px 8px -2px rgba(0,0,0,.28),0 14px 28px -10px rgba(0,0,0,.45);
+--shadow-glass:inset 0 1px 0 var(--glass-hi),0 0 0 1px rgba(0,0,0,.25),0 18px 40px -12px rgba(0,0,0,.6)}
+.light.accent-ochre{--accent:#E2AE1C;--accent-top:#F3CC4A;--on-accent:#3A2C00;--accent-soft:#F3E2A6;--on-accent-soft:#4A3A00;--accent-text:#7A5C00;--blob-a:rgba(244,206,90,.6)}
+.dark.accent-ochre{--accent:#E0B03A;--accent-top:#EEC65E;--on-accent:#271D00;--accent-soft:#3A3119;--on-accent-soft:#F2DA92;--accent-text:#EBC65C;--blob-a:rgba(224,176,58,.15)}
+.light.accent-terracotta{--accent:#BF5629;--accent-top:#D26B3E;--on-accent:#FFFFFF;--accent-soft:#F5D9CA;--on-accent-soft:#5A2008;--accent-text:#A3461E;--blob-a:rgba(235,160,120,.5)}
+.dark.accent-terracotta{--accent:#E8906A;--accent-top:#F2A784;--on-accent:#2D0F03;--accent-soft:#3E2519;--on-accent-soft:#F7CBB5;--accent-text:#F0A280;--blob-a:rgba(232,144,106,.14)}
+.light.accent-sage{--accent:#5A7656;--accent-top:#6C8A67;--on-accent:#FFFFFF;--accent-soft:#DCE6D4;--on-accent-soft:#22341E;--accent-text:#46603F;--blob-a:rgba(160,195,160,.55)}
+.dark.accent-sage{--accent:#A6C19C;--accent-top:#BCD3B2;--on-accent:#15240F;--accent-soft:#263124;--on-accent-soft:#CFE1C6;--accent-text:#AECBA4;--blob-a:rgba(166,193,156,.13)}
+.light.accent-ink{--accent:#3E5E8A;--accent-top:#4F709D;--on-accent:#FFFFFF;--accent-soft:#DCE4F0;--on-accent-soft:#162B4A;--accent-text:#385883;--blob-a:rgba(160,185,225,.5)}
+.dark.accent-ink{--accent:#A8C0E6;--accent-top:#BED0EF;--on-accent:#0F2240;--accent-soft:#222A3A;--on-accent-soft:#CFDCF2;--accent-text:#B0C7EA;--blob-a:rgba(168,192,230,.13)}
+.light .t-green{--tag-bg:#DDE9D6;--tag-fg:#234A1F}.dark .t-green{--tag-bg:#233222;--tag-fg:#BFDDB4}
+.light .t-amber{--tag-bg:#F4E4B5;--tag-fg:#5B4300}.dark .t-amber{--tag-bg:#3A3119;--tag-fg:#F0D58A}
+.light .t-blue{--tag-bg:#DCE5F2;--tag-fg:#1D3B66}.dark .t-blue{--tag-bg:#202A3B;--tag-fg:#BFD2F0}
+.serif{font-family:'Fraunces',Georgia,serif;font-optical-sizing:auto}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.eyebrow{font-size:11px;line-height:14px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:500;margin:0}
+.muted{color:var(--ink-2)}.faint{color:var(--ink-3)}
+.cap{font-family:'Geist Mono',ui-monospace,monospace;font-size:10.5px;line-height:14px;color:var(--ink-3)}
+.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.i-sm{width:15px;height:15px}
+.paper{background:linear-gradient(180deg,var(--card),var(--card-2));box-shadow:var(--shadow-paper);border-radius:14px}
+.glass{background:var(--glass);-webkit-backdrop-filter:blur(22px) saturate(160%);backdrop-filter:blur(22px) saturate(160%);border:1px solid var(--glass-edge);box-shadow:var(--shadow-glass)}
+.chip{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:7px;font-size:11px;font-weight:500;background:var(--tag-bg);color:var(--tag-fg)}
+.dot{width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.75}
+.play{height:32px;padding:0 12px;border-radius:10px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:6px;background:var(--accent-soft);color:var(--on-accent-soft);flex:none}
+.demo{position:relative;display:flex;flex-direction:column;border-radius:24px;overflow:hidden;box-shadow:inset 0 0 0 1px var(--line);background:var(--ground)}
+.demo-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px 20px 0}
+.stage{position:relative;flex:1;margin:14px;border-radius:18px;overflow:hidden;background:var(--ground-sunk);box-shadow:inset 0 1px 2px var(--field-inset)}
+.spec{padding:0 20px 18px;display:flex;flex-wrap:wrap;gap:4px 14px}
+
+.navi{display:flex;align-items:center;gap:10px;height:38px;padding:0 12px;border-radius:12px;color:var(--ink-2);font-weight:500;font-size:13px;width:100%;text-align:left;box-sizing:border-box;transition:background-color 200ms var(--ease-settle),color 200ms var(--ease-settle)}
+.navi.cur{background:var(--accent-soft);color:var(--on-accent-soft)}
+.pane{position:absolute;inset:0;padding:4px 2px;display:flex;flex-direction:column;gap:10px;opacity:0;pointer-events:none;transition:opacity 120ms var(--ease-exit),transform 160ms var(--ease-exit)}
+.pane.before{transform:translateY(-10px)}
+.pane.after{transform:translateY(10px)}
+.pane.on{opacity:1;transform:none;pointer-events:auto;transition:opacity 220ms var(--ease-settle) 90ms,transform 340ms var(--spring-paper) 90ms}
+
+.phone{position:relative;width:250px;height:440px;border-radius:30px;overflow:hidden;background:var(--ground);box-shadow:0 0 0 1px var(--line-strong),0 20px 40px -18px rgba(0,0,0,.4)}
+.screen{position:absolute;inset:0;padding:66px 12px 80px;box-sizing:border-box;display:flex;flex-direction:column;gap:8px}
+.screen.list{transition:transform 380ms var(--spring-paper),opacity 260ms var(--ease-settle),filter 260ms var(--ease-settle)}
+.screen.list.back{transform:translateX(-18%);opacity:.0;filter:blur(1px);transition:transform 380ms var(--spring-paper),opacity 200ms var(--ease-exit),filter 200ms var(--ease-exit)}
+.screen.det{transform:translateX(36px);opacity:0;pointer-events:none;transition:transform 220ms var(--ease-exit),opacity 160ms var(--ease-exit)}
+.screen.det.on{transform:none;opacity:1;pointer-events:auto;transition:transform 380ms var(--spring-paper) 40ms,opacity 260ms var(--ease-settle) 40ms}
+.ptitle{position:absolute;left:0;right:0;text-align:center;transition:opacity 160ms var(--ease-exit),transform 220ms var(--ease-exit)}
+.ptitle.off-l{opacity:0;transform:translateX(-14px)}
+.ptitle.off-r{opacity:0;transform:translateX(14px)}
+.ptitle.on{opacity:1;transform:none;transition:opacity 240ms var(--ease-settle) 60ms,transform 340ms var(--spring-paper) 60ms}
+.backbtn{transition:opacity 200ms var(--ease-settle),transform 300ms var(--spring-paper)}
+.backbtn.off{opacity:0;transform:translateX(8px)}
+
+.lrow{opacity:0;transform:translateY(10px);transition:opacity 120ms ease,transform 120ms ease}
+.loaded .lrow{opacity:1;transform:none;transition:opacity 260ms var(--ease-settle),transform 420ms var(--spring-paper)}
+.loaded .lrow:nth-child(2){transition-delay:40ms}.loaded .lrow:nth-child(3){transition-delay:80ms}.loaded .lrow:nth-child(4){transition-delay:120ms}.loaded .lrow:nth-child(5){transition-delay:160ms}
+
+.anchor{outline:1.5px dashed var(--accent-text);outline-offset:3px}
+.rm .pane,.rm .screen,.rm .ptitle,.rm .lrow,.rm .backbtn{transform:none !important;filter:none !important;transition-property:opacity !important;transition-duration:140ms !important;transition-delay:0s !important;transition-timing-function:linear !important}
+.blob{position:absolute;border-radius:50%;pointer-events:none}
+</style>
+</helmet>
+<div class="pg {{themeClass}}" style="position: relative; width: 1440px; height: 1060px; overflow: hidden; box-sizing: border-box; padding: 48px; display: flex; flex-direction: column; gap: 24px">
+<div class="blob" aria-hidden="true" style="top: -220px; left: 30%; width: 640px; height: 640px; background: radial-gradient(closest-side, var(--blob-a), transparent)"></div>
+<div class="blob" aria-hidden="true" style="bottom: -260px; right: -160px; width: 700px; height: 700px; background: radial-gradient(closest-side, var(--blob-b), transparent)"></div>
+
+<header style="position: relative; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 24px">
+<div style="max-width: 860px">
+<div class="eyebrow">Motion · pages</div>
+<h1 class="serif" style="margin: 6px 0 0; font-size: 44px; line-height: 50px; font-weight: 500; letter-spacing: -.02em">The glass stays, the paper changes</h1>
+<p class="muted" style="margin: 10px 0 0; font-size: 15px; line-height: 23px">On every navigation the frosted frame (rail, header, tab bar) holds perfectly still. Only the paper underneath moves: it fades and drifts a few pixels in the direction you went. Going deeper slides forward; going back reverses it. Typing, filtering and sorting never animate a page; results swap in place.</p>
+</div>
+<button class="play" onClick="{{toggleRm}}" aria-pressed="{{rm}}" style="height: 40px; padding: 0 16px; font-size: 13px">{{rmLabel}}</button>
+</header>
+
+<div style="position: relative; flex: 1; display: grid; grid-template-columns: 1.45fr 1fr 1fr; gap: 16px">
+
+<article class="demo">
+<div class="demo-head"><div><h2 class="serif" style="margin: 0; font-size: 19px; font-weight: 500">Between sections</h2><p class="faint" style="margin: 2px 0 0; font-size: 12px">Click the rail. Lower in the rail drifts up, higher drifts down.</p></div></div>
+<div class="stage" style="display: flex; gap: 12px; padding: 12px">
+<nav class="glass anchor" aria-label="Sections" style="width: 150px; flex: none; border-radius: 16px; padding: 10px 8px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px">
+<div class="serif" style="font-size: 15px; font-weight: 500; padding: 2px 8px 8px">Clippings</div>
+<sc-for list="{{sections}}" as="s" hint-placeholder-count="3">
+<button class="navi {{s.cls}}" onClick="{{s.pick}}" aria-current="{{s.current}}">{{s.label}}</button>
+</sc-for>
+</nav>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px">
+<div class="glass anchor" style="height: 48px; border-radius: 14px; display: flex; align-items: center; padding: 0 14px; flex: none"><span class="serif" style="font-size: 17px; font-weight: 500">{{sectionTitle}}</span></div>
+<div style="position: relative; flex: 1">
+<div class="{{paneCls0}}">
+<div class="paper" style="padding: 10px 12px"><div class="serif" style="font-size: 14px; font-weight: 500">Designing websites to last</div><div class="mono faint" style="font-size: 10.5px">jeffhuang.com · 2h ago</div></div>
+<div class="paper" style="padding: 10px 12px"><div class="serif" style="font-size: 14px; font-weight: 500">backdrop-filter</div><div class="mono faint" style="font-size: 10.5px">developer.mozilla.org · Yesterday</div></div>
+<div class="paper" style="padding: 10px 12px"><div class="serif" style="font-size: 14px; font-weight: 500">Principles of calm technology</div><div class="mono faint" style="font-size: 10.5px">calmtech.com · Mon</div></div>
+</div>
+<div class="{{paneCls1}}">
+<div class="paper" style="padding: 12px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between"><span class="chip t-amber"><span class="dot"></span>reading</span><span class="faint" style="font-size: 12px">42</span></div>
+<div style="display: flex; justify-content: space-between"><span class="chip t-green"><span class="dot"></span>design</span><span class="faint" style="font-size: 12px">31</span></div>
+<div style="display: flex; justify-content: space-between"><span class="chip t-blue"><span class="dot"></span>web</span><span class="faint" style="font-size: 12px">18</span></div>
+</div>
+</div>
+<div class="{{paneCls2}}">
+<div class="paper" style="padding: 12px; display: flex; flex-direction: column; gap: 10px">
+<div class="serif" style="font-size: 14px; font-weight: 500">Appearance</div>
+<div style="display: flex; justify-content: space-between; font-size: 12px"><span>Mode</span><span class="faint">System</span></div>
+<div style="display: flex; justify-content: space-between; font-size: 12px"><span>Accent</span><span class="faint">Ochre</span></div>
+</div>
+<div class="paper" style="padding: 12px"><div class="serif" style="font-size: 14px; font-weight: 500">Connected apps</div></div>
+</div>
+</div>
+</div>
+</div>
+<div class="spec"><span class="cap">old paper: fade 120 · drift 10px · exit</span><span class="cap">new paper: fade 220 + drift 340 paper, after 90</span><span class="cap">dashed = anchored, never moves</span></div>
+</article>
+
+<article class="demo">
+<div class="demo-head"><div><h2 class="serif" style="margin: 0; font-size: 19px; font-weight: 500">Deeper and back</h2><p class="faint" style="margin: 2px 0 0; font-size: 12px">On a phone the page slides forward a little; the list eases back behind it</p></div><button class="play" onClick="{{togglePush}}">{{pushLabel}}</button></div>
+<div class="stage" style="display: flex; align-items: center; justify-content: center">
+<div class="phone">
+<div class="{{listCls}}">
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="4">
+<button class="paper" onClick="{{openDetail}}" style="padding: 10px 12px; text-align: left"><div class="serif" style="font-size: 13px; font-weight: 500">{{r.title}}</div><div class="mono faint" style="font-size: 10px">{{r.meta}}</div></button>
+</sc-for>
+</div>
+<div class="{{detCls}}">
+<div class="paper" style="padding: 14px; border-radius: 18px; display: flex; flex-direction: column; gap: 10px">
+<div class="serif" style="font-size: 18px; line-height: 23px; font-weight: 500">Principles of calm technology</div>
+<div class="mono faint" style="font-size: 10px">calmtech.com · Saved 20 Oct</div>
+<div style="height: 32px; border-radius: 10px; background: linear-gradient(180deg, var(--accent-top), var(--accent)); color: var(--on-accent); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 500">Open original</div>
+<p class="serif" style="margin: 0; font-size: 12.5px; line-height: 19px">Technology should ask for as little attention as it can.</p>
+</div>
+</div>
+<div class="glass anchor" style="position: absolute; top: 10px; left: 10px; right: 10px; height: 44px; border-radius: 16px; display: flex; align-items: center; z-index: 3">
+<button class="{{backCls}}" onClick="{{togglePush}}" aria-label="Back" style="position: absolute; left: 6px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; z-index: 1"><svg class="i i-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg></button>
+<span class="{{titleListCls}}" style="font-weight: 600; font-size: 13px">Clippings</span>
+<span class="{{titleDetCls}}" style="font-weight: 600; font-size: 13px">Clipping</span>
+</div>
+<div class="glass anchor" aria-hidden="true" style="position: absolute; left: 10px; right: 10px; bottom: 10px; height: 52px; border-radius: 18px; display: flex; align-items: center; justify-content: space-around; z-index: 3; font-size: 10px; color: var(--ink-2)"><span style="padding: 4px 14px; border-radius: 12px; background: var(--accent-soft); color: var(--on-accent-soft); font-weight: 600">Clippings</span><span>Tags</span><span>Settings</span></div>
+</div>
+</div>
+<div class="spec"><span class="cap">forward 380 paper · x 36→0</span><span class="cap">list: x 0→−18%, fades</span><span class="cap">header title swaps · back reverses</span><span class="cap">desktop: the sheet morph instead</span></div>
+</article>
+
+<article class="demo">
+<div class="demo-head"><div><h2 class="serif" style="margin: 0; font-size: 19px; font-weight: 500">First load</h2><p class="faint" style="margin: 2px 0 0; font-size: 12px">Sheets settle in, 40ms apart, first five only</p></div><button class="play" onClick="{{toggleLoad}}">{{loadLabel}}</button></div>
+<div class="stage" style="padding: 14px">
+<div class="glass anchor" style="height: 48px; border-radius: 14px; display: flex; align-items: center; padding: 0 14px; margin-bottom: 10px"><span class="serif" style="font-size: 17px; font-weight: 500">Clippings</span></div>
+<div class="{{loadCls}}" style="display: flex; flex-direction: column; gap: 8px">
+<div class="lrow paper" style="padding: 10px 12px"><div class="serif" style="font-size: 13px; font-weight: 500">Designing websites to last</div><div class="mono faint" style="font-size: 10px">jeffhuang.com</div></div>
+<div class="lrow paper" style="padding: 10px 12px"><div class="serif" style="font-size: 13px; font-weight: 500">backdrop-filter</div><div class="mono faint" style="font-size: 10px">developer.mozilla.org</div></div>
+<div class="lrow paper" style="padding: 10px 12px"><div class="serif" style="font-size: 13px; font-weight: 500">Principles of calm technology</div><div class="mono faint" style="font-size: 10px">calmtech.com</div></div>
+<div class="lrow paper" style="padding: 10px 12px"><div class="serif" style="font-size: 13px; font-weight: 500">Lucide icons</div><div class="mono faint" style="font-size: 10px">lucide.dev</div></div>
+<div class="lrow paper" style="padding: 10px 12px"><div class="serif" style="font-size: 13px; font-weight: 500">A beginner’s sourdough starter</div><div class="mono faint" style="font-size: 10px">theperfectloaf.com</div></div>
+</div>
+</div>
+<div class="spec"><span class="cap">420 paper · y 10→0 · 40ms stagger</span><span class="cap">only on a cold load, never on back</span></div>
+</article>
+
+</div>
+
+<section class="paper" aria-label="Rules" style="position: relative; padding: 18px 22px; border-radius: 20px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px">
+<div><div style="font-weight: 600">Anchored</div><p class="muted" style="margin: 4px 0 0; font-size: 13px; line-height: 19px">Rail, header and tab bar get their own view-transition names, so they never fade or move.</p></div>
+<div><div style="font-weight: 600">Direction</div><p class="muted" style="margin: 4px 0 0; font-size: 13px; line-height: 19px">Sections: by rail order. Deeper: forward. Browser back and Esc play the reverse.</p></div>
+<div><div style="font-weight: 600">Fast or nothing</div><p class="muted" style="margin: 4px 0 0; font-size: 13px; line-height: 19px">A navigation that takes over 400ms shows the old page dimmed instead of a blank one, then transitions once.</p></div>
+<div><div style="font-weight: 600">Reduced motion</div><p class="muted" style="margin: 4px 0 0; font-size: 13px; line-height: 19px">Every page change becomes a 140ms cross-fade. Try the switch above.</p></div>
+</section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"mode":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"enum","options":["ochre","terracotta","sage","ink"],"default":"ochre"},"$preview":{"width":1440,"height":1060}}'>
+class Component extends DCLogic {
+renderVals() {
+const s = this.state || {};
+const mode = this.props.mode ?? 'light';
+const accent = this.props.accent ?? 'ochre';
+const active = s.section ?? 0;
+const labels = ['Clippings', 'Tags', 'Settings'];
+const paneCls = (i) => 'pane' + (i === active ? ' on' : i < active ? ' before' : ' after');
+const pushed = !!s.pushed;
+const loaded = s.loaded !== false;
+return {
+themeClass: mode + ' accent-' + accent + (s.rm ? ' rm' : ''),
+rm: !!s.rm,
+rmLabel: s.rm ? 'Reduced motion: on' : 'Reduced motion: off',
+toggleRm: () => this.setState({ rm: !s.rm }),
+sections: labels.map((label, i) => ({
+label,
+cls: i === active ? 'cur' : '',
+current: i === active ? 'page' : 'false',
+pick: () => this.setState({ section: i })
+})),
+sectionTitle: labels[active],
+paneCls0: paneCls(0),
+paneCls1: paneCls(1),
+paneCls2: paneCls(2),
+rows: [
+{ title: 'Principles of calm technology', meta: 'calmtech.com · Mon' },
+{ title: 'Designing websites to last', meta: 'jeffhuang.com · 2h ago' },
+{ title: 'backdrop-filter', meta: 'developer.mozilla.org' },
+{ title: 'Lucide icons', meta: 'lucide.dev · 14 Oct' }
+],
+openDetail: () => this.setState({ pushed: true }),
+togglePush: () => this.setState({ pushed: !pushed }),
+pushLabel: pushed ? 'Back' : 'Open',
+listCls: 'screen list' + (pushed ? ' back' : ''),
+detCls: 'screen det' + (pushed ? ' on' : ''),
+backCls: 'backbtn' + (pushed ? '' : ' off'),
+titleListCls: 'ptitle' + (pushed ? ' off-l' : ' on'),
+titleDetCls: 'ptitle' + (pushed ? ' on' : ' off-r'),
+loadCls: loaded ? 'loaded' : '',
+loadLabel: loaded ? 'Reset' : 'Load',
+toggleLoad: () => this.setState({ loaded: !loaded })
+};
+}
+}
+</script>
+</body>
+</html>

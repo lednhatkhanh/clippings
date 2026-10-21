@@ -28,12 +28,12 @@ vi.mock("./auth.ts", () => ({ isSignedIn: vi.fn() }));
 // The service worker draws the icons on a canvas, which Node lacks.
 vi.mock("./icons.ts", () => ({
   COLORS: {
-    primary: "#636117",
-    "on-primary": "#ffffff",
-    error: "#ba1a1a",
-    "on-error": "#ffffff",
-    "secondary-container": "#e8e4bf",
-    "on-secondary-container": "#49482c",
+    accent: "#5b7757",
+    "on-accent": "#ffffff",
+    danger: "#a9371b",
+    "on-danger": "#ffffff",
+    "accent-soft": "#d1e9c9",
+    "on-accent-soft": "#253a24",
   },
   toolbarIcons: () => ({ unsaved: "unsaved-icon", saved: "saved-icon" }),
 }));
@@ -164,7 +164,9 @@ describe("saving silently", () => {
 
     expect(iconOf(TAB)).toBe("saved-icon");
     expect(await badgeOf(TAB)).toBe("✓");
-    expect(await browser.action.getBadgeBackgroundColor({ tabId: TAB })).toEqual([99, 97, 23, 255]);
+    expect(await browser.action.getBadgeBackgroundColor({ tabId: TAB })).toEqual([
+      91, 119, 87, 255,
+    ]);
     await vi.advanceTimersByTimeAsync(SAVED_BADGE_MS - 1);
     expect(await badgeOf(TAB)).toBe("✓");
     await vi.advanceTimersByTimeAsync(1);
@@ -179,7 +181,7 @@ describe("saving silently", () => {
 
     expect(await badgeOf(TAB)).toBe("!");
     expect(await browser.action.getBadgeBackgroundColor({ tabId: TAB })).toEqual([
-      186, 26, 26, 255,
+      169, 55, 27, 255,
     ]);
     expect(await titleOf(TAB)).toMatch(/sign in/i);
   });

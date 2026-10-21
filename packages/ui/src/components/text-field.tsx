@@ -24,8 +24,9 @@ export interface TextFieldProps extends Omit<AriaTextFieldProps, "className" | "
   className?: string;
 }
 
+// The well draws its own focus ring (`field-indicator`), so the global one stays off.
 const CONTROL =
-  "field-indicator rounded-xs bg-surface-container-high px-4 py-3 typescale-body-lg text-on-surface placeholder:text-on-surface-variant data-disabled:opacity-38";
+  "field-indicator rounded-lg px-3.5 py-2.5 typescale-body-lg text-ink outline-none placeholder:text-ink-faint data-disabled:opacity-40";
 
 export function TextField({
   label,
@@ -41,9 +42,9 @@ export function TextField({
     <AriaTextField
       {...props}
       isInvalid={errorMessage ? true : props.isInvalid}
-      className={cn("flex flex-col gap-1", className)}
+      className={cn("flex flex-col gap-1.5", className)}
     >
-      <Label className="typescale-label-md text-on-surface-variant">{label}</Label>
+      <Label className="typescale-label-md text-ink-muted">{label}</Label>
       {multiline ? (
         <TextArea
           rows={rows}
@@ -55,10 +56,10 @@ export function TextField({
         <Input
           placeholder={placeholder}
           maxLength={maxLength}
-          className={cn(CONTROL, "min-h-14")}
+          className={cn(CONTROL, "min-h-11")}
         />
       )}
-      <FieldError className="typescale-body-sm text-error">{errorMessage}</FieldError>
+      <FieldError className="typescale-body-sm text-danger">{errorMessage}</FieldError>
     </AriaTextField>
   );
 }

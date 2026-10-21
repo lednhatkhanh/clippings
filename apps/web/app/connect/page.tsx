@@ -69,14 +69,14 @@ async function ConsentContent({ searchParams }: { searchParams: SearchParams }) 
       <h1 className="typescale-headline-sm">
         <span className="break-words">{name}</span> wants to save and search your clippings
       </h1>
-      <p className="typescale-body-md text-on-surface-variant">
-        Allowing sends you back to <span className="text-on-surface">{destination}</span>.
+      <p className="typescale-body-md text-ink-muted">
+        Allowing sends you back to <span className="text-ink">{destination}</span>.
       </p>
-      <div className="typescale-body-md text-on-surface-variant">
-        Signed in as <span className="break-all text-on-surface">{session.user.email}</span>.{" "}
+      <div className="typescale-body-md text-ink-muted">
+        Signed in as <span className="break-all text-ink">{session.user.email}</span>.{" "}
         <form action={switchAccountAction} className="inline">
           <input type="hidden" name="oauth_query" value={oauthQuery} />
-          <button type="submit" className="text-primary underline">
+          <button type="submit" className="text-accent-ink underline">
             Not you?
           </button>
         </form>
@@ -90,7 +90,7 @@ async function ConsentContent({ searchParams }: { searchParams: SearchParams }) 
         </form>
         <form action={denyConnectionAction}>
           <input type="hidden" name="oauth_query" value={oauthQuery} />
-          <Button type="submit" variant="outlined" className="w-full">
+          <Button type="submit" variant="paper" className="w-full">
             Deny
           </Button>
         </form>
@@ -107,7 +107,7 @@ export default function ConnectPage({ searchParams }: { searchParams: SearchPara
   return (
     <AuthCard>
       <ClippingsStackIllustration className="h-auto w-50" />
-      <Suspense fallback={<p className="typescale-body-md text-on-surface-variant">Loading…</p>}>
+      <Suspense fallback={<p className="typescale-body-md text-ink-muted">Loading…</p>}>
         <ConsentContent searchParams={searchParams} />
       </Suspense>
     </AuthCard>

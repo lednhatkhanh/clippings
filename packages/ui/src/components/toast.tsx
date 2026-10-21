@@ -1,5 +1,6 @@
 "use client";
 
+import { X } from "lucide-react";
 import {
   Button as AriaButton,
   Text,
@@ -8,8 +9,6 @@ import {
   UNSTABLE_ToastQueue as ToastQueue,
   UNSTABLE_ToastRegion as AriaToastRegion,
 } from "react-aria-components";
-
-import { Icon } from "../icons/icon.tsx";
 
 // React Aria's Toast is still `UNSTABLE_`: only this file touches it, so an API change lands here.
 
@@ -49,12 +48,12 @@ export function ToastRegion() {
   return (
     <AriaToastRegion
       queue={queue}
-      className="fixed inset-x-4 bottom-24 z-40 flex flex-col-reverse gap-2 rounded-xs medium:start-30 medium:end-auto medium:bottom-6 large:start-68"
+      className="fixed inset-x-4 bottom-24 z-40 flex flex-col-reverse gap-2 medium:start-28 medium:end-auto medium:bottom-6 large:start-72"
     >
       {({ toast }) => (
         <AriaToast
           toast={toast}
-          className="flex min-h-12 w-full toast-enter items-center gap-1 rounded-xs bg-inverse-surface ps-4 pe-1 text-inverse-on-surface shadow-3 medium:w-auto medium:max-w-140 medium:min-w-86"
+          className="flex min-h-14 w-full toast-enter items-center gap-2 rounded-lg-increased glass-float ps-4.5 pe-2 text-ink medium:w-auto medium:max-w-140 medium:min-w-86"
         >
           <AriaToastContent className="min-w-0 flex-1 py-3">
             <Text slot="title" className="typescale-body-md">
@@ -67,7 +66,7 @@ export function ToastRegion() {
                 toast.content.action?.onAction();
                 queue.close(toast.key);
               }}
-              className="state-layer min-h-12 shrink-0 rounded-full px-3 typescale-label-lg text-inverse-primary"
+              className="state-layer min-h-11 shrink-0 rounded-md px-3 typescale-label-lg text-accent-ink medium:min-h-9"
             >
               {toast.content.action.label}
             </AriaButton>
@@ -75,9 +74,9 @@ export function ToastRegion() {
           <AriaButton
             slot="close"
             aria-label="Dismiss"
-            className="state-layer flex size-12 shrink-0 items-center justify-center rounded-full"
+            className="state-layer flex size-11 shrink-0 items-center justify-center rounded-md text-ink-muted medium:size-9"
           >
-            <Icon name="close" />
+            <X className="size-4.5" />
           </AriaButton>
         </AriaToast>
       )}

@@ -1,5 +1,6 @@
 "use client";
 
+import { MonitorDown, Share } from "lucide-react";
 import { useSyncExternalStore } from "react";
 
 import {
@@ -7,9 +8,9 @@ import {
   promptInstall,
   subscribeInstallOption,
 } from "@/lib/pwa/install-prompt.ts";
-import { Button, Icon } from "@clippings/ui";
+import { Button } from "@clippings/ui";
 
-import { SettingsSection } from "./settings-section.tsx";
+import { SettingsRow } from "./settings-section.tsx";
 
 /**
  * "Install app": Chromium's install dialog, or the Add to Home Screen steps in iOS and iPadOS
@@ -21,7 +22,8 @@ export function InstallAppSettings() {
 
   if (!option) return null;
   return (
-    <SettingsSection
+    <SettingsRow
+      stacked={option !== "prompt"}
       title="Install app"
       description={
         option === "prompt"
@@ -30,21 +32,20 @@ export function InstallAppSettings() {
       }
     >
       {option === "prompt" ? (
-        <div>
-          <Button variant="tonal" onPress={() => void promptInstall()}>
-            <Icon name="install_desktop" />
-            Install app
-          </Button>
-        </div>
+        <Button variant="paper" onPress={() => void promptInstall()}>
+          <MonitorDown className="size-4.5" />
+          Install app
+        </Button>
       ) : (
-        <ol className="flex list-decimal flex-col gap-2 ps-6 typescale-body-md">
+        <ol className="flex list-decimal flex-col gap-2 ps-6 typescale-body-md text-ink-muted">
           <li>
-            Tap Share <Icon name="ios_share" /> in Safari&apos;s toolbar.
+            Tap Share <Share className="inline size-4 align-text-bottom" /> in Safari&apos;s
+            toolbar.
           </li>
           <li>Choose Add to Home Screen. You may need to scroll the list or tap More.</li>
           <li>Tap Add.</li>
         </ol>
       )}
-    </SettingsSection>
+    </SettingsRow>
   );
 }

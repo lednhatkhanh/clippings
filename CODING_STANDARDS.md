@@ -34,8 +34,18 @@ type-aware) and types (`tsc`); this file holds what none of them says.
   components live in a separate module.
 - `packages/ui/src/generated/` is output. Edit `src/theme/` and run
   `pnpm --filter @clippings/ui generate`; CI fails on a stale file.
-- Add icons to the subset font with `pnpm --filter @clippings/ui build:icons`. `check:icons` fails
-  on a name the font lacks.
+- Paper & Glass: content sits on `paper` (cards, sheets, sections); only what floats above it uses
+  glass: `glass` for the frame (rail, header, tab bar), `glass-float` for menus, dialogs, toasts and
+  the command palette. Filled actions use `accent-fill`. The vocabulary is in
+  `packages/ui/src/styles/theme.css`.
+- Icons are `lucide-react` components (`<Bookmark className="size-5" />`), stroke 1.75 set
+  globally; an icon-only button needs an `aria-label`. Design-system props that show an icon take
+  the component (`icon={Palette}`).
+- Motion: entrances settle (`ease-settle` or the paper spring), exits are quicker (`ease-exit`),
+  only the saved check and a new tag pop. Multiply any travel distance by
+  `--motion-spatial-factor`, which reduced motion sets to 0.
+- After changing `apps/web/lib/pwa/app-icon.ts`, run `pnpm --filter @clippings/web build:app-icons`;
+  `manifest.test.ts` fails on a stale icon.
 
 ## Database
 

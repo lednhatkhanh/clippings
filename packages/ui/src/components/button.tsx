@@ -8,15 +8,21 @@ import type {
 
 import { cn } from "../cn.ts";
 
+// `filled` is the one accent action, `paper` the quiet alternative that lifts on hover, `text` a
+// bare label, `danger` a destructive confirm. `tonal` and `outlined` are older names for `paper`.
 const VARIANTS = {
-  filled: "bg-primary text-on-primary",
-  tonal: "bg-secondary-container text-on-secondary-container",
-  outlined: "border border-outline text-primary",
-  text: "text-primary",
+  filled:
+    "accent-fill transition duration-quick ease-settle data-hovered:brightness-105 data-hovered:saturate-105 data-pressed:translate-y-px data-pressed:brightness-95 data-pressed:duration-press",
+  paper: "paper lift text-ink",
+  tonal: "paper lift text-ink",
+  outlined: "paper lift text-ink",
+  text: "state-layer text-ink-muted transition-colors data-hovered:text-ink data-pressed:text-ink",
+  danger:
+    "bg-danger text-on-danger shadow-paper transition duration-quick ease-settle data-hovered:brightness-110 data-pressed:translate-y-px data-pressed:brightness-95 data-pressed:duration-press",
 } as const;
 
 const BASE =
-  "state-layer inline-flex min-h-12 items-center justify-center gap-2 rounded-full px-6 outline-secondary typescale-label-lg transition disabled:opacity-38 data-pending:opacity-38";
+  "inline-flex h-11 items-center justify-center gap-2 rounded-md px-4 typescale-label-lg data-disabled:opacity-40 data-pending:opacity-40 medium:h-10";
 
 type Variant = keyof typeof VARIANTS;
 

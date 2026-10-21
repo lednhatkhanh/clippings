@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Paper and Glass tokens and states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;padding:0}
+input::placeholder{color:var(--ink-3);opacity:1}
+.pg{font-family:'Geist',system-ui,sans-serif;color:var(--ink);background:var(--ground);-webkit-font-smoothing:antialiased;font-size:14px;line-height:20px}
+.pg.light{--ground:#F2EDE3;--ground-sunk:#E8E1D2;--card:#FCFAF5;--card-2:#F7F2E8;--ink:#26221C;--ink-2:#544C40;--ink-3:#6B6253;--line:rgba(70,52,28,.12);--line-strong:rgba(70,52,28,.24);--glass:rgba(250,247,240,.62);--glass-strong:rgba(252,250,245,.8);--glass-edge:rgba(255,255,255,.72);--glass-hi:rgba(255,255,255,.85);--field:rgba(255,255,255,.55);--field-inset:rgba(60,40,20,.10);--danger:#A63A24;--danger-soft:#F6DCD3;--scrim:rgba(46,34,18,.16);--blob-b:rgba(170,200,172,.55);--blob-c:rgba(236,190,150,.5);
+--shadow-paper:inset 0 1px 0 rgba(255,255,255,.7),0 0 0 1px rgba(80,60,30,.06),0 1px 1px rgba(60,40,20,.05),0 3px 6px -2px rgba(60,40,20,.07),0 12px 24px -8px rgba(60,40,20,.09);
+--shadow-lift:inset 0 1px 0 rgba(255,255,255,.8),0 0 0 1px rgba(80,60,30,.07),0 2px 2px rgba(60,40,20,.05),0 8px 14px -4px rgba(60,40,20,.10),0 22px 40px -12px rgba(60,40,20,.16);
+--shadow-glass:inset 0 1px 0 var(--glass-hi),0 1px 2px rgba(60,40,20,.08),0 16px 36px -12px rgba(60,40,20,.26);
+--shadow-float:inset 0 1px 0 var(--glass-hi),0 0 0 1px rgba(80,60,30,.08),0 4px 10px -2px rgba(60,40,20,.12),0 30px 60px -16px rgba(60,40,20,.38)}
+.pg.dark{--ground:#16140F;--ground-sunk:#0F0E0B;--card:#24201B;--card-2:#1F1C17;--ink:#EEE7DA;--ink-2:#C4BAA8;--ink-3:#9D9381;--line:rgba(255,240,210,.09);--line-strong:rgba(255,240,210,.18);--glass:rgba(34,31,26,.6);--glass-strong:rgba(40,36,30,.78);--glass-edge:rgba(255,245,225,.10);--glass-hi:rgba(255,250,235,.07);--field:rgba(0,0,0,.24);--field-inset:rgba(0,0,0,.4);--danger:#F0A08A;--danger-soft:#3D221B;--scrim:rgba(0,0,0,.42);--blob-b:rgba(120,160,125,.12);--blob-c:rgba(210,140,100,.11);
+--shadow-paper:inset 0 1px 0 rgba(255,250,235,.05),0 0 0 1px rgba(255,240,210,.06),0 1px 1px rgba(0,0,0,.3),0 4px 8px -2px rgba(0,0,0,.28),0 14px 28px -10px rgba(0,0,0,.45);
+--shadow-lift:inset 0 1px 0 rgba(255,250,235,.07),0 0 0 1px rgba(255,240,210,.09),0 2px 2px rgba(0,0,0,.3),0 10px 18px -4px rgba(0,0,0,.4),0 26px 44px -12px rgba(0,0,0,.6);
+--shadow-glass:inset 0 1px 0 var(--glass-hi),0 0 0 1px rgba(0,0,0,.25),0 18px 40px -12px rgba(0,0,0,.6);
+--shadow-float:inset 0 1px 0 var(--glass-hi),0 0 0 1px rgba(0,0,0,.35),0 4px 10px -2px rgba(0,0,0,.4),0 30px 60px -16px rgba(0,0,0,.75)}
+.light.accent-ochre{--accent:#E2AE1C;--accent-top:#F3CC4A;--on-accent:#3A2C00;--accent-soft:#F3E2A6;--on-accent-soft:#4A3A00;--accent-text:#7A5C00;--accent-ring:rgba(150,110,0,.22);--accent-glow:rgba(150,105,0,.42);--blob-a:rgba(244,206,90,.6)}
+.dark.accent-ochre{--accent:#E0B03A;--accent-top:#EEC65E;--on-accent:#271D00;--accent-soft:#3A3119;--on-accent-soft:#F2DA92;--accent-text:#EBC65C;--accent-ring:rgba(255,220,120,.25);--accent-glow:rgba(0,0,0,.5);--blob-a:rgba(224,176,58,.15)}
+.light.accent-terracotta{--accent:#BF5629;--accent-top:#D26B3E;--on-accent:#FFFFFF;--accent-soft:#F5D9CA;--on-accent-soft:#5A2008;--accent-text:#A3461E;--accent-ring:rgba(140,50,10,.25);--accent-glow:rgba(150,60,20,.4);--blob-a:rgba(235,160,120,.5)}
+.dark.accent-terracotta{--accent:#E8906A;--accent-top:#F2A784;--on-accent:#2D0F03;--accent-soft:#3E2519;--on-accent-soft:#F7CBB5;--accent-text:#F0A280;--accent-ring:rgba(255,190,160,.25);--accent-glow:rgba(0,0,0,.5);--blob-a:rgba(232,144,106,.14)}
+.light.accent-sage{--accent:#5A7656;--accent-top:#6C8A67;--on-accent:#FFFFFF;--accent-soft:#DCE6D4;--on-accent-soft:#22341E;--accent-text:#46603F;--accent-ring:rgba(40,70,35,.25);--accent-glow:rgba(40,70,35,.35);--blob-a:rgba(160,195,160,.55)}
+.dark.accent-sage{--accent:#A6C19C;--accent-top:#BCD3B2;--on-accent:#15240F;--accent-soft:#263124;--on-accent-soft:#CFE1C6;--accent-text:#AECBA4;--accent-ring:rgba(200,230,190,.22);--accent-glow:rgba(0,0,0,.5);--blob-a:rgba(166,193,156,.13)}
+.light.accent-ink{--accent:#3E5E8A;--accent-top:#4F709D;--on-accent:#FFFFFF;--accent-soft:#DCE4F0;--on-accent-soft:#162B4A;--accent-text:#385883;--accent-ring:rgba(30,50,90,.25);--accent-glow:rgba(30,50,90,.35);--blob-a:rgba(160,185,225,.5)}
+.dark.accent-ink{--accent:#A8C0E6;--accent-top:#BED0EF;--on-accent:#0F2240;--accent-soft:#222A3A;--on-accent-soft:#CFDCF2;--accent-text:#B0C7EA;--accent-ring:rgba(190,210,245,.22);--accent-glow:rgba(0,0,0,.5);--blob-a:rgba(168,192,230,.13)}
+.light .t-amber{--tag-bg:#F4E4B5;--tag-fg:#5B4300}.dark .t-amber{--tag-bg:#3A3119;--tag-fg:#F0D58A}
+.light .t-green{--tag-bg:#DDE9D6;--tag-fg:#234A1F}.dark .t-green{--tag-bg:#233222;--tag-fg:#BFDDB4}
+.light .t-blue{--tag-bg:#DCE5F2;--tag-fg:#1D3B66}.dark .t-blue{--tag-bg:#202A3B;--tag-fg:#BFD2F0}
+.light .t-rose{--tag-bg:#F6DCD6;--tag-fg:#6E2215}.dark .t-rose{--tag-bg:#3B2220;--tag-fg:#F2BFB4}
+.light .t-violet{--tag-bg:#E7DFF0;--tag-fg:#43296A}.dark .t-violet{--tag-bg:#2D2639;--tag-fg:#D7C8EE}
+.light .t-teal{--tag-bg:#D6EAE7;--tag-fg:#154A44}.dark .t-teal{--tag-bg:#1D3230;--tag-fg:#AEDDD6}
+.serif{font-family:'Fraunces',Georgia,serif;font-optical-sizing:auto}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.eyebrow{font-size:11px;line-height:14px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:500;margin:0}
+.muted{color:var(--ink-2)}.faint{color:var(--ink-3)}
+.cap{font-family:'Geist Mono',ui-monospace,monospace;font-size:10.5px;line-height:14px;color:var(--ink-3)}
+.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.i-sm{width:14px;height:14px}
+.paper{background:linear-gradient(180deg,var(--card),var(--card-2));box-shadow:var(--shadow-paper);border-radius:16px}
+.glass{background:var(--glass);-webkit-backdrop-filter:blur(22px) saturate(160%);backdrop-filter:blur(22px) saturate(160%);border:1px solid var(--glass-edge);box-shadow:var(--shadow-glass)}
+.float{background:var(--glass-strong);-webkit-backdrop-filter:blur(28px) saturate(170%);backdrop-filter:blur(28px) saturate(170%);border:1px solid var(--glass-edge);box-shadow:var(--shadow-float)}
+.sunk{background:var(--field);border:1px solid var(--line);box-shadow:inset 0 1px 2px var(--field-inset),0 1px 0 var(--glass-hi)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 16px;border-radius:12px;font-size:14px;font-weight:500;white-space:nowrap;box-sizing:border-box;transition:transform .12s ease,box-shadow .2s ease,filter .2s ease}
+.btn-filled{background:linear-gradient(180deg,var(--accent-top),var(--accent));color:var(--on-accent);box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 0 0 1px var(--accent-ring),0 1px 2px rgba(0,0,0,.12),0 8px 18px -8px var(--accent-glow)}
+.btn-filled.h{filter:brightness(1.05) saturate(1.05);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 0 0 1px var(--accent-ring),0 2px 4px rgba(0,0,0,.14),0 12px 24px -8px var(--accent-glow)}
+.btn-filled.p{transform:translateY(1px);filter:brightness(.96);box-shadow:inset 0 1px 3px rgba(0,0,0,.18),0 0 0 1px var(--accent-ring)}
+.btn-paper{background:linear-gradient(180deg,var(--card),var(--card-2));box-shadow:var(--shadow-paper);color:var(--ink)}
+.btn-paper.h{box-shadow:var(--shadow-lift)}
+.btn-paper.p{transform:translateY(1px);box-shadow:inset 0 1px 2px var(--field-inset),0 0 0 1px var(--line)}
+.btn-quiet{color:var(--ink-2)}
+.btn-quiet.h{background:var(--line);color:var(--ink)}
+.btn-quiet.p{background:var(--line-strong);color:var(--ink)}
+.f{outline:2px solid var(--accent-text);outline-offset:2px}
+.d{opacity:.4;box-shadow:none;filter:saturate(.5);cursor:default}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:8px;font-size:12px;line-height:16px;font-weight:500;background:var(--tag-bg);color:var(--tag-fg);white-space:nowrap}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.75}
+.filter{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:10px;font-size:13px;font-weight:500;color:var(--ink-2);box-shadow:inset 0 0 0 1px var(--line-strong);box-sizing:border-box}
+.filter.sel{background:var(--accent-soft);color:var(--on-accent-soft);box-shadow:none}
+.field{display:flex;align-items:center;gap:10px;height:44px;padding:0 12px 0 14px;border-radius:14px;color:var(--ink-2);box-sizing:border-box}
+.field input{flex:1;min-width:0;border:0;outline:0;background:transparent;font-size:15px;color:var(--ink)}
+.field.focus{border-color:var(--accent-text);box-shadow:inset 0 1px 2px var(--field-inset),0 0 0 3px var(--accent-ring)}
+.field.invalid{border-color:var(--danger);box-shadow:inset 0 1px 2px var(--field-inset),0 0 0 3px var(--danger-soft)}
+.seg{display:inline-flex;padding:3px;gap:2px;border-radius:13px;background:var(--ground-sunk);box-shadow:inset 0 1px 2px var(--field-inset)}
+.seg-item{height:34px;padding:0 14px;border-radius:10px;display:inline-flex;align-items:center;gap:8px;font-weight:500;color:var(--ink-2)}
+.seg-item.sel{background:linear-gradient(180deg,var(--card),var(--card-2));box-shadow:var(--shadow-paper);color:var(--ink)}
+.switch{width:44px;height:26px;border-radius:13px;background:var(--ground-sunk);box-shadow:inset 0 1px 2px var(--field-inset),inset 0 0 0 1px var(--line);position:relative;flex:none}
+.switch span{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:linear-gradient(180deg,#FFFDF8,#F2EDE3);box-shadow:0 1px 2px rgba(0,0,0,.2),0 2px 6px -2px rgba(0,0,0,.25)}
+.switch.on{background:linear-gradient(180deg,var(--accent-top),var(--accent));box-shadow:inset 0 1px 2px rgba(0,0,0,.12)}
+.switch.on span{left:21px}
+.check{width:20px;height:20px;border-radius:6px;box-shadow:inset 0 0 0 1.5px var(--line-strong);display:flex;align-items:center;justify-content:center;flex:none}
+.check.on{background:linear-gradient(180deg,var(--accent-top),var(--accent));color:var(--on-accent);box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 0 0 1px var(--accent-ring)}
+.radio{width:20px;height:20px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--line-strong);display:flex;align-items:center;justify-content:center;flex:none}
+.radio.on{box-shadow:inset 0 0 0 6px var(--accent)}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line)}
+.tab{height:40px;padding:0 12px;font-weight:500;color:var(--ink-2);position:relative}
+.tab.sel{color:var(--ink)}
+.tab.sel::after{content:'';position:absolute;left:10px;right:10px;bottom:-1px;height:2px;border-radius:2px;background:var(--accent)}
+.progress{height:4px;border-radius:2px;background:var(--line);overflow:hidden}
+.progress span{display:block;height:100%;width:62%;border-radius:2px;background:var(--accent)}
+.fav{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex:none;background:linear-gradient(180deg,var(--card),var(--card-2));box-shadow:var(--shadow-paper);font-family:'Fraunces',Georgia,serif;font-size:14px;font-weight:600;color:var(--ink-2)}
+.row{display:flex;align-items:center;gap:12px;padding:12px 14px}
+.row.h{box-shadow:var(--shadow-lift);transform:translateY(-1px)}
+.row.s{box-shadow:inset 0 0 0 2px var(--accent-text),var(--shadow-paper)}
+.row.f{outline:2px solid var(--accent-text);outline-offset:3px}
+.state-grid{display:grid;grid-template-columns:96px repeat(5, minmax(0, 1fr));gap:12px 10px;align-items:center}
+.blob{position:absolute;border-radius:50%;pointer-events:none}
+</style>
+</helmet>
+<div class="pg light accent-ochre" style="width: 1440px; height: 1640px; box-sizing: border-box; padding: 48px; display: flex; flex-direction: column; gap: 28px; overflow: hidden">
+
+<header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 24px">
+<div style="max-width: 760px">
+<div class="eyebrow">Clippings design system</div>
+<h1 class="serif" style="margin: 6px 0 0; font-size: 44px; line-height: 50px; font-weight: 500; letter-spacing: -.02em">Paper &amp; Glass</h1>
+<p class="muted" style="margin: 10px 0 0; font-size: 15px; line-height: 23px">Warm matte paper for content, frosted glass only for what floats above it: navigation, the header, menus, dialogs and toasts. One accent tints actions and selection. Every state below maps to a React Aria render prop or data attribute.</p>
+</div>
+<div style="display: flex; gap: 10px; flex-wrap: wrap">
+<span class="mono faint" style="font-size: 12px">Fraunces · Geist · Geist Mono · Lucide 1.75 stroke</span>
+</div>
+</header>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; flex: 1">
+<sc-for list="{{panels}}" as="p" hint-placeholder-count="2">
+<section class="pg {{p.cls}}" aria-label="{{p.label}}" style="position: relative; overflow: hidden; border-radius: 28px; box-sizing: border-box; padding: 28px; display: flex; flex-direction: column; gap: 24px; box-shadow: 0 0 0 1px rgba(0,0,0,.08)">
+<div class="blob" aria-hidden="true" style="top: -120px; right: -80px; width: 420px; height: 420px; background: radial-gradient(closest-side, var(--blob-a), transparent)"></div>
+<div class="blob" aria-hidden="true" style="bottom: -160px; left: -120px; width: 460px; height: 460px; background: radial-gradient(closest-side, var(--blob-b), transparent)"></div>
+
+<div style="position: relative; display: flex; align-items: baseline; justify-content: space-between">
+<h2 class="serif" style="margin: 0; font-size: 26px; line-height: 32px; font-weight: 500">{{p.label}}</h2>
+<span class="cap">.{{p.mode}} · accent-ochre</span>
+</div>
+
+<div style="position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
+<div><div style="height: 64px; border-radius: 14px; background: var(--ground); box-shadow: inset 0 0 0 1px var(--line-strong)"></div><div style="margin-top: 6px; font-weight: 500; font-size: 13px">Ground</div><div class="cap">--ground</div></div>
+<div><div class="paper" style="height: 64px; border-radius: 14px"></div><div style="margin-top: 6px; font-weight: 500; font-size: 13px">Paper</div><div class="cap">--card · --shadow-paper</div></div>
+<div><div class="sunk" style="height: 64px; border-radius: 14px; box-sizing: border-box"></div><div style="margin-top: 6px; font-weight: 500; font-size: 13px">Sunk field</div><div class="cap">--field</div></div>
+<div><div style="position: relative; height: 64px; border-radius: 14px; overflow: hidden; background: var(--ground)"><div aria-hidden="true" style="position: absolute; left: 8px; top: 10px; width: 44px; height: 44px; border-radius: 50%; background: var(--accent)"></div><div aria-hidden="true" style="position: absolute; right: 10px; top: 18px; width: 40px; height: 40px; border-radius: 50%; background: #9DB89F"></div><div class="glass" style="position: absolute; inset: 12px 10px; border-radius: 10px"></div></div><div style="margin-top: 6px; font-weight: 500; font-size: 13px">Glass</div><div class="cap">blur 22 · sat 160%</div></div>
+</div>
+
+<div style="position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 16px; align-items: baseline">
+<div class="serif" style="font-size: 34px; line-height: 40px; font-weight: 500; letter-spacing: -.015em">Clippings</div>
+<div class="serif" style="font-size: 20px; line-height: 26px; font-weight: 500">Section title</div>
+<div class="serif" style="font-size: 18px; line-height: 24px; font-weight: 500">Row title</div>
+<div class="cap">Fraunces 34/40 · 500</div>
+<div class="cap">Fraunces 20/26 · 500</div>
+<div class="cap">Fraunces 18/24 · 500</div>
+<div style="font-size: 14px; line-height: 21px">Body and controls</div>
+<div class="mono faint" style="font-size: 12px">domain.com · 2h ago</div>
+<div class="eyebrow">Eyebrow label</div>
+</div>
+
+<div class="paper" style="position: relative; padding: 18px; border-radius: 20px">
+<div class="state-grid">
+<span></span><span class="cap">rest</span><span class="cap">[data-hovered]</span><span class="cap">[data-pressed]</span><span class="cap">[data-focus-visible]</span><span class="cap">[data-disabled]</span>
+<span style="font-weight: 500; font-size: 13px">Filled</span>
+<button class="btn btn-filled">Save</button><button class="btn btn-filled h">Save</button><button class="btn btn-filled p">Save</button><button class="btn btn-filled f">Save</button><button class="btn btn-filled d" disabled="">Save</button>
+<span style="font-weight: 500; font-size: 13px">Paper</span>
+<button class="btn btn-paper">Cancel</button><button class="btn btn-paper h">Cancel</button><button class="btn btn-paper p">Cancel</button><button class="btn btn-paper f">Cancel</button><button class="btn btn-paper d" disabled="">Cancel</button>
+<span style="font-weight: 500; font-size: 13px">Quiet</span>
+<button class="btn btn-quiet">Retry</button><button class="btn btn-quiet h">Retry</button><button class="btn btn-quiet p">Retry</button><button class="btn btn-quiet f">Retry</button><button class="btn btn-quiet d" disabled="">Retry</button>
+</div>
+</div>
+
+<div style="position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label class="field sunk focus"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><input type="search" aria-label="Search" value="calm tech"><svg class="i i-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></label>
+<span class="cap">SearchField [data-focus-within]</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label class="field sunk invalid"><input aria-label="Link" value="htps://example" aria-invalid="true"></label>
+<span style="font-size: 12px; color: var(--danger)">Enter a link that starts with https://</span>
+</div>
+</div>
+
+<div style="position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 14px 20px">
+<div class="seg" role="radiogroup" aria-label="Mode"><span class="seg-item">System</span><span class="seg-item sel">Light</span><span class="seg-item">Dark</span></div>
+<span style="display: inline-flex; align-items: center; gap: 8px"><span class="switch on" aria-hidden="true"><span></span></span>Switch</span>
+<span style="display: inline-flex; align-items: center; gap: 8px"><span class="switch" aria-hidden="true"><span></span></span>Off</span>
+<span style="display: inline-flex; align-items: center; gap: 8px"><span class="check on" aria-hidden="true"><svg class="i i-sm" viewBox="0 0 24 24" style="stroke-width: 3" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></span>Checkbox</span>
+<span style="display: inline-flex; align-items: center; gap: 8px"><span class="radio on" aria-hidden="true"></span>Radio</span>
+<span style="display: inline-flex; align-items: center; gap: 8px"><span class="radio" aria-hidden="true"></span>Radio</span>
+</div>
+
+<div style="position: relative; display: flex; flex-direction: column; gap: 12px">
+<div class="tabs" role="tablist"><button class="tab sel" role="tab" aria-selected="true">All</button><button class="tab" role="tab" aria-selected="false">Unread</button><button class="tab" role="tab" aria-selected="false">Deleted</button></div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+<span class="filter sel"><svg class="i i-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>Web</span>
+<span class="filter">Extension</span>
+<span class="chip t-amber"><span class="dot"></span>reading</span>
+<span class="chip t-green"><span class="dot"></span>design</span>
+<span class="chip t-blue"><span class="dot"></span>web</span>
+<span class="chip t-rose"><span class="dot"></span>kitchen</span>
+<span class="chip t-violet"><span class="dot"></span>css</span>
+<span class="chip t-teal"><span class="dot"></span>travel</span>
+</div>
+<div style="display: flex; align-items: center; gap: 12px"><span class="faint" style="font-size: 12px">Reading the page…</span><span class="progress" style="flex: 1" aria-hidden="true"><span></span></span></div>
+</div>
+
+<div style="position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px">
+<div><div class="paper row"><span class="fav" aria-hidden="true">C</span><span class="serif" style="font-size: 16px; font-weight: 500">Calm technology</span></div><div class="cap" style="margin-top: 6px">GridListItem rest</div></div>
+<div><div class="paper row h"><span class="fav" aria-hidden="true">C</span><span class="serif" style="font-size: 16px; font-weight: 500">Calm technology</span></div><div class="cap" style="margin-top: 6px">[data-hovered] lifts</div></div>
+<div><div class="paper row s"><span class="fav" aria-hidden="true">C</span><span class="serif" style="font-size: 16px; font-weight: 500">Calm technology</span></div><div class="cap" style="margin-top: 6px">[data-selected]</div></div>
+<div><div class="paper row f"><span class="fav" aria-hidden="true">C</span><span class="serif" style="font-size: 16px; font-weight: 500">Calm technology</span></div><div class="cap" style="margin-top: 6px">[data-focus-visible]</div></div>
+</div>
+
+<div style="position: relative; flex: 1; min-height: 210px; border-radius: 20px; overflow: hidden; background: var(--ground); box-shadow: inset 0 0 0 1px var(--line)">
+<div aria-hidden="true" style="position: absolute; inset: 14px; display: flex; flex-direction: column; gap: 8px"><div class="paper" style="height: 56px"></div><div class="paper" style="height: 56px"></div><div class="paper" style="height: 56px"></div></div>
+<div aria-hidden="true" style="position: absolute; inset: 0; background: var(--scrim); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px)"></div>
+<div role="alertdialog" aria-label="Delete this clipping?" class="float" style="position: absolute; left: 50%; top: 50%; width: 340px; margin: -82px 0 0 -170px; box-sizing: border-box; padding: 20px; border-radius: 20px">
+<div class="serif" style="font-size: 19px; line-height: 25px; font-weight: 500">Delete this clipping?</div>
+<p class="muted" style="margin: 6px 0 16px; font-size: 13px; line-height: 19px">It moves to Deleted. You can restore it for 30 days.</p>
+<div style="display: flex; justify-content: flex-end; gap: 8px"><button class="btn btn-quiet">Cancel</button><button class="btn" style="background: var(--danger); color: var(--card)">Delete</button></div>
+</div>
+<span class="cap" style="position: absolute; left: 16px; bottom: 10px">Modal + Dialog · float glass over a blurred scrim</span>
+</div>
+
+</section>
+</sc-for>
+</div>
+
+<section aria-label="Accents" style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<span class="eyebrow" style="margin-right: 8px">Accents</span>
+<span class="light accent-ochre"><button class="btn btn-filled">Ochre</button></span>
+<span class="light accent-terracotta"><button class="btn btn-filled">Terracotta</button></span>
+<span class="light accent-sage"><button class="btn btn-filled">Sage</button></span>
+<span class="light accent-ink"><button class="btn btn-filled">Ink</button></span>
+<span class="dark accent-ochre"><button class="btn btn-filled">Ochre</button></span>
+<span class="dark accent-terracotta"><button class="btn btn-filled">Terracotta</button></span>
+<span class="dark accent-sage"><button class="btn btn-filled">Sage</button></span>
+<span class="dark accent-ink"><button class="btn btn-filled">Ink</button></span>
+</section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1640}}'>
+class Component extends DCLogic {
+renderVals() {
+return {
+panels: [
+{ cls: 'light accent-ochre', mode: 'light', label: 'Light' },
+{ cls: 'dark accent-ochre', mode: 'dark', label: 'Dark' }
+]
+};
+}
+}
+</script>
+</body>
+</html>

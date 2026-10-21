@@ -1,34 +1,34 @@
 "use client";
 
+import { Monitor, Moon, Palette, Plus, Sun, Tag, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { saveAppearanceAction } from "@/app/(app)/settings/actions.ts";
 import { useOpenNewClipping } from "@/components/clippings/new-clipping-dialog.tsx";
 import { useTags } from "@/components/clippings/use-tags.ts";
+import {
+  shownAppearance,
+  switchAppearance,
+  type Switchable,
+} from "@/components/settings/switch-appearance.ts";
 import { hrefWithTag, loadBrowseParams } from "@/lib/clippings/browse-params.ts";
 import {
   APPEARANCE_DEFAULTS,
-  APPEARANCE_KEYS,
   APPEARANCE_VALUES,
-  pickAppearance,
   type Appearance,
   type PaletteName,
 } from "@clippings/shared";
-import {
-  applyAppearance,
-  Command,
-  CommandGroup,
-  CommandMenu,
-  Dialog,
-  Modal,
-  toasts,
-  transitionAppearance,
-} from "@clippings/ui";
+import { Command, CommandGroup, CommandMenu, Dialog, Modal } from "@clippings/ui";
 
 const MODES: Record<Appearance["theme"], string> = {
   light: "Light mode",
   dark: "Dark mode",
   system: "System mode",
+};
+
+const MODE_ICONS: Record<Appearance["theme"], LucideIcon> = {
+  light: Sun,
+  dark: Moon,
+  system: Monitor,
 };
 
 const PALETTES: Record<PaletteName, string> = {
@@ -38,35 +38,6 @@ const PALETTES: Record<PaletteName, string> = {
   ink: "Ink palette",
 };
 
-/** The appearance on screen, read from `<html>`, where a missing attribute means `system`. */
-function shownAppearance(): Appearance {
-  const root = document.documentElement;
-  const shown = Object.fromEntries(
-    APPEARANCE_KEYS.map((key) => [key, root.getAttribute(`data-${key}`) ?? "system"]),
-  );
-  return { ...APPEARANCE_DEFAULTS, ...pickAppearance(shown) };
-}
-
-type Switchable = "theme" | "palette";
-
-/**
- * Switches mode or palette on this device and saves it, as Settings does. A failed save puts the
- * old value back, unless something else has been picked since.
- */
-function switchAppearance<K extends Switchable>(key: K, value: Appearance[K]) {
-  const shown = shownAppearance();
-  const previous = shown[key];
-  if (previous === value) return;
-  transitionAppearance(() => applyAppearance({ ...shown, [key]: value }));
-
-  saveAppearanceAction({ [key]: value }).catch(() => {
-    const now = shownAppearance();
-    if (now[key] === value)
-      transitionAppearance(() => applyAppearance({ ...now, [key]: previous }));
-    toasts.show({ message: "Couldn't save that setting. Try again." });
-  });
-}
-
 /** ⌘K or Ctrl+K, without Shift or Alt, which other shortcuts use. */
 const isPaletteShortcut = (event: KeyboardEvent) =>
   event.key.toLowerCase() === "k" &&
@@ -74,9 +45,18 @@ const isPaletteShortcut = (event: KeyboardEvent) =>
   !event.shiftKey &&
   !event.altKey;
 
+/** Fired on `document` to open the palette from a button, such as the rail's "Jump to…". */
+const OPEN_EVENT = "clippings:open-command-palette";
+
+/** Opens the command palette, as ⌘K does. Does nothing until a `CommandPalette` is mounted. */
+export function openCommandPalette() {
+  document.dispatchEvent(new CustomEvent(OPEN_EVENT));
+}
+
 /**
  * ⌘K (Ctrl+K) from anywhere in the app opens a palette of commands: New clipping, go to a tag,
- * and switch mode or palette. Esc, or the shortcut again, closes it.
+ * and switch mode or palette. Esc, or the shortcut again, closes it. `openCommandPalette()` opens
+ * it from a button.
  */
 export function CommandPalette() {
   const [isOpen, setIsOpen] = useState(false);
@@ -92,14 +72,22 @@ export function CommandPalette() {
       setAppearance(shownAppearance());
       setIsOpen((open) => !open);
     };
+    const onOpen = () => {
+      setAppearance(shownAppearance());
+      setIsOpen(true);
+    };
     document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    document.addEventListener(OPEN_EVENT, onOpen);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener(OPEN_EVENT, onOpen);
+    };
   }, []);
 
   const close = () => setIsOpen(false);
 
   return (
-    <Modal isDismissable isOpen={isOpen} onOpenChange={setIsOpen}>
+    <Modal variant="palette" isDismissable isOpen={isOpen} onOpenChange={setIsOpen}>
       <Dialog aria-label="Commands">
         {isOpen ? (
           <PaletteCommands
@@ -137,7 +125,7 @@ function PaletteCommands({
   return (
     <CommandMenu aria-label="Search commands" placeholder="Type a command or a tag">
       <CommandGroup title="Clippings">
-        <Command id="new-clipping" icon="add" onAction={onNewClipping}>
+        <Command id="new-clipping" icon={Plus} onAction={onNewClipping}>
           New clipping
         </Command>
       </CommandGroup>
@@ -147,7 +135,7 @@ function PaletteCommands({
             <Command
               key={tag.id}
               id={`tag:${tag.id}`}
-              icon="sell"
+              icon={Tag}
               href={hrefWithTag(loadBrowseParams(""), tag.name)}
               textValue={`${tag.name} tag`}
               onAction={onNavigate}
@@ -162,6 +150,7 @@ function PaletteCommands({
           <Command
             key={theme}
             id={`theme:${theme}`}
+            icon={MODE_ICONS[theme]}
             isCurrent={appearance.theme === theme}
             onAction={() => onAppearance("theme", theme)}
           >
@@ -172,6 +161,7 @@ function PaletteCommands({
           <Command
             key={palette}
             id={`palette:${palette}`}
+            icon={Palette}
             isCurrent={appearance.palette === palette}
             onAction={() => onAppearance("palette", palette)}
           >

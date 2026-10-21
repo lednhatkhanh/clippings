@@ -20,14 +20,13 @@ import { serveStaticShell } from "../support/static-shell.ts";
 // - A first load serves the route's prerendered static shell as the document (`serveStaticShell`
 //   says why), then lets the client hydrate it under the lock.
 //
-// What the first load shows is the header and navigation only. The signed-in layout reads the
-// session inside one Suspense boundary around the whole page (`app/(app)/layout.tsx`), so the
-// page's heading and its actions arrive with the data on a first load, and are in the shell only
-// when navigating from another page.
+// What the first load shows is the navigation only: each page's glass header belongs to the page.
+// The signed-in layout reads the session inside one Suspense boundary around the whole page
+// (`app/(app)/layout.tsx`), so the page's header and its actions arrive with the data on a first
+// load, and are in the shell only when navigating from another page.
 
 const URL_ON_LIST = "https://example.com/instant";
 
-const header = (page: Page) => page.getByRole("banner").getByText("Clippings");
 const nav = (page: Page) => page.getByRole("navigation", { name: "Main" });
 const navLink = (page: Page, name: string) => nav(page).getByRole("link", { name });
 const row = (page: Page) =>
@@ -35,9 +34,8 @@ const row = (page: Page) =>
     .getByRole("grid", { name: "Your clippings" })
     .getByRole("row", { name: /example\.com\/instant/ });
 
-/** What every app page shows at once: the header, and the navigation with its three places. */
+/** What every app page shows at once: the navigation, with its three places. */
 async function expectAppShell(page: Page) {
-  await expect(header(page)).toBeVisible();
   await expect(nav(page)).toBeVisible();
   for (const name of ["Clippings", "Tags", "Settings"]) {
     await expect(navLink(page, name)).toBeVisible();
