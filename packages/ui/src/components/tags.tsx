@@ -232,7 +232,7 @@ export function TagPicker({
         ) : null}
         <Popover
           offset={4}
-          className="max-h-72 w-(--trigger-width) menu-pop overflow-y-auto rounded-lg-increased glass-float p-1.5 text-ink"
+          className="max-h-72 w-(--trigger-width) menu-pop scroll-thin overflow-y-auto rounded-lg-increased glass-float p-1.5 text-ink"
         >
           <ListBox
             renderEmptyState={() => (

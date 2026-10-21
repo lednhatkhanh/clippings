@@ -29,7 +29,8 @@ const KEY =
 
 /**
  * A search field that filters the commands under it, for a command palette: put it in a `Dialog`
- * inside a `Modal variant="palette"`, which gives it no padding of its own. Focus stays in the
+ * inside a `Modal variant="palette"`, which gives it no padding of its own; give the `Dialog`
+ * `min-h-0` so the command list shrinks to fit a short screen. Focus stays in the
  * field while the arrow keys move through the commands and Enter runs one. A text field, not a
  * search field, so Esc closes the palette at once instead of clearing the text.
  */
@@ -47,7 +48,7 @@ export function CommandMenu({
         aria-label={label}
         // oxlint-disable-next-line jsx-a11y/no-autofocus -- the palette opens to type a command
         autoFocus
-        className="flex h-15 items-center gap-3 border-b border-line ps-4.5 pe-4.5 text-ink-muted transition-colors outline-none focus-within:border-accent-ink"
+        className="flex h-15 shrink-0 items-center gap-3 border-b border-line ps-4.5 pe-4.5 text-ink-muted transition-colors outline-none focus-within:border-accent-ink"
       >
         <Search className="size-5 shrink-0" />
         <Input
@@ -60,7 +61,7 @@ export function CommandMenu({
       </TextField>
       <Menu
         aria-label={label}
-        className="flex max-h-96 flex-col gap-0.5 overflow-y-auto p-2 outline-none"
+        className="flex max-h-96 min-h-0 scroll-thin flex-col gap-0.5 overflow-y-auto p-2 outline-none"
         renderEmptyState={() => (
           <p className="px-3 py-4 typescale-body-md text-ink-muted">{emptyMessage}</p>
         )}
@@ -69,7 +70,7 @@ export function CommandMenu({
       </Menu>
       <div
         aria-hidden="true"
-        className="flex gap-4 border-t border-line px-4.5 py-2.5 typescale-body-sm text-ink-faint"
+        className="flex shrink-0 gap-4 border-t border-line px-4.5 py-2.5 typescale-body-sm text-ink-faint"
       >
         <span className="flex items-center gap-1.5">
           <span className={KEY}>↑↓</span> move

@@ -13,6 +13,8 @@
     /* Sticky bars must not hide the focused element (WCAG 2.4.11). */
     scroll-padding-top: var(--top-bar-height);
     -webkit-text-size-adjust: 100%;
+    /* Inherited by every scroller: a warm thumb on no track, instead of the gray system gutter. */
+    scrollbar-color: var(--pg-line-strong) transparent;
   }
 
   :root[data-theme="light"] {
