@@ -35,11 +35,17 @@ const row = (page: Page) =>
     .getByRole("row", { name: /example\.com\/instant/ });
 
 /** What every app page shows at once: the navigation, with its three places. */
-async function expectAppShell(page: Page) {
-  await expect(nav(page)).toBeVisible();
-  for (const name of ["Clippings", "Tags", "Settings"]) {
-    await expect(navLink(page, name)).toBeVisible();
-  }
+function expectAppShell(page: Page) {
+  return test.step(
+    "the navigation is on screen",
+    async () => {
+      await expect(nav(page)).toBeVisible();
+      for (const name of ["Clippings", "Tags", "Settings"]) {
+        await expect(navLink(page, name)).toBeVisible();
+      }
+    },
+    { box: true },
+  );
 }
 
 /**
@@ -47,14 +53,20 @@ async function expectAppShell(page: Page) {
  * a client navigation and not a page load, and with its links' own prefetches finished, so the
  * lock doesn't catch them half-way.
  */
-async function startOn(page: Page, path: string, ready: Locator) {
-  await page.goto(path);
-  await expect(ready).toBeVisible();
-  // React marks the document it hydrated. (As a string: this package has no DOM types.)
-  await page.waitForFunction(
-    "Object.keys(document).some((key) => key.startsWith('__reactContainer$'))",
+function startOn(page: Page, path: string, ready: Locator) {
+  return test.step(
+    `start on ${path}`,
+    async () => {
+      await page.goto(path);
+      await expect(ready).toBeVisible();
+      // React marks the document it hydrated. (As a string: this package has no DOM types.)
+      await page.waitForFunction(
+        "Object.keys(document).some((key) => key.startsWith('__reactContainer$'))",
+      );
+      await page.waitForLoadState("networkidle");
+    },
+    { box: true },
   );
-  await page.waitForLoadState("networkidle");
 }
 
 test.describe("the list (/)", () => {

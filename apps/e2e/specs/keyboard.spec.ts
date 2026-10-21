@@ -5,11 +5,17 @@ import { expect, signIn, test } from "../support/fixtures.ts";
 const SEARCH = "Search your clippings";
 
 /** Presses `keys` until `done` holds: the first press may land before the page has hydrated. */
-async function pressUntil(page: Page, keys: string[], done: () => Promise<void>) {
-  await expect(async () => {
-    for (const key of keys) await page.keyboard.press(key);
-    await done();
-  }).toPass({ timeout: 10_000 });
+function pressUntil(page: Page, keys: string[], done: () => Promise<void>) {
+  return test.step(
+    `press ${keys.join(" ")}`,
+    async () => {
+      await expect(async () => {
+        for (const key of keys) await page.keyboard.press(key);
+        await done();
+      }).toPass({ timeout: 10_000 });
+    },
+    { box: true },
+  );
 }
 
 test.describe("keyboard shortcuts", () => {
@@ -60,23 +66,32 @@ test.describe("keyboard shortcuts", () => {
   test("turning single-key shortcuts off in Settings stops them, on this device", async ({
     page,
   }) => {
-    await page.goto("/settings");
     const setting = page.getByRole("radiogroup", { name: "Single-key shortcuts" });
-    await setting.getByRole("radio", { name: "Off" }).click();
-    await expect(setting.getByRole("radio", { name: "Off" })).toBeChecked();
 
-    await page.goto("/");
-    await expect(page.getByRole("searchbox", { name: SEARCH })).toBeVisible();
-    await page.keyboard.press("g");
-    await page.keyboard.press("t");
-    await page.keyboard.press("n");
-    await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole("dialog", { name: "New clipping" })).toBeHidden();
+    await test.step("turn them off in Settings", async () => {
+      await page.goto("/settings");
+      await setting.getByRole("radio", { name: "Off" }).click();
+      await expect(setting.getByRole("radio", { name: "Off" })).toBeChecked();
+    });
 
-    await page.goto("/settings");
-    await setting.getByRole("radio", { name: "On" }).click();
-    await page.goto("/");
-    await pressUntil(page, ["g", "t"], () => expect(page).toHaveURL(/\/tags$/, { timeout: 1_000 }));
+    await test.step("the list ignores them", async () => {
+      await page.goto("/");
+      await expect(page.getByRole("searchbox", { name: SEARCH })).toBeVisible();
+      await page.keyboard.press("g");
+      await page.keyboard.press("t");
+      await page.keyboard.press("n");
+      await expect(page).toHaveURL(/\/$/);
+      await expect(page.getByRole("dialog", { name: "New clipping" })).toBeHidden();
+    });
+
+    await test.step("turned back on, they work again", async () => {
+      await page.goto("/settings");
+      await setting.getByRole("radio", { name: "On" }).click();
+      await page.goto("/");
+      await pressUntil(page, ["g", "t"], () =>
+        expect(page).toHaveURL(/\/tags$/, { timeout: 1_000 }),
+      );
+    });
   });
 
   test("shortcuts stay off while typing in a field", async ({ page }) => {
