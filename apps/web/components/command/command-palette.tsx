@@ -88,7 +88,7 @@ export function CommandPalette() {
 
   return (
     <Modal variant="palette" isDismissable isOpen={isOpen} onOpenChange={setIsOpen}>
-      <Dialog aria-label="Commands">
+      <Dialog aria-label="Commands" className="min-h-0">
         {isOpen ? (
           <PaletteCommands
             appearance={appearance}

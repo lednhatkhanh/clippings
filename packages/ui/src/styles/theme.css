@@ -259,6 +259,11 @@
   }
 }
 
+/* A thin scrollbar for a scroller inside a floating surface (a menu, the palette's list). */
+@utility scroll-thin {
+  scrollbar-width: thin;
+}
+
 /* The accent fill: a soft top-down gradient with a highlight and a glow. Text is `on-accent`. */
 @utility accent-fill {
   background-color: var(--pg-accent);

@@ -63,10 +63,16 @@ export function getInstallOption(): InstallOption {
   return isIosSafari() ? "ios" : null;
 }
 
-/** Opens Chromium's install dialog. The event works once; Chromium fires a new one if dismissed. */
+/**
+ * Opens Chromium's install dialog. The row stays while the dialog is open; the event works once, so
+ * it goes once the user answers, unless Chromium has fired a fresh one by then.
+ */
 export async function promptInstall() {
   const event = deferred;
   if (!event) return;
-  setDeferred(null);
-  await event.prompt();
+  try {
+    await event.prompt();
+  } finally {
+    if (deferred === event) setDeferred(null);
+  }
 }

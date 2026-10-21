@@ -22,7 +22,7 @@ import { cn } from "../cn.ts";
 
 // Float glass, 44 to 288px wide, with 6px of padding around its 38px items.
 const POPOVER =
-  "min-w-44 max-w-72 menu-pop glass-float overflow-y-auto rounded-lg-increased p-1.5 text-ink";
+  "min-w-44 max-w-72 menu-pop glass-float scroll-thin overflow-y-auto rounded-lg-increased p-1.5 text-ink";
 
 /**
  * A button and the menu it opens: pass the trigger, then the `Menu`. The menu grows from the side

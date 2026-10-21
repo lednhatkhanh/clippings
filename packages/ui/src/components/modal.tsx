@@ -56,10 +56,11 @@ export function Modal({ children, variant = "dialog", ...props }: ModalProps) {
             ref={panelRef}
             className={cn(
               "w-full glass-float text-ink",
-              // The palette fits below the overlay's top padding and scrolls on a short screen
-              // (a phone held sideways), so its last commands and footer stay reachable.
+              // The palette fits below the overlay's top padding and clips to its corners; its
+              // command list is the one scroller and shrinks on a short screen (a phone held
+              // sideways), so the field and footer stay in view.
               variant === "palette"
-                ? "max-h-full max-w-150 modal-panel-float overflow-y-auto rounded-xl-increased"
+                ? "flex max-h-full max-w-150 modal-panel-float flex-col overflow-hidden rounded-xl-increased"
                 : "max-h-dvh max-w-130 modal-panel overflow-y-auto rounded-t-xl-increased p-6 medium:rounded-xl-increased",
             )}
           >
