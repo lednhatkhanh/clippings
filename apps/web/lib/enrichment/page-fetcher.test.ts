@@ -274,6 +274,162 @@ describe("createPageFetcher", () => {
     });
   });
 
+  describe("checkLink", () => {
+    const url = (path = "/") => `http://public.test:${server!.port}${path}`;
+
+    it("finds a page that answers 200 alive, following a redirect to it", async () => {
+      server = await startServer((request, response) => {
+        if (request.url === "/old") {
+          response.writeHead(301, { location: "/page" });
+          return response.end();
+        }
+        html(response, "<html><body>Hello</body></html>");
+      });
+      const fetcher = createPageFetcher({ lookup, agent: server.agent });
+
+      expect(await fetcher.checkLink(url("/page"))).toBe("alive");
+      expect(await fetcher.checkLink(url("/old"))).toBe("alive");
+    });
+
+    it("finds a page alive whatever it is: a PDF is a link that works", async () => {
+      server = await startServer((_request, response) => {
+        response.writeHead(200, { "content-type": "application/pdf" });
+        response.end("%PDF-1.7");
+      });
+      const fetcher = createPageFetcher({ lookup, agent: server.agent });
+
+      expect(await fetcher.checkLink(url())).toBe("alive");
+    });
+
+    it.each([404, 410, 500, 503])("finds a page that answers %i dead", async (status) => {
+      server = await startServer((_request, response) => response.writeHead(status).end());
+      const fetcher = createPageFetcher({ lookup, agent: server.agent });
+
+      expect(await fetcher.checkLink(url())).toBe("dead");
+    });
+
+    it.each([401, 403, 406, 429])(
+      "can't tell when the site answers %i: it is there and won't say more",
+      async (status) => {
+        server = await startServer((_request, response) => response.writeHead(status).end());
+        const fetcher = createPageFetcher({ lookup, agent: server.agent });
+
+        expect(await fetcher.checkLink(url())).toBe("unknown");
+      },
+    );
+
+    it("finds a page behind a redirect to a bot wall unknown", async () => {
+      server = await startServer((request, response) => {
+        if (request.url === "/start") {
+          response.writeHead(302, { location: "/wall" });
+        } else {
+          response.writeHead(403);
+        }
+        response.end();
+      });
+      const fetcher = createPageFetcher({ lookup, agent: server.agent });
+
+      expect(await fetcher.checkLink(url("/start"))).toBe("unknown");
+    });
+
+    it("accepts any kind of file, so a server isn't tempted to answer 406", async () => {
+      let accept: string | undefined;
+      server = await startServer((request, response) => {
+        accept = request.headers.accept;
+        response.writeHead(200).end();
+      });
+      const fetcher = createPageFetcher({ lookup, agent: server.agent });
+
+      await fetcher.checkLink(url());
+
+      expect(accept).toBe("*/*");
+    });
+
+    it("finds a redirect to a missing page dead, and a redirect loop dead", async () => {
+      server = await startServer((request, response) => {
+        if (request.url === "/gone") {
+          response.writeHead(302, { location: "/missing" });
+        } else if (request.url === "/loop") {
+          response.writeHead(302, { location: "/loop" });
+        } else {
+          response.writeHead(404);
+        }
+        response.end();
+      });
+      const fetcher = createPageFetcher({ lookup, agent: server.agent });
+
+      expect(await fetcher.checkLink(url("/gone"))).toBe("dead");
+      expect(await fetcher.checkLink(url("/loop"))).toBe("dead");
+    });
+
+    it("finds a name that doesn't resolve dead, and one that is not a web address", async () => {
+      server = await startServer((_request, response) => response.end());
+      const fetcher = createPageFetcher({ lookup, agent: server.agent });
+
+      expect(await fetcher.checkLink(`http://unknown.test:${server.port}/`)).toBe("dead");
+      expect(await fetcher.checkLink("ftp://public.test/file")).toBe("dead");
+    });
+
+    it("finds a refused connection dead", async () => {
+      server = await startServer((_request, response) => response.end());
+      const { port } = server;
+      const fetcher = createPageFetcher({ lookup, agent: server.agent });
+      await server.close();
+      server = undefined;
+
+      expect(await fetcher.checkLink(`http://public.test:${port}/`)).toBe("dead");
+    });
+
+    it("never reaches an internal address, and says dead", async () => {
+      server = await startServer((request, response) => {
+        if (request.url === "/start") {
+          response.writeHead(302, { location: `http://127.0.0.1:${server!.port}/secret` });
+          return response.end();
+        }
+        html(response, "internal secret");
+      });
+      const fetcher = createPageFetcher({ lookup, agent: server.agent });
+
+      expect(await fetcher.checkLink(url("/start"))).toBe("dead");
+      expect(await fetcher.checkLink(`http://internal.test:${server.port}/`)).toBe("dead");
+      expect(await fetcher.checkLink(`http://127.0.0.1:${server.port}/`)).toBe("dead");
+      expect(server.requested).toEqual(["/start"]);
+    });
+
+    it("gives up on a site that never answers", async () => {
+      server = await startServer(() => {
+        // Accepts the request and says nothing.
+      });
+      const fetcher = createPageFetcher({ lookup, agent: server.agent, checkBudgetMs: 200 });
+
+      expect(await fetcher.checkLink(url())).toBe("dead");
+    });
+
+    it("hangs up after the first bytes of a long body", async () => {
+      let closedByReader = false;
+      let sent = 0;
+      server = await startServer((_request, response) => {
+        response.writeHead(200, { "content-type": "text/html" });
+        const chunk = "word ".repeat(13_000); // about 64 KB
+        const writeMore = () => {
+          while (!response.destroyed && !response.writableEnded && sent < 200_000_000) {
+            sent += chunk.length;
+            if (!response.write(chunk)) return void response.once("drain", writeMore);
+          }
+        };
+        response.on("close", () => {
+          closedByReader = !response.writableFinished;
+        });
+        writeMore();
+      });
+      const fetcher = createPageFetcher({ lookup, agent: server.agent });
+
+      expect(await fetcher.checkLink(url())).toBe("alive");
+      await expect.poll(() => closedByReader).toBe(true);
+      expect(sent).toBeLessThan(10_000_000);
+    });
+  });
+
   describe("a file that isn't a web page", () => {
     const PDF = Buffer.from("%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n");
     const send =

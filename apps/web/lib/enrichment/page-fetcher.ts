@@ -14,6 +14,12 @@ const MAX_BYTES = 2_000_000;
 // function killed with the clipping still pending.
 const FETCH_BUDGET_MS = 20_000;
 const MAX_REDIRECTS = 5;
+const READ_ACCEPT = "text/html,application/xhtml+xml,application/pdf,text/plain;q=0.8";
+// A link check only needs the status line, so it takes the first chunk of the body and hangs up.
+const CHECK_MAX_BYTES = 1_024;
+// A link that hasn't answered in this long counts as gone for the check, so a run of timeouts is
+// short: the service checks ten at once.
+const CHECK_BUDGET_MS = 5_000;
 
 export class PageFetchError extends Error {
   constructor(message: string) {
@@ -64,10 +70,15 @@ export interface PageFetcherOptions {
   maxBytes?: number;
   /** For the whole fetch, redirects included. */
   budgetMs?: number;
+  /** For the whole link check, redirects included. */
+  checkBudgetMs?: number;
 }
 
-type RequestOptions = Required<Omit<PageFetcherOptions, "agent" | "budgetMs">> &
-  Pick<PageFetcherOptions, "agent">;
+type RequestOptions = Required<Omit<PageFetcherOptions, "agent" | "budgetMs" | "checkBudgetMs">> &
+  Pick<PageFetcherOptions, "agent"> & {
+    /** The `Accept` header; the one a page read sends by default. */
+    accept?: string;
+  };
 
 interface RawResponse {
   status: number;
@@ -81,7 +92,7 @@ interface RawResponse {
 function requestOnce(
   url: URL,
   signal: AbortSignal,
-  { lookup, agent, maxBytes }: RequestOptions,
+  { lookup, agent, maxBytes, accept = READ_ACCEPT }: RequestOptions,
 ): Promise<RawResponse> {
   // An IP in the URL skips DNS, so `publicOnlyLookup` never sees it.
   const host = url.hostname.replace(/^\[|\]$/g, "");
@@ -99,7 +110,7 @@ function requestOnce(
         signal,
         headers: {
           "user-agent": "Clippings/1.0 (reads pages people saved)",
-          accept: "text/html,application/xhtml+xml,application/pdf,text/plain;q=0.8",
+          accept,
           "accept-encoding": "identity",
         },
       },
@@ -142,6 +153,28 @@ function decode(body: Buffer, contentType: string): string {
   }
 }
 
+/** Follows redirects itself so every hop is checked; the first answer that isn't one. */
+async function follow(
+  address: string,
+  signal: AbortSignal,
+  options: RequestOptions,
+): Promise<RawResponse & { url: URL }> {
+  let url = new URL(address);
+  for (let hops = 0; hops <= MAX_REDIRECTS; hops++) {
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      throw new PageFetchError(`Not a web address: ${url.href}`);
+    }
+    const response = await requestOnce(url, signal, options);
+    const { status, headers } = response;
+    if (status >= 300 && status < 400 && headers.location) {
+      url = new URL(headers.location, url);
+      continue;
+    }
+    return { ...response, url };
+  }
+  throw new PageFetchError("Too many redirects");
+}
+
 const PDF_MAGIC = "%PDF-";
 
 /** A PDF by its Content-Type, or by its first bytes when a server calls it a generic download. */
@@ -172,49 +205,55 @@ export function createPageFetcher({
   agent,
   maxBytes = MAX_BYTES,
   budgetMs = FETCH_BUDGET_MS,
+  checkBudgetMs = CHECK_BUDGET_MS,
 }: PageFetcherOptions = {}): PageFetcher {
   return {
     async fetchPage(address) {
-      let url = new URL(address);
-      const signal = AbortSignal.timeout(budgetMs);
-      for (let hops = 0; hops <= MAX_REDIRECTS; hops++) {
-        if (url.protocol !== "http:" && url.protocol !== "https:") {
-          throw new PageFetchError(`Not a web address: ${url.href}`);
+      const { status, headers, body, truncated, url } = await follow(
+        address,
+        AbortSignal.timeout(budgetMs),
+        { lookup, agent, maxBytes },
+      );
+      if (status < 200 || status >= 300) throw new PageFetchError(`The site answered ${status}`);
+
+      const contentType = headers["content-type"] ?? "";
+      if (isPdf(contentType, body)) {
+        // Half a PDF can't be read, so unlike a long page it fails instead of being cut.
+        if (truncated) {
+          throw new PageFetchError(`The PDF is larger than ${Math.round(maxBytes / 1_000_000)} MB`);
         }
-        const { status, headers, body, truncated } = await requestOnce(url, signal, {
+        return {
+          title: fileNameTitle(url),
+          text: "",
+          document: { mediaType: "application/pdf", data: body.toString("base64") },
+        };
+      }
+      const text = decode(body, contentType);
+      if (/html/i.test(contentType) || (!contentType && /<html|<body/i.test(text))) {
+        return extractPage(text);
+      }
+      if (/^text\/plain/i.test(contentType)) return { title: null, text: text.slice(0, 20_000) };
+      throw new PageFetchError(`Can't read ${contentType || "this kind of file"}`);
+    },
+
+    async checkLink(address) {
+      // A GET, not a HEAD: plenty of live sites answer HEAD with 405 or 404.
+      try {
+        const { status } = await follow(address, AbortSignal.timeout(checkBudgetMs), {
           lookup,
           agent,
-          maxBytes,
+          maxBytes: CHECK_MAX_BYTES,
+          // Any kind of file is a link that works; a narrow Accept gets some servers' 406.
+          accept: "*/*",
         });
-
-        if (status >= 300 && status < 400 && headers.location) {
-          url = new URL(headers.location, url);
-          continue;
-        }
-        if (status < 200 || status >= 300) throw new PageFetchError(`The site answered ${status}`);
-
-        const contentType = headers["content-type"] ?? "";
-        if (isPdf(contentType, body)) {
-          // Half a PDF can't be read, so unlike a long page it fails instead of being cut.
-          if (truncated) {
-            throw new PageFetchError(
-              `The PDF is larger than ${Math.round(maxBytes / 1_000_000)} MB`,
-            );
-          }
-          return {
-            title: fileNameTitle(url),
-            text: "",
-            document: { mediaType: "application/pdf", data: body.toString("base64") },
-          };
-        }
-        const text = decode(body, contentType);
-        if (/html/i.test(contentType) || (!contentType && /<html|<body/i.test(text))) {
-          return extractPage(text);
-        }
-        if (/^text\/plain/i.test(contentType)) return { title: null, text: text.slice(0, 20_000) };
-        throw new PageFetchError(`Can't read ${contentType || "this kind of file"}`);
+        if (status >= 200 && status < 300) return "alive";
+        // A 4xx other than "gone" says the site is there and won't say more (a bot wall, a login,
+        // a rate limit): no evidence either way.
+        const refused = status >= 400 && status < 500 && status !== 404 && status !== 410;
+        return refused ? "unknown" : "dead";
+      } catch {
+        return "dead";
       }
-      throw new PageFetchError("Too many redirects");
     },
   };
 }

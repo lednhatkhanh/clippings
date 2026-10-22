@@ -51,12 +51,23 @@ export async function createServiceFixture() {
     string,
     { page: { title: string | null; text: string }; summary: PageSummary } | { error: Error }
   >();
+  /** What a link check finds at each URL: "alive" unless set otherwise. */
+  const links = new Map<string, "alive" | "dead" | "unknown">();
+  /** The URLs `checkLink` was asked about, in order. */
+  const checkedLinks: string[] = [];
+  /** Runs while a check of the URL is in flight, before it answers: what happens meanwhile. */
+  const duringLinkCheck = new Map<string, () => Promise<void>>();
   const fetcher: PageFetcher = {
     fetchPage: async (url) => {
       const entry = web.get(url);
       if (!entry) throw new Error(`Nothing at ${url}`);
       if ("error" in entry) throw entry.error;
       return entry.page;
+    },
+    checkLink: async (url) => {
+      checkedLinks.push(url);
+      await duringLinkCheck.get(url)?.();
+      return links.get(url) ?? "alive";
     },
   };
   /** The `userTags` each summarize call got, in order: undefined when suggestions were off. */
@@ -91,6 +102,12 @@ export async function createServiceFixture() {
     /** The fixture's pool, for tests that set up rows no service writes (Better Auth's). */
     pool,
     web,
+    /** What a link check finds at each URL; a URL not in it is alive. */
+    links,
+    /** Every URL a link check was run on, in order. */
+    checkedLinks,
+    /** Something to do while a check of a URL is in flight, before it answers. */
+    duringLinkCheck,
     enrichmentRequests,
     /** Every `requestEnrichments` call: the ids in order and the window they were spread over. */
     batchedEnrichmentRequests,

@@ -29,9 +29,17 @@ export interface FetchedPage {
   document?: { mediaType: "application/pdf"; data: string };
 }
 
-/** Fetches a page over the network. Throws when the page can't be read. */
+/** Fetches a page over the network. */
 export interface PageFetcher {
+  /** Reads the page. Throws when it can't be read. */
   fetchPage: (url: string) => Promise<FetchedPage>;
+  /**
+   * Whether the page still answers: "alive" when it resolves to a 2xx, "dead" when it is gone (404,
+   * 410, a 5xx, no such host, a refused connection, a timeout, an address the fetcher won't reach),
+   * "unknown" when the site answers but won't say (401, 403, 406, 429 and other 4xx: bot walls and
+   * rate limits). Never throws: one check says little, the service weighs several.
+   */
+  checkLink: (url: string) => Promise<"alive" | "dead" | "unknown">;
 }
 
 /** What the summarizer makes of a page. */

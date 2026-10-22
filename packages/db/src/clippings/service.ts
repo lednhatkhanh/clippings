@@ -1,4 +1,13 @@
-import { constructNow, isAfter, isBefore, isValid, parseISO, subHours, subSeconds } from "date-fns";
+import {
+  constructNow,
+  isAfter,
+  isBefore,
+  isValid,
+  parseISO,
+  subDays,
+  subHours,
+  subSeconds,
+} from "date-fns";
 import {
   and,
   asc,
@@ -234,6 +243,9 @@ type ClippingRow = Omit<typeof clippings.$inferSelect, "searchTsv" | "embedding"
 /** Not deleted: every read and edit the user makes sees only these. */
 const live = isNull(clippings.deletedAt);
 
+/** A clipping starting over has no link verdict yet: the last one was about another life of the row. */
+const noLinkVerdict = { linkCheckedAt: null, linkFailures: 0, linkDeadSince: null };
+
 /** The columns every status change writes together. */
 const statusChange = (status: ClippingRow["status"], at: Date) => ({
   status,
@@ -256,6 +268,7 @@ const toClipping = (row: ClippingRow, tagList: Tag[] = []): Clipping => ({
   clientId: row.clientId,
   tags: tagList,
   pinned: row.pinnedAt !== null,
+  linkDeadSince: row.linkDeadSince ? formatIsoUtc(row.linkDeadSince) : null,
   suggestedTags: [],
   createdAt: formatIsoUtc(row.createdAt),
 });
@@ -395,6 +408,13 @@ const SWEEP_BATCH_SIZE = 100;
  */
 const PURGE_AFTER_HOURS = 24;
 const PURGE_BATCH_SIZE = 1000;
+
+/** How long a clipping's link is left alone after a check. */
+const LINK_RECHECK_AFTER_DAYS = 7;
+/** Checks in a row that must find a page gone before it is marked dead: one bad day is not rot. */
+const LINK_DEAD_AFTER_FAILURES = 3;
+/** Links checked at once, so a run stays short without hammering one network path. */
+const LINK_CHECK_CONCURRENCY = 10;
 
 /**
  * Most imported clippings the daily drain requests. QStash's free tier allows 1,000 messages a
@@ -537,7 +557,7 @@ export class InvalidUrlError extends Error {
 /**
  * The rules about clippings. Every operation a user triggers takes the acting user and scopes its
  * queries by them, so no caller can reach another user's rows. `enrichClipping`, `sweepStuck`,
- * `embedMissing` and `purgeDeleted` are the exceptions: they are system jobs, reached only through the signed QStash
+ * `embedMissing`, `purgeDeleted` and `checkLinks` are the exceptions: they are system jobs, reached only through the signed QStash
  * handler and the cron secret, and they act across users.
  */
 export function createClippingsService({
@@ -786,6 +806,7 @@ export function createClippingsService({
       clientId: input.clientId ?? null,
       deletedAt: null,
       createdAt: now,
+      ...noLinkVerdict,
       ...statusChange("pending", now),
     };
     const created = await db.transaction(async (tx) => {
@@ -1640,6 +1661,10 @@ export function createClippingsService({
           summary: read.summary,
           excerpt: read.excerpt,
           embedding: meaning,
+          // The fetch just got a 2xx: the link is alive as of now.
+          linkCheckedAt: now,
+          linkFailures: 0,
+          linkDeadSince: null,
           ...statusChange("ready", now),
         })
         .where(and(eq(clippings.id, clippingId), eq(clippings.status, "pending")))
@@ -1949,6 +1974,7 @@ export function createClippingsService({
                 status: "pending",
                 statusChangedAt: now,
                 importRequestedAt: null,
+                ...noLinkVerdict,
                 updatedAt: now,
               },
               setWhere: isNotNull(clippings.deletedAt),
@@ -2078,6 +2104,82 @@ export function createClippingsService({
     return purged.length;
   }
 
+  /**
+   * For the daily cron: checks up to `limit` ready clippings whose link was last checked more
+   * than a week ago or never, the longest-unchecked first, and returns how many it checked and
+   * how many of those answered dead this time. A live answer clears the failures; a dead one
+   * counts one, and the third in a row marks the clipping dead since that check (kept through
+   * further failures); an unknown one (the site refuses robots, say) only stamps the check. Each
+   * result is written as it arrives, so a run cut short loses only the links still in flight.
+   *
+   * A write goes through only while the row is still the one that was checked: ready, live, at
+   * the same url and with the same last check. A clipping deleted and saved again meanwhile, or
+   * checked by an overlapping run, is left alone, and isn't counted.
+   */
+  async function checkLinks({
+    limit,
+  }: {
+    limit: number;
+  }): Promise<{ checked: number; dead: number }> {
+    const now = clock.now();
+    const due = await db
+      .select({ id: clippings.id, url: clippings.url, checkedAt: clippings.linkCheckedAt })
+      .from(clippings)
+      .where(
+        and(
+          eq(clippings.status, "ready"),
+          live,
+          or(
+            isNull(clippings.linkCheckedAt),
+            lt(clippings.linkCheckedAt, subDays(now, LINK_RECHECK_AFTER_DAYS)),
+          ),
+        ),
+      )
+      .orderBy(sql`${clippings.linkCheckedAt} asc nulls first`, asc(clippings.id))
+      .limit(limit);
+
+    let next = 0;
+    let checked = 0;
+    let dead = 0;
+    async function worker() {
+      while (next < due.length) {
+        const { id, url, checkedAt } = due[next++]!;
+        const verdict = await fetcher.checkLink(url);
+        const update = db
+          .update(clippings)
+          .set(
+            verdict === "alive"
+              ? { linkCheckedAt: now, linkFailures: 0, linkDeadSince: null }
+              : verdict === "unknown"
+                ? { linkCheckedAt: now }
+                : {
+                    linkCheckedAt: now,
+                    // The columns on the right are the values before this update.
+                    linkFailures: sql`${clippings.linkFailures} + 1`,
+                    linkDeadSince: sql`case when ${clippings.linkFailures} + 1 >= ${LINK_DEAD_AFTER_FAILURES} then coalesce(${clippings.linkDeadSince}, ${now}) else ${clippings.linkDeadSince} end`,
+                  },
+          )
+          .where(
+            and(
+              eq(clippings.id, id),
+              eq(clippings.status, "ready"),
+              live,
+              eq(clippings.url, url),
+              checkedAt === null
+                ? isNull(clippings.linkCheckedAt)
+                : eq(clippings.linkCheckedAt, checkedAt),
+            ),
+          );
+        const [written] = await update.returning({ id: clippings.id });
+        if (!written) continue;
+        checked += 1;
+        if (verdict === "dead") dead += 1;
+      }
+    }
+    await Promise.all(Array.from({ length: LINK_CHECK_CONCURRENCY }, worker));
+    return { checked, dead };
+  }
+
   return {
     saveClipping,
     listTags,
@@ -2111,6 +2213,7 @@ export function createClippingsService({
     sweepStuck,
     embedMissing,
     purgeDeleted,
+    checkLinks,
   };
 }
 
