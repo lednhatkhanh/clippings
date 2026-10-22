@@ -392,13 +392,22 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
   });
 
   describe("write access", () => {
-    const READ_TOOLS = ["list_recent", "save_clipping", "search_clippings"];
+    const READ_TOOLS = [
+      "list_clippings",
+      "list_recent",
+      "related_clippings",
+      "save_clipping",
+      "search_clippings",
+    ];
     const WRITE_TOOLS = [
       "delete_clipping",
       "get_clipping",
       "get_page_text",
       "list_tags",
+      "merge_tag",
+      "rename_tag",
       "restore_clipping",
+      "tag_clippings",
       "update_clipping",
     ];
 
@@ -573,6 +582,17 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
           tags: [{ name: "animals" }],
         });
 
+        // The official client checks structuredContent against each tool's outputSchema.
+        const tagged = await client.callTool({
+          name: "tag_clippings",
+          arguments: { ids: [clipping.id, bobsClipping.id], add: ["mammals"] },
+        });
+        expect(tagged.isError).toBeFalsy();
+        expect(tagged.structuredContent).toEqual({ changed: 1, notFound: [bobsClipping.id] });
+        expect(await fixture.service.getClipping("bob", bobsClipping.id)).toMatchObject({
+          tags: [],
+        });
+
         // Bob's clipping is out of reach.
         const foreign = await client.callTool({
           name: "delete_clipping",
@@ -611,7 +631,9 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
     try {
       const { tools } = await client.listTools();
       expect(tools.map((tool) => tool.name).sort()).toEqual([
+        "list_clippings",
         "list_recent",
+        "related_clippings",
         "save_clipping",
         "search_clippings",
       ]);

@@ -14,7 +14,7 @@ const MAX_BYTES = 2_000_000;
 // function killed with the clipping still pending.
 const FETCH_BUDGET_MS = 20_000;
 const MAX_REDIRECTS = 5;
-const READ_ACCEPT = "text/html,application/xhtml+xml,text/plain;q=0.8";
+const READ_ACCEPT = "text/html,application/xhtml+xml,application/pdf,text/plain;q=0.8";
 // A link check only needs the status line, so it takes the first chunk of the body and hangs up.
 const CHECK_MAX_BYTES = 1_024;
 // A link that hasn't answered in this long counts as gone for the check, so a run of timeouts is
@@ -84,6 +84,8 @@ interface RawResponse {
   status: number;
   headers: http.IncomingHttpHeaders;
   body: Buffer;
+  /** The body was cut off at the size limit. */
+  truncated: boolean;
 }
 
 /** One request, without following a redirect. */
@@ -115,17 +117,22 @@ function requestOnce(
       (response) => {
         const chunks: Buffer[] = [];
         let size = 0;
+        let truncated = false;
         const finish = () =>
           resolveResponse({
             status: response.statusCode ?? 0,
             headers: response.headers,
             body: Buffer.concat(chunks),
+            truncated,
           });
         response.on("data", (chunk: Buffer) => {
           chunks.push(chunk);
           size += chunk.length;
           // The start of a long page is enough to summarize it.
-          if (size > maxBytes) response.destroy();
+          if (size > maxBytes) {
+            truncated = true;
+            response.destroy();
+          }
         });
         response.on("end", finish);
         response.on("close", finish);
@@ -151,7 +158,7 @@ async function follow(
   address: string,
   signal: AbortSignal,
   options: RequestOptions,
-): Promise<RawResponse> {
+): Promise<RawResponse & { url: URL }> {
   let url = new URL(address);
   for (let hops = 0; hops <= MAX_REDIRECTS; hops++) {
     if (url.protocol !== "http:" && url.protocol !== "https:") {
@@ -163,9 +170,33 @@ async function follow(
       url = new URL(headers.location, url);
       continue;
     }
-    return response;
+    return { ...response, url };
   }
   throw new PageFetchError("Too many redirects");
+}
+
+const PDF_MAGIC = "%PDF-";
+
+/** A PDF by its Content-Type, or by its first bytes when a server calls it a generic download. */
+function isPdf(contentType: string, body: Buffer): boolean {
+  if (/^application\/(x-)?pdf\b/i.test(contentType)) return true;
+  return (
+    /^(application|binary)\/octet-stream\b/i.test(contentType) &&
+    body.subarray(0, PDF_MAGIC.length).toString("latin1") === PDF_MAGIC
+  );
+}
+
+/** The file name in the URL's path, as a stand-in title for a PDF that has none of its own. */
+function fileNameTitle(url: URL): string | null {
+  const last = url.pathname.split("/").findLast(Boolean);
+  if (!last) return null;
+  let name = last;
+  try {
+    name = decodeURIComponent(last);
+  } catch {
+    // Keep the raw segment when it isn't valid percent-encoding.
+  }
+  return name.replace(/\.pdf$/i, "").trim() || null;
 }
 
 /** The real fetcher: follows redirects itself so every hop is checked, and never reaches an internal address. */
@@ -178,14 +209,25 @@ export function createPageFetcher({
 }: PageFetcherOptions = {}): PageFetcher {
   return {
     async fetchPage(address) {
-      const { status, headers, body } = await follow(address, AbortSignal.timeout(budgetMs), {
-        lookup,
-        agent,
-        maxBytes,
-      });
+      const { status, headers, body, truncated, url } = await follow(
+        address,
+        AbortSignal.timeout(budgetMs),
+        { lookup, agent, maxBytes },
+      );
       if (status < 200 || status >= 300) throw new PageFetchError(`The site answered ${status}`);
 
       const contentType = headers["content-type"] ?? "";
+      if (isPdf(contentType, body)) {
+        // Half a PDF can't be read, so unlike a long page it fails instead of being cut.
+        if (truncated) {
+          throw new PageFetchError(`The PDF is larger than ${Math.round(maxBytes / 1_000_000)} MB`);
+        }
+        return {
+          title: fileNameTitle(url),
+          text: "",
+          document: { mediaType: "application/pdf", data: body.toString("base64") },
+        };
+      }
       const text = decode(body, contentType);
       if (/html/i.test(contentType) || (!contentType && /<html|<body/i.test(text))) {
         return extractPage(text);
