@@ -429,25 +429,31 @@ describe("parseBookmarksHtml", () => {
       );
 
     it("reads a run of lists then folders in linear time", () => {
+      // Every list left open, then every folder: as deep as a file of this size can nest.
       const listsThenFolders = (count: number) =>
         `<!DOCTYPE NETSCAPE-Bookmark-file-1>${"<DL>".repeat(count)}${"<H3>".repeat(count)}`;
-      // Best of three, so one slow run on a busy machine doesn't decide it.
-      const fastest = (html: string) =>
-        Math.min(...[1, 2, 3].map(() => timed(() => parseBookmarksHtml(html)).ms));
-      // Half the largest file: quadratic already shows at this size, and CI runners are many
-      // times slower than a laptop.
+      // As many tags, each list closed at once, so it never nests.
+      const shallowLists = (count: number) =>
+        `<!DOCTYPE NETSCAPE-Bookmark-file-1>${"<DL></DL>".repeat(count)}`;
+      // Best of five after a warm-up, so one slow run on a busy machine doesn't decide it.
+      const fastest = (html: string) => {
+        parseBookmarksHtml(html);
+        return Math.min(...[1, 2, 3, 4, 5].map(() => timed(() => parseBookmarksHtml(html)).ms));
+      };
+      // Half the largest file: quadratic already shows at this size.
       const count = Math.floor(MAX_BOOKMARKS_FILE_BYTES / 16);
-      const full = listsThenFolders(count);
-      expect(timed(() => parseBookmarksHtml(full)).result).toEqual({
+      const deep = listsThenFolders(count);
+      expect(timed(() => parseBookmarksHtml(deep)).result).toEqual({
         ok: true,
         bookmarks: [],
         skipped: [],
       });
-      // Eight times the input takes about eight times as long when linear and sixty-four when
-      // quadratic. A ratio, not a time limit, so a slow CI machine doesn't fail it; the wide gap
-      // leaves room for a busy machine's noise either way.
-      const ratio = fastest(full) / Math.max(fastest(listsThenFolders(count / 8)), 1);
-      expect(ratio).toBeLessThan(24);
+      // The deepest file against a flat one of the same size, not against a smaller deep one,
+      // which on a CI runner made linear work look superlinear. Linear parsing keeps them about
+      // 2 apart on a laptop and up to about 10 on a busy runner; work that grows with the depth
+      // makes the deep one over a thousand times slower. 100 sits between the two.
+      const ratio = fastest(deep) / Math.max(fastest(shallowLists(count)), 1);
+      expect(ratio).toBeLessThan(100);
     }, 30_000);
 
     it("names no more folders than the cap, however deep and however many links", () => {
