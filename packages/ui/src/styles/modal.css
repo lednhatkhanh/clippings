@@ -1,13 +1,13 @@
 /*
  * Modal motion, driven by React Aria's `data-entering` / `data-exiting` states. RAC keeps both the
  * overlay and the modal mounted until their own animations finish, and the dialog moves focus in
- * only once the modal has entered. `modal-scrim` goes on `ModalOverlay`, `modal-panel` (a bottom
- * sheet on phones, a dialog from the medium size class up) or `modal-panel-float` (always a
- * dialog, for the command palette) on `Modal`.
+ * only once the modal has entered. `modal-scrim` goes on `ModalOverlay` and `modal-panel-float` on
+ * `Modal`. A phone's bottom sheet is React Aria's Sheet instead, styled by the `modal-sheet-*`
+ * utilities at the end.
  *
  * The scrim fades in and blurs the page behind it a little. The dialog rises 14px and grows from
  * 97% on the paper spring while it fades in on the fade spring; it leaves faster, on the exit
- * easing. The sheet slides up on the settle easing, with no overshoot at the screen's edge.
+ * easing.
  * Travel and scale are multiplied by the spatial factor (tokens.css), so under reduced motion
  * nothing moves and only the fades remain. The springs' own durations are multiplied by it too,
  * which is why every animation here pairs a spatial one with a fade that keeps its length.
@@ -27,18 +27,6 @@
   }
 }
 
-@keyframes modal-sheet-in {
-  from {
-    translate: 0 calc(100% * var(--motion-spatial-factor));
-  }
-}
-
-@keyframes modal-sheet-out {
-  to {
-    translate: 0 calc(100% * var(--motion-spatial-factor));
-  }
-}
-
 @keyframes modal-rise-in {
   from {
     translate: 0 calc(14px * var(--motion-spatial-factor));
@@ -51,6 +39,30 @@
     translate: 0 calc(8px * var(--motion-spatial-factor));
     scale: calc(1 - 0.015 * var(--motion-spatial-factor));
   }
+}
+
+/*
+ * Where the modal sits, after React Aria's own Modal recipe. A fixed overlay fills the layout
+ * viewport, which an on-screen keyboard covers without shrinking (iOS, and Android Chrome by
+ * default), so a bottom sheet's field would sit behind the keyboard. Instead `modal-page` (on
+ * `ModalOverlay`) covers the whole page, and `modal-viewport` (inside it) sticks to the top of
+ * the visible part and takes its height. `ModalOverlay` sets both sizes and updates the viewport
+ * height as the keyboard opens and closes.
+ */
+@utility modal-page {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  width: var(--page-width);
+  height: var(--page-height);
+  overflow: clip;
+}
+
+@utility modal-viewport {
+  position: sticky;
+  inset-block-start: 0;
+  width: 100%;
+  height: var(--visual-viewport-height);
 }
 
 @utility modal-scrim {
@@ -86,32 +98,59 @@
   }
 }
 
-@utility modal-panel {
-  &[data-entering] {
-    animation:
-      modal-sheet-in calc(var(--motion-duration-calm) * var(--motion-spatial-factor))
-        var(--motion-ease-settle) both,
-      modal-fade-in var(--motion-spring-fade-duration) var(--motion-spring-fade) both;
+/*
+ * The phone's bottom sheet (`Modal`'s `BottomSheet`). React Aria's Sheet moves it by scrolling, so
+ * it enters, follows a swipe and leaves on the browser's own scroll physics; the backdrop's fade
+ * (`modal-fade-in`, as its `swipeAnimation`) tracks how much of the sheet is in view. Reduced
+ * motion jumps the scroll, so the sheet appears and goes without travel.
+ */
+@utility modal-sheet {
+  /* Its overscroll padding is a viewport tall, so the height limit measures the content alone. */
+  box-sizing: content-box;
+  max-height: calc(100% - 2rem);
+  overflow: clip;
+  outline: none;
+}
+
+/* A grip at the top edge that says the sheet swipes down. */
+@utility modal-sheet-handle {
+  position: absolute;
+  inset-block-start: 0.5rem;
+  inset-inline-start: 50%;
+  translate: -50% 0;
+  width: 2.25rem;
+  height: 0.3125rem;
+  border-radius: 9999px;
+  background: var(--color-line-strong);
+}
+
+@utility modal-sheet-backdrop {
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+
+  @media (prefers-reduced-transparency: reduce) {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
+}
 
-  &[data-exiting] {
-    animation:
-      modal-sheet-out calc(var(--motion-duration-base) * var(--motion-spatial-factor))
-        var(--motion-ease-exit) both,
-      modal-fade-out var(--motion-duration-quick) var(--motion-ease-exit) both;
-  }
+/*
+ * The sheet's content (a `Dialog` inside it). The bottom padding grows by what an on-screen
+ * keyboard covers (`--sheet-scroll-padding-y`), so the last field scrolls clear of it, and by the
+ * home indicator's inset. It scrolls only once the sheet is fully in view; until then a swipe on
+ * it moves the sheet.
+ */
+@utility modal-sheet-content {
+  box-sizing: border-box;
+  padding: calc(var(--spacing) * 6);
+  padding-block-end: calc(
+    var(--spacing) * 6 + var(--sheet-scroll-padding-y, 0px) + env(safe-area-inset-bottom)
+  );
+  outline: none;
+  overflow: hidden;
+  overscroll-behavior: auto;
 
-  @variant medium {
-    &[data-entering] {
-      animation:
-        modal-rise-in var(--motion-spring-paper-duration) var(--motion-spring-paper) both,
-        modal-fade-in var(--motion-spring-fade-duration) var(--motion-spring-fade) both;
-    }
-
-    &[data-exiting] {
-      animation:
-        modal-rise-out var(--motion-duration-quick) var(--motion-ease-exit) both,
-        modal-fade-out var(--motion-duration-quick) var(--motion-ease-exit) both;
-    }
+  [data-expanded] & {
+    overflow-y: auto;
   }
 }
