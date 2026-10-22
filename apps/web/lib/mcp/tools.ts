@@ -31,6 +31,7 @@ export type McpClippings = Pick<
   | "searchClippings"
   | "listClippings"
   | "getClipping"
+  | "getClippingText"
   | "updateClipping"
   | "listTagSummaries"
   | "deleteClipping"
@@ -222,6 +223,31 @@ export function registerClippingTools(
       const caller = callerFrom(ctx);
       const clipping = await clippings.getClipping(caller.userId, id);
       return clipping ? result({ clipping: presentFull(clipping, appOrigin) }) : failure(NOT_FOUND);
+    },
+  );
+
+  server.registerTool(
+    "get_page_text",
+    {
+      title: "Get a clipping's page text",
+      description:
+        "Read the page text Clippings saved when it last read one of the user's clippings, by id: up to about 20,000 characters, cut to what the summarizer takes. Use it to answer from the page itself instead of the summary. Pages Clippings couldn't read, and clippings saved before it kept the text, have none until the user re-reads them.",
+      inputSchema: z.object({ id: idSchema }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ id }, ctx) => {
+      const caller = callerFrom(ctx);
+      const clipping = await clippings.getClipping(caller.userId, id);
+      if (!clipping) return failure(NOT_FOUND);
+      const page = await clippings.getClippingText(caller.userId, id);
+      if (!page) return failure("Clippings has no saved text for that clipping.");
+      return result({
+        id: clipping.id,
+        url: clipping.url,
+        title: clipping.title,
+        text: page.text,
+        fetchedAt: page.fetchedAt,
+      });
     },
   );
 

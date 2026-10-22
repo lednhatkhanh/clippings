@@ -46,6 +46,7 @@ import {
   clippings,
   clippingTags,
   clippingTagSuggestions,
+  clippingTexts,
   EMBEDDING_DIMENSIONS,
   tags,
   userSettings,
@@ -121,8 +122,20 @@ export interface ClippingsPage {
   nextCursor: string | null;
 }
 
-/** A clipping as it appears in the user's data export: its tags by name. */
-export type ExportedClipping = Omit<Clipping, "tags" | "suggestedTags"> & { tags: string[] };
+/**
+ * A clipping as it appears in the user's data export: its tags by name and the page text the last
+ * reading saved (null when there is none).
+ */
+export type ExportedClipping = Omit<Clipping, "tags" | "suggestedTags"> & {
+  tags: string[];
+  text: string | null;
+};
+
+/** The page text saved with a clipping, and when it was read. */
+export interface ClippingText {
+  text: string;
+  fetchedAt: string;
+}
 
 /** One bookmark to import. A `ParsedBookmark` from `@clippings/shared` fits. */
 export interface ImportItem {
@@ -952,13 +965,42 @@ export function createClippingsService({
       .from(clippings)
       .where(and(eq(clippings.userId, userId), live))
       .orderBy(desc(clippings.createdAt), desc(clippings.id));
+    const texts = new Map(
+      (
+        await db
+          .select({ clippingId: clippingTexts.clippingId, text: clippingTexts.text })
+          .from(clippingTexts)
+          .where(eq(clippingTexts.userId, userId))
+      ).map((row) => [row.clippingId, row.text]),
+    );
     return {
       exportedAt,
       clippings: (await withTags(userId, rows)).map((clipping) => {
         const { suggestedTags: _suggestedTags, ...exported } = clipping;
-        return { ...exported, tags: clipping.tags.map((tag) => tag.name) };
+        return {
+          ...exported,
+          tags: clipping.tags.map((tag) => tag.name),
+          text: texts.get(clipping.id) ?? null,
+        };
       }),
     };
+  }
+
+  /**
+   * The page text the last reading of the user's clipping saved, with the time it was read, or
+   * null when the user has no such live clipping or it has no saved text.
+   */
+  async function getClippingText(userId: string, clippingId: string): Promise<ClippingText | null> {
+    if (!UUID.test(clippingId)) return null;
+    const [row] = await db
+      .select({ text: clippingTexts.text, fetchedAt: clippingTexts.fetchedAt })
+      .from(clippingTexts)
+      .innerJoin(
+        clippings,
+        and(eq(clippings.id, clippingTexts.clippingId), eq(clippings.userId, clippingTexts.userId)),
+      )
+      .where(and(eq(clippingTexts.clippingId, clippingId), eq(clippingTexts.userId, userId), live));
+    return row ? { text: row.text, fetchedAt: formatIsoUtc(row.fetchedAt) } : null;
   }
 
   /**
@@ -1286,6 +1328,27 @@ export function createClippingsService({
   }
 
   /**
+   * Keeps the page text of a clipping the reading just made ready: replaces the saved one, or
+   * removes it when the page had none (a stale text must not outlive a re-read).
+   */
+  async function replacePageText(
+    tx: Transaction,
+    userId: string,
+    clippingId: string,
+    text: string,
+    at: Date,
+  ): Promise<void> {
+    if (text === "") {
+      await tx.delete(clippingTexts).where(eq(clippingTexts.clippingId, clippingId));
+      return;
+    }
+    await tx
+      .insert(clippingTexts)
+      .values({ clippingId, userId, text, fetchedAt: at })
+      .onConflictDoUpdate({ target: clippingTexts.clippingId, set: { text, fetchedAt: at } });
+  }
+
+  /**
    * Reads a pending clipping's page and fills in its title, summary and excerpt. Safe to repeat:
    * only a pending clipping is touched, so a redelivered job does nothing, and the user's title,
    * note and tags are never written. For a user with tag suggestions on, it also stores the tags
@@ -1311,9 +1374,11 @@ export function createClippingsService({
     const userTags = suggesting ? await mostUsedTagNames(row.userId) : undefined;
 
     let read: PageSummary;
+    let pageText = "";
     let meaning: number[] | null = null;
     try {
       const page = await fetcher.fetchPage(row.url);
+      pageText = page.text;
       read = await summarizer.summarize({
         url: row.url,
         ...page,
@@ -1358,6 +1423,7 @@ export function createClippingsService({
         })
         .where(and(eq(clippings.id, clippingId), eq(clippings.status, "pending")))
         .returning({ id: clippings.id });
+      if (ready) await replacePageText(tx, row.userId, clippingId, pageText, now);
       if (ready && suggesting) {
         await replaceSuggestions(
           tx,
@@ -1800,6 +1866,7 @@ export function createClippingsService({
     searchClippings,
     relatedClippings,
     exportClippings,
+    getClippingText,
     updateClipping,
     getClipping,
     hasClippingOfUrl,

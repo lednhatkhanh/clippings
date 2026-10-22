@@ -18,7 +18,7 @@ type AccessTokenClaims = Parameters<Parameters<typeof requireMcpAuth>[1]>[1];
 const READ_INSTRUCTIONS =
   "Clippings is the user's private collection of saved web pages. Save a page they want to keep with save_clipping; find what they saved with search_clippings or list_recent.";
 
-const WRITE_INSTRUCTIONS = `${READ_INSTRUCTIONS} Read one clipping with get_clipping and change its title, note or tags with update_clipping. Call list_tags before tagging and reuse the user's tags. delete_clipping can be undone with restore_clipping for 24 hours. Change or delete only what the user asked you to.`;
+const WRITE_INSTRUCTIONS = `${READ_INSTRUCTIONS} Read one clipping with get_clipping, and the page text Clippings saved for it with get_page_text. Change its title, note or tags with update_clipping. Call list_tags before tagging and reuse the user's tags. delete_clipping can be undone with restore_clipping for 24 hours. Change or delete only what the user asked you to.`;
 
 /**
  * The MCP server behind `/mcp`: stateless, serving spec 2026-07-28 and falling back to stateless

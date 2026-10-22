@@ -242,8 +242,8 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
       expect(exported.exportedAt).toBe("2026-10-01T09:00:07.000Z");
       // An export names its tags; the saved clipping carries them as objects.
       expect(exported.clippings).toEqual([
-        { ...last, tags: [], suggestedTags: undefined },
-        { ...first, tags: ["reading"], suggestedTags: undefined },
+        { ...last, tags: [], text: null, suggestedTags: undefined },
+        { ...first, tags: ["reading"], text: null, suggestedTags: undefined },
       ]);
       // Suggestions belong to the detail read; an export has none.
       expect(exported.clippings.every((clipping) => !("suggestedTags" in clipping))).toBe(true);

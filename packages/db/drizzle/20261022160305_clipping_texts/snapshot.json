@@ -1,0 +1,145 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "a07b8ea5-5757-4031-b146-774a66d3c3e2",
+  "prevIds": ["74b027f1-1e30-46d7-947f-a4a9e3d31841"],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "clipping_texts"],
+      "writes": [
+        "s|tbl|public.clipping_texts",
+        "n|tbl|public.clipping_texts",
+        "e|tbl|public.clipping_texts",
+        "n|rel|public.clipping_texts",
+        "n|type|public.clipping_texts",
+        "n|rel|public.clipping_texts_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "clipping_texts"],
+      "writes": [
+        "s|fk|public.clipping_texts.clipping_texts_clipping_fkey",
+        "n|fk|public.clipping_texts.clipping_texts_clipping_fkey",
+        "e|fk|public.clipping_texts.clipping_texts_clipping_fkey",
+        "n|con|public.clipping_texts.clipping_texts_clipping_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.clipping_texts",
+        "n|sch|public",
+        "n|tbl|public.clippings",
+        "n|sch|public",
+        "n|col|public.clipping_texts.clipping_id",
+        "n|col|public.clipping_texts.user_id",
+        "n|col|public.clippings.id",
+        "n|col|public.clippings.user_id",
+        "e|uniqueness|public.clippings.id.user_id"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "clipping_texts",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clipping_texts",
+        "name": "clipping_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clipping_texts",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clipping_texts",
+        "name": "text",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clipping_texts",
+        "name": "fetched_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clipping_texts",
+        "name": "clipping_texts_clipping_fkey",
+        "nameExplicit": true,
+        "columns": ["clipping_id", "user_id"],
+        "schemaTo": "public",
+        "tableTo": "clippings",
+        "columnsTo": ["id", "user_id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clipping_texts",
+        "name": "clipping_texts_pkey",
+        "columns": ["clipping_id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    }
+  ]
+}
