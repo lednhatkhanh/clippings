@@ -12,12 +12,11 @@ export interface SweepRequestDeps {
 }
 
 /**
- * Links checked per run. Five run at once and most answer in a second; only a run of nothing but
- * 10 s timeouts would pass the route's 60 s. The check goes last, after the work that must not be
- * skipped, and each result is written as it arrives, so a cut-off run loses only the checks still
- * in flight.
+ * Links checked per run. Five run at once with a 10 s budget each, so even a run of nothing but
+ * timeouts takes 40 s and stays inside the route's 60 s. The check goes last, after the work that
+ * must not be skipped, and each result is written as it arrives.
  */
-const LINK_CHECK_LIMIT = 40;
+const LINK_CHECK_LIMIT = 20;
 
 function isAuthorized(authorization: string | null, secret: string | undefined): boolean {
   if (!secret || !authorization) return false;
