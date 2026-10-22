@@ -1,1346 +1,443 @@
 {
-  "version": "8",
+  "type": "diff",
+  "version": "9",
   "dialect": "postgres",
   "id": "e60e70b7-1269-4bdb-bb06-5fed8230e72b",
   "prevIds": ["33337802-6fba-4d11-8552-1c5ed8df6e40"],
-  "ddl": [
-    {
-      "isRlsEnabled": false,
-      "name": "account",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "clipping_tags",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "clippings",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "session",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "tags",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "user",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "user_settings",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "verification",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "accountId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "providerId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "userId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "accessToken",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "refreshToken",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "idToken",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "accessTokenExpiresAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "refreshTokenExpiresAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "scope",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "password",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "updatedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "clipping_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clipping_tags"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "tag_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clipping_tags"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clipping_tags"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "gen_random_uuid()",
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "url",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "url_normalized",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "title",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "''",
-      "generated": null,
-      "identity": null,
-      "name": "note",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "summary",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "excerpt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "'pending'",
-      "generated": null,
-      "identity": null,
-      "name": "status",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "source",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "client_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "status_changed_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
-      "type": "vector(1024)",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "embedding",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "deleted_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
-      "type": "tsvector",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": {
-        "as": "setweight(to_tsvector('simple', \"clippings\".\"title\"), 'A') || setweight(to_tsvector('simple', \"clippings\".\"note\"), 'B') || setweight(to_tsvector('simple', coalesce(\"clippings\".\"excerpt\", '')), 'C')",
-        "type": "stored"
-      },
-      "identity": null,
-      "name": "search_tsv",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "expiresAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "token",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "updatedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "ipAddress",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "userAgent",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "userId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "gen_random_uuid()",
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "tags"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "tags"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "name",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "tags"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "'none'",
-      "generated": null,
-      "identity": null,
-      "name": "color",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "tags"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "tags"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "name",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "email",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
-      "type": "boolean",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "emailVerified",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "image",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "updatedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user_settings"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "'system'",
-      "generated": null,
-      "identity": null,
-      "name": "theme",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user_settings"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "'olive'",
-      "generated": null,
-      "identity": null,
-      "name": "palette",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user_settings"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "'system'",
-      "generated": null,
-      "identity": null,
-      "name": "contrast",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user_settings"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "'comfortable'",
-      "generated": null,
-      "identity": null,
-      "name": "density",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user_settings"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user_settings"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "verification"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "identifier",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "verification"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "value",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "verification"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "expiresAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "verification"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "verification"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "updatedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "verification"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "userId",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "clipping_tags"],
+      "writes": [
+        "s|tbl|public.clipping_tags",
+        "n|tbl|public.clipping_tags",
+        "e|tbl|public.clipping_tags",
+        "n|rel|public.clipping_tags",
+        "n|type|public.clipping_tags",
+        "n|rel|public.clipping_tags_pkey"
       ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "account_userId_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "account"
+      "reads": ["n|sch|public"]
     },
     {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "tag_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "tags"],
+      "writes": [
+        "s|tbl|public.tags",
+        "n|tbl|public.tags",
+        "e|tbl|public.tags",
+        "n|rel|public.tags",
+        "n|type|public.tags",
+        "n|rel|public.tags_pkey",
+        "n|rel|public.tags_id_user_id_key"
       ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "clipping_tags_tag_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "clipping_tags"
+      "reads": ["n|sch|public"]
     },
     {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "user_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "created_at",
-          "isExpression": false,
-          "asc": false,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "id",
-          "isExpression": false,
-          "asc": false,
-          "nullsFirst": false,
-          "opclass": null
-        }
+      "statementType": "add_unique",
+      "statementTarget": ["table", "public", "clippings"],
+      "writes": [
+        "s|uq|public.clippings.clippings_id_user_id_key",
+        "n|uq|public.clippings.clippings_id_user_id_key",
+        "e|uq|public.clippings.clippings_id_user_id_key",
+        "n|con|public.clippings.clippings_id_user_id_key",
+        "n|rel|public.clippings_id_user_id_key"
       ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "clippings_user_newest_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "clippings"
+      "reads": [
+        "n|tbl|public.clippings",
+        "n|sch|public",
+        "n|col|public.clippings.id",
+        "n|col|public.clippings.user_id"
+      ]
     },
     {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "search_tsv",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "clipping_tags", "clipping_tags_tag_id_idx"],
+      "writes": [
+        "s|idx|public.clipping_tags_tag_id_idx",
+        "n|idx|public.clipping_tags_tag_id_idx",
+        "e|idx|public.clipping_tags_tag_id_idx",
+        "n|rel|public.clipping_tags_tag_id_idx"
       ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "gin",
-      "concurrently": false,
-      "name": "clippings_search_tsv_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "clippings"
+      "reads": ["n|tbl|public.clipping_tags", "n|sch|public", "n|col|public.clipping_tags.tag_id"]
     },
     {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "title",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": {
-            "name": "gin_trgm_ops",
-            "default": false
-          }
-        }
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "tags", "tags_user_id_name_key"],
+      "writes": [
+        "s|idx|public.tags_user_id_name_key",
+        "n|idx|public.tags_user_id_name_key",
+        "e|idx|public.tags_user_id_name_key",
+        "n|rel|public.tags_user_id_name_key"
       ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "gin",
-      "concurrently": false,
-      "name": "clippings_title_trgm_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "clippings"
+      "reads": ["n|tbl|public.tags", "n|sch|public", "n|col|public.tags.user_id"]
     },
     {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "userId",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "clipping_tags"],
+      "writes": [
+        "s|fk|public.clipping_tags.clipping_tags_clipping_fkey",
+        "n|fk|public.clipping_tags.clipping_tags_clipping_fkey",
+        "e|fk|public.clipping_tags.clipping_tags_clipping_fkey",
+        "n|con|public.clipping_tags.clipping_tags_clipping_fkey"
       ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "session_userId_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "session"
+      "reads": [
+        "n|tbl|public.clipping_tags",
+        "n|sch|public",
+        "n|tbl|public.clippings",
+        "n|sch|public",
+        "n|col|public.clipping_tags.clipping_id",
+        "n|col|public.clipping_tags.user_id",
+        "n|col|public.clippings.id",
+        "n|col|public.clippings.user_id",
+        "e|uniqueness|public.clippings.id.user_id"
+      ]
     },
     {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "user_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "lower(\"name\")",
-          "isExpression": true,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "clipping_tags"],
+      "writes": [
+        "s|fk|public.clipping_tags.clipping_tags_tag_fkey",
+        "n|fk|public.clipping_tags.clipping_tags_tag_fkey",
+        "e|fk|public.clipping_tags.clipping_tags_tag_fkey",
+        "n|con|public.clipping_tags.clipping_tags_tag_fkey"
       ],
-      "isUnique": true,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "tags_user_id_name_key",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "tags"
+      "reads": [
+        "n|tbl|public.clipping_tags",
+        "n|sch|public",
+        "n|tbl|public.tags",
+        "n|sch|public",
+        "n|col|public.clipping_tags.tag_id",
+        "n|col|public.clipping_tags.user_id",
+        "n|col|public.tags.id",
+        "n|col|public.tags.user_id",
+        "e|uniqueness|public.tags.id.user_id"
+      ]
     },
     {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "identifier",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "tags"],
+      "writes": [
+        "s|fk|public.tags.tags_user_id_user_id_fkey",
+        "n|fk|public.tags.tags_user_id_user_id_fkey",
+        "e|fk|public.tags.tags_user_id_user_id_fkey",
+        "n|con|public.tags.tags_user_id_user_id_fkey"
       ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "verification_identifier_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "verification"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["userId"],
-      "schemaTo": "public",
-      "tableTo": "user",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "account_userId_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "nameExplicit": true,
-      "columns": ["clipping_id", "user_id"],
-      "schemaTo": "public",
-      "tableTo": "clippings",
-      "columnsTo": ["id", "user_id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "clipping_tags_clipping_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "clipping_tags"
-    },
-    {
-      "nameExplicit": true,
-      "columns": ["tag_id", "user_id"],
-      "schemaTo": "public",
-      "tableTo": "tags",
-      "columnsTo": ["id", "user_id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "clipping_tags_tag_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "clipping_tags"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["user_id"],
-      "schemaTo": "public",
-      "tableTo": "user",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "clippings_user_id_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["userId"],
-      "schemaTo": "public",
-      "tableTo": "user",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "session_userId_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "session"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["user_id"],
-      "schemaTo": "public",
-      "tableTo": "user",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "tags_user_id_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "tags"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["user_id"],
-      "schemaTo": "public",
-      "tableTo": "user",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "user_settings_user_id_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "user_settings"
-    },
-    {
-      "columns": ["clipping_id", "tag_id"],
-      "nameExplicit": true,
-      "name": "clipping_tags_pkey",
-      "entityType": "pks",
-      "schema": "public",
-      "table": "clipping_tags"
-    },
-    {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "account_pkey",
-      "schema": "public",
-      "table": "account",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "clippings_pkey",
-      "schema": "public",
-      "table": "clippings",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "session_pkey",
-      "schema": "public",
-      "table": "session",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "tags_pkey",
-      "schema": "public",
-      "table": "tags",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "user_pkey",
-      "schema": "public",
-      "table": "user",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["user_id"],
-      "nameExplicit": false,
-      "name": "user_settings_pkey",
-      "schema": "public",
-      "table": "user_settings",
-      "entityType": "pks"
-    },
-    {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "verification_pkey",
-      "schema": "public",
-      "table": "verification",
-      "entityType": "pks"
-    },
-    {
-      "nameExplicit": true,
-      "columns": ["user_id", "url_normalized"],
-      "nullsNotDistinct": false,
-      "name": "clippings_user_id_url_normalized_key",
-      "entityType": "uniques",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
-      "nameExplicit": true,
-      "columns": ["id", "user_id"],
-      "nullsNotDistinct": false,
-      "name": "clippings_id_user_id_key",
-      "entityType": "uniques",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
-      "nameExplicit": true,
-      "columns": ["id", "user_id"],
-      "nullsNotDistinct": false,
-      "name": "tags_id_user_id_key",
-      "entityType": "uniques",
-      "schema": "public",
-      "table": "tags"
-    },
-    {
-      "nameExplicit": true,
-      "columns": ["token"],
-      "nullsNotDistinct": false,
-      "name": "session_token_key",
-      "schema": "public",
-      "table": "session",
-      "entityType": "uniques"
-    },
-    {
-      "nameExplicit": true,
-      "columns": ["email"],
-      "nullsNotDistinct": false,
-      "name": "user_email_key",
-      "schema": "public",
-      "table": "user",
-      "entityType": "uniques"
-    },
-    {
-      "value": "\"status\" in ('pending', 'ready', 'failed')",
-      "name": "clippings_status_check",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
-      "value": "\"source\" in ('web', 'extension', 'mcp', 'digest')",
-      "name": "clippings_source_check",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
-      "value": "\"color\" in ('none', 'red', 'orange', 'amber', 'green', 'teal', 'blue', 'violet', 'pink')",
-      "name": "tags_color_check",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "tags"
-    },
-    {
-      "value": "\"theme\" in ('system', 'light', 'dark')",
-      "name": "user_settings_theme_check",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "user_settings"
-    },
-    {
-      "value": "\"palette\" in ('olive', 'ochre', 'terracotta', 'ink')",
-      "name": "user_settings_palette_check",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "user_settings"
-    },
-    {
-      "value": "\"contrast\" in ('system', 'standard', 'medium', 'high')",
-      "name": "user_settings_contrast_check",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "user_settings"
-    },
-    {
-      "value": "\"density\" in ('comfortable', 'compact')",
-      "name": "user_settings_density_check",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "user_settings"
+      "reads": [
+        "n|tbl|public.tags",
+        "n|sch|public",
+        "n|tbl|public.user",
+        "n|sch|public",
+        "n|col|public.tags.user_id",
+        "n|col|public.user.id",
+        "e|uniqueness|public.user.id"
+      ]
     }
   ],
-  "renames": []
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "clipping_tags",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "tags",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clipping_tags",
+        "name": "clipping_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clipping_tags",
+        "name": "tag_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clipping_tags",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tags",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "gen_random_uuid()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tags",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tags",
+        "name": "name",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tags",
+        "name": "color",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'none'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tags",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clipping_tags",
+        "name": "clipping_tags_tag_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "tag_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tags",
+        "name": "tags_user_id_name_key",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "user_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "lower(\"name\")",
+            "isExpression": true,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": true,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clipping_tags",
+        "name": "clipping_tags_clipping_fkey",
+        "nameExplicit": true,
+        "columns": ["clipping_id", "user_id"],
+        "schemaTo": "public",
+        "tableTo": "clippings",
+        "columnsTo": ["id", "user_id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clipping_tags",
+        "name": "clipping_tags_tag_fkey",
+        "nameExplicit": true,
+        "columns": ["tag_id", "user_id"],
+        "schemaTo": "public",
+        "tableTo": "tags",
+        "columnsTo": ["id", "user_id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tags",
+        "name": "tags_user_id_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["user_id"],
+        "schemaTo": "public",
+        "tableTo": "user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clipping_tags",
+        "name": "clipping_tags_pkey",
+        "columns": ["clipping_id", "tag_id"],
+        "nameExplicit": true,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tags",
+        "name": "tags_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clippings",
+        "name": "clippings_id_user_id_key",
+        "nameExplicit": true,
+        "columns": ["id", "user_id"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tags",
+        "name": "tags_id_user_id_key",
+        "nameExplicit": true,
+        "columns": ["id", "user_id"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "tags",
+        "name": "tags_color_check",
+        "value": "\"color\" in ('none', 'red', 'orange', 'amber', 'green', 'teal', 'blue', 'violet', 'pink')",
+        "entityType": "checks"
+      }
+    }
+  ]
 }
