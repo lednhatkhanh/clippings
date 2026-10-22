@@ -1,0 +1,14 @@
+{
+  "name": "clippings",
+  "description": "Plugins for Clippings, a private collection of saved web pages",
+  "owner": {
+    "name": "Khanh Le"
+  },
+  "plugins": [
+    {
+      "name": "clippings",
+      "source": "./plugins/clippings",
+      "description": "Save, find, review and tidy your Clippings library from Claude"
+    }
+  ]
+}

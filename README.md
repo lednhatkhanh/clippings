@@ -97,6 +97,19 @@ Either one opens a browser window: sign in with an allowlisted Google account, t
 Clippings is the OAuth authorization server (Better Auth's MCP plugin), so there are no keys to
 copy.
 
+### The Clippings plugin
+
+`plugins/clippings` bundles that connector (pointed at the production `/mcp`) with a skill that
+teaches Claude to search before saving, reuse your tags, cite links, and run a weekly review and a
+tag tidy-up. This repo is also the plugin marketplace.
+
+- **Claude Code**: run `/plugin marketplace add lednhatkhanh/clippings`, then
+  `/plugin install clippings@clippings`, then `/mcp` to sign in.
+- **claude.ai and Cowork**: Customize → Plugins, add the GitHub repository
+  `lednhatkhanh/clippings` as a marketplace, install `clippings`, then connect Clippings from the
+  plugin's Connectors tab. A plugin installed this way syncs to Claude Code at the next session
+  start.
+
 ## The browser extension
 
 The Chrome extension saves the page you're on from its toolbar popup, with a note. Build it for
