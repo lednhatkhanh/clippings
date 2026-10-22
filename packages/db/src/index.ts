@@ -44,6 +44,7 @@ export {
   TitleTooLongError,
   TooManyClippingsError,
   type ClippingsExport,
+  type ClippingText,
   type ClippingsPage,
   type ClippingsService,
   type EnrichmentOutcome,
