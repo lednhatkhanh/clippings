@@ -20,6 +20,9 @@ export {
 } from "./schema.ts";
 export type {
   Clock,
+  DigestClipping,
+  Digester,
+  DigesterInput,
   Embedder,
   EmbeddingPurpose,
   FetchedPage,
@@ -28,6 +31,7 @@ export type {
   PageSummary,
   Summarizer,
   SummarizerInput,
+  WeeklyDigest,
 } from "./clippings/ports.ts";
 export {
   createClippingsService,
@@ -57,6 +61,14 @@ export {
   type SearchResults,
   type UpdateClippingInput,
 } from "./clippings/service.ts";
+export {
+  createDigestService,
+  lastFinishedWeek,
+  type DigestClippingRef,
+  type DigestWeek,
+  type DigestService,
+  type WeeklyDigestView,
+} from "./digest/service.ts";
 export {
   createSettingsService,
   InvalidSettingsError,

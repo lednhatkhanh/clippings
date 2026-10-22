@@ -66,13 +66,19 @@ for going offline; a second build gets a new build id, so it triggers the update
 - **Anthropic** answers the page-reading tool call after four seconds, so the pending state is
   visible. Its title is the page's own, prefixed with `Read:`. When the request asks for tag
   suggestions, it suggests the user's first two tags and one new tag, the first long word of the
-  page title.
+  page title. A `save_digest` request (the weekly digest) gets one group of all the week's
+  clippings and the first archive clipping brought back.
 - **Voyage AI** embeds a text as its words (one hashed axis per word), so search by meaning finds
   texts that share a word even where keyword search wouldn't, such as a word in the summary.
   Real semantic quality stays with the user.
 - Pages are fetched for real, so use a public URL such as `https://example.com`. The app refuses
   loopback and private addresses on purpose: a link to `http://127.0.0.1:...` ends as failed, which
   is also the way to see the failed row and Retry.
+
+Call the crons by hand with the secret from `local.env`: `curl -H "Authorization: Bearer $CRON_SECRET"
+http://localhost:3100/api/cron/sweep`, and `/api/cron/digest` for the weekly digests. A digest is
+written for the last finished Monday to Sunday (UTC), so backdate a few clippings into it first
+(`update clippings set created_at = ...`); a second call the same week writes nothing.
 
 Read the fakes' output with `preview_logs`. Stop what you started when you are done:
 `preview_stop` for the servers, `agent-browser close` for the browser session, and

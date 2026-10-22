@@ -18,7 +18,7 @@ export interface SweepRequestDeps {
  */
 const LINK_CHECK_LIMIT = 40;
 
-function isAuthorized(authorization: string | null, secret: string | undefined): boolean {
+export function isAuthorized(authorization: string | null, secret: string | undefined): boolean {
   if (!secret || !authorization) return false;
   const given = Buffer.from(authorization);
   const expected = Buffer.from(`Bearer ${secret}`);
