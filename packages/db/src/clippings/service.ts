@@ -1339,7 +1339,9 @@ export function createClippingsService({
     at: Date,
   ): Promise<void> {
     if (text === "") {
-      await tx.delete(clippingTexts).where(eq(clippingTexts.clippingId, clippingId));
+      await tx
+        .delete(clippingTexts)
+        .where(and(eq(clippingTexts.clippingId, clippingId), eq(clippingTexts.userId, userId)));
       return;
     }
     await tx
