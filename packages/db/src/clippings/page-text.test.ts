@@ -40,6 +40,9 @@ describe.skipIf(!TEST_DATABASE_URL)("the saved page text", () => {
     const id = await saveAndRead(ana);
 
     expect(await fixture.service.getClippingText(ana, id)).toEqual({
+      id,
+      url: URL,
+      title: "An essay about gardening",
       text: "A long essay about gardening, from start to end.",
       fetchedAt: "2026-10-01T09:00:00.000Z",
     });
@@ -66,6 +69,9 @@ describe.skipIf(!TEST_DATABASE_URL)("the saved page text", () => {
     await fixture.service.enrichClipping(id);
 
     expect(await fixture.service.getClippingText(ana, id)).toEqual({
+      id,
+      url: URL,
+      title: "An essay about gardening",
       text: "The second reading.",
       fetchedAt: "2026-10-02T09:00:00.000Z",
     });
@@ -132,22 +138,60 @@ describe.skipIf(!TEST_DATABASE_URL)("the saved page text", () => {
     expect(rows.rowCount).toBe(0);
   });
 
-  it("puts each clipping's text in the export, null where there is none, only for the user's own", async () => {
+  it("keeps the last good text when a later re-read fails", async () => {
+    const ana = await fixture.createUser("ana");
+    setPage("The good reading.");
+    const id = await saveAndRead(ana);
+
+    fixture.web.set(URL, { error: new Error("dead link") });
+    await fixture.service.reEnrichClipping(ana, id);
+    expect(await fixture.service.enrichClipping(id, { lastAttempt: true })).toBe("failed");
+
+    expect(await fixture.service.getClippingText(ana, id)).toMatchObject({
+      text: "The good reading.",
+    });
+  });
+
+  it("drops the old text when a deleted clipping is saved again", async () => {
+    const ana = await fixture.createUser("ana");
+    setPage("The old reading.");
+    const id = await saveAndRead(ana);
+    await fixture.service.deleteClipping(ana, id);
+
+    const again = await fixture.service.saveClipping(ana, { url: URL, source: "web" });
+
+    expect(again).toMatchObject({ status: "created", clipping: { id } });
+    expect(await fixture.service.getClippingText(ana, id)).toBeNull();
+    expect((await fixture.pool.query(`select 1 from clipping_texts`)).rowCount).toBe(0);
+  });
+
+  it("drops the old text when an import brings a deleted clipping back", async () => {
+    const ana = await fixture.createUser("ana");
+    setPage("The old reading.");
+    const id = await saveAndRead(ana);
+    await fixture.service.deleteClipping(ana, id);
+
+    const counts = await fixture.service.importClippings(
+      ana,
+      [{ url: URL, addedAt: null, folders: [] }],
+      { foldersAsTags: false },
+    );
+
+    expect(counts.created).toBe(1);
+    expect(await fixture.service.getClippingText(ana, id)).toBeNull();
+    expect((await fixture.pool.query(`select 1 from clipping_texts`)).rowCount).toBe(0);
+  });
+
+  it("leaves another user's text alone when a user's clipping is revived", async () => {
     const ana = await fixture.createUser("ana");
     const ben = await fixture.createUser("ben");
-    setPage("Ana's page.");
-    const withText = await saveAndRead(ana);
-    fixture.advanceClock(1000);
-    const pending = (
-      await fixture.service.saveClipping(ana, { url: "https://example.com/pending", source: "web" })
-    ).clipping.id;
-    await saveAndRead(ben);
+    setPage("A page.");
+    const anas = await saveAndRead(ana);
+    const bens = await saveAndRead(ben);
+    await fixture.service.deleteClipping(ana, anas);
 
-    const { clippings } = await fixture.service.exportClippings(ana);
+    await fixture.service.saveClipping(ana, { url: URL, source: "web" });
 
-    expect(clippings.map(({ id, text }) => ({ id, text }))).toEqual([
-      { id: pending, text: null },
-      { id: withText, text: "Ana's page." },
-    ]);
+    expect(await fixture.service.getClippingText(ben, bens)).toMatchObject({ text: "A page." });
   });
 });

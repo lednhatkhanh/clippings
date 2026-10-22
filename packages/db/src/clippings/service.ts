@@ -122,17 +122,14 @@ export interface ClippingsPage {
   nextCursor: string | null;
 }
 
-/**
- * A clipping as it appears in the user's data export: its tags by name and the page text the last
- * reading saved (null when there is none).
- */
-export type ExportedClipping = Omit<Clipping, "tags" | "suggestedTags"> & {
-  tags: string[];
-  text: string | null;
-};
+/** A clipping as it appears in the user's data export: its tags by name. */
+export type ExportedClipping = Omit<Clipping, "tags" | "suggestedTags"> & { tags: string[] };
 
-/** The page text saved with a clipping, and when it was read. */
+/** The page text saved with a clipping, when it was read, and the clipping's url and shown title. */
 export interface ClippingText {
+  id: string;
+  url: string;
+  title: string;
   text: string;
   fetchedAt: string;
 }
@@ -750,6 +747,9 @@ export function createClippingsService({
               eq(clippingTagSuggestions.userId, userId),
             ),
           );
+        await tx
+          .delete(clippingTexts)
+          .where(and(eq(clippingTexts.clippingId, row.id), eq(clippingTexts.userId, userId)));
       }
       return row;
     });
@@ -965,42 +965,44 @@ export function createClippingsService({
       .from(clippings)
       .where(and(eq(clippings.userId, userId), live))
       .orderBy(desc(clippings.createdAt), desc(clippings.id));
-    const texts = new Map(
-      (
-        await db
-          .select({ clippingId: clippingTexts.clippingId, text: clippingTexts.text })
-          .from(clippingTexts)
-          .where(eq(clippingTexts.userId, userId))
-      ).map((row) => [row.clippingId, row.text]),
-    );
     return {
       exportedAt,
       clippings: (await withTags(userId, rows)).map((clipping) => {
         const { suggestedTags: _suggestedTags, ...exported } = clipping;
-        return {
-          ...exported,
-          tags: clipping.tags.map((tag) => tag.name),
-          text: texts.get(clipping.id) ?? null,
-        };
+        return { ...exported, tags: clipping.tags.map((tag) => tag.name) };
       }),
     };
   }
 
   /**
-   * The page text the last reading of the user's clipping saved, with the time it was read, or
-   * null when the user has no such live clipping or it has no saved text.
+   * The page text the last successful reading of the user's clipping saved, with the time it was
+   * read and the clipping's url and title as shown, or null when the user has no such live
+   * clipping or it has no saved text.
    */
   async function getClippingText(userId: string, clippingId: string): Promise<ClippingText | null> {
     if (!UUID.test(clippingId)) return null;
     const [row] = await db
-      .select({ text: clippingTexts.text, fetchedAt: clippingTexts.fetchedAt })
+      .select({
+        url: clippings.url,
+        title: sql<string>`${shownTitle}`,
+        text: clippingTexts.text,
+        fetchedAt: clippingTexts.fetchedAt,
+      })
       .from(clippingTexts)
       .innerJoin(
         clippings,
         and(eq(clippings.id, clippingTexts.clippingId), eq(clippings.userId, clippingTexts.userId)),
       )
       .where(and(eq(clippingTexts.clippingId, clippingId), eq(clippingTexts.userId, userId), live));
-    return row ? { text: row.text, fetchedAt: formatIsoUtc(row.fetchedAt) } : null;
+    return row
+      ? {
+          id: clippingId,
+          url: row.url,
+          title: row.title,
+          text: row.text,
+          fetchedAt: formatIsoUtc(row.fetchedAt),
+        }
+      : null;
   }
 
   /**
@@ -1740,7 +1742,7 @@ export function createClippingsService({
       if (rows.length === 0) return rows;
 
       const ids = rows.map((row) => row.id);
-      // Revived clippings start over without tags or suggestions; new ones have none to delete.
+      // Revived clippings start over without tags, suggestions or page text; new ones have none to delete.
       for (const chunk of chunks(ids, 5000)) {
         await tx
           .delete(clippingTags)
@@ -1753,6 +1755,9 @@ export function createClippingsService({
               inArray(clippingTagSuggestions.clippingId, chunk),
             ),
           );
+        await tx
+          .delete(clippingTexts)
+          .where(and(eq(clippingTexts.userId, userId), inArray(clippingTexts.clippingId, chunk)));
       }
       if (foldersAsTags) await tagImported(tx, userId, rows, pages, now);
       return rows;
