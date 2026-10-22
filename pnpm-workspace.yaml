@@ -5,37 +5,37 @@ packages:
 catalogMode: strict
 
 catalog:
-  "@anthropic-ai/sdk": 0.135.0
+  "@anthropic-ai/sdk": 1.1.0
   "@ast-grep/cli": 0.51.0
   "@axe-core/playwright": 4.14.0
-  "@better-auth/cimd": 1.7.10
-  "@better-auth/mcp": 1.7.10
-  "@better-auth/oauth-provider": 1.7.10
+  "@better-auth/cimd": 1.7.12
+  "@better-auth/mcp": 1.7.12
+  "@better-auth/oauth-provider": 1.7.12
   "@date-fns/utc": 2.1.1
   "@material/material-color-utilities": 0.4.0
   "@modelcontextprotocol/client": 2.3.1
   "@modelcontextprotocol/server": 2.3.1
   # Always the same version as `next`: bump them together.
-  "@next/playwright": 16.4.1
+  "@next/playwright": 16.4.2
   "@playwright/test": 1.64.1
-  "@shadcn/lint": 0.2.1
+  "@shadcn/lint": 0.2.3
   "@tailwindcss/postcss": 4.3.3
   "@types/node": 24.19.2
   "@types/pg": 8.23.1
   "@types/react": 19.3.0
   "@types/react-dom": 19.3.0
-  "@upstash/qstash": 2.12.0
-  better-auth: 1.7.10
-  cn: 0.4.0
+  "@upstash/qstash": 2.12.1
+  better-auth: 1.7.12
+  cn: 0.5.0
   date-fns: 4.4.0
-  drizzle-kit: 1.0.0-rc.4
-  drizzle-orm: 1.0.0-rc.4
-  lucide-react: 1.52.0
+  drizzle-kit: 1.0.0-rc.5
+  drizzle-orm: 1.0.0-rc.5
+  lucide-react: 1.61.0
   mcp-handler: 2.3.0
-  next: 16.4.1
+  next: 16.4.2
   nuqs: 2.10.2
-  oxfmt: 0.73.0
-  oxlint: 1.88.0
+  oxfmt: 0.74.0
+  oxlint: 1.89.0
   oxlint-tsgolint: 7.0.2004
   pg: 8.23.1
   react: 19.3.1
@@ -45,9 +45,9 @@ catalog:
   swr: 2.5.1
   tailwindcss: 4.3.3
   tsx: 4.23.15
-  turbo: 2.11.8
+  turbo: 2.11.10
   typescript: 7.0.2
-  vitest: 5.0.4
+  vitest: 5.0.5
   wxt: 0.21.4
   zod: 4.6.7
 
@@ -55,26 +55,9 @@ catalog:
 # `minimumReleaseAge` when first installed. They are version-pinned, so they go
 # inert after a bump; delete the block whenever convenient.
 minimumReleaseAgeExclude:
-  - "@next/env@16.4.1"
-  - "@next/swc-darwin-arm64@16.4.1"
-  - "@next/swc-darwin-x64@16.4.1"
-  - "@next/swc-linux-arm64-gnu@16.4.1"
-  - "@next/swc-linux-arm64-musl@16.4.1"
-  - "@next/swc-linux-x64-gnu@16.4.1"
-  - "@next/swc-linux-x64-musl@16.4.1"
-  - "@next/swc-win32-arm64-msvc@16.4.1"
-  - "@next/swc-win32-x64-msvc@16.4.1"
-  - next@16.4.1
-  - react-dom@19.3.1
-  - react@19.3.1
-  - "@better-auth/core@1.7.10"
-  - "@better-auth/drizzle-adapter@1.7.10"
-  - "@better-auth/kysely-adapter@1.7.10"
-  - "@better-auth/memory-adapter@1.7.10"
-  - "@better-auth/mongo-adapter@1.7.10"
-  - "@better-auth/prisma-adapter@1.7.10"
-  - "@better-auth/telemetry@1.7.10"
-  - better-auth@1.7.10
+  - "@anthropic-ai/sdk@1.1.0"
+  - drizzle-kit@1.0.0-rc.5
+  - drizzle-orm@1.0.0-rc.5
 
 # esbuild arrives transitively (tsx, vite). Its postinstall only validates the
 # platform binary, which resolves from optional dependencies without it.

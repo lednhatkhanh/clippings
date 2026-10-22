@@ -1,53 +1,221 @@
 {
-  "version": "8",
+  "type": "base",
+  "version": "9",
   "dialect": "postgres",
   "id": "cb50b05a-0a41-44be-b797-86709063778c",
   "prevIds": ["00000000-0000-0000-0000-000000000000"],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "account"],
+      "writes": [
+        "s|tbl|public.account",
+        "n|tbl|public.account",
+        "e|tbl|public.account",
+        "n|rel|public.account",
+        "n|type|public.account",
+        "n|rel|public.account_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "clippings"],
+      "writes": [
+        "s|tbl|public.clippings",
+        "n|tbl|public.clippings",
+        "e|tbl|public.clippings",
+        "n|rel|public.clippings",
+        "n|type|public.clippings",
+        "n|rel|public.clippings_pkey",
+        "n|rel|public.clippings_user_id_url_normalized_key"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "session"],
+      "writes": [
+        "s|tbl|public.session",
+        "n|tbl|public.session",
+        "e|tbl|public.session",
+        "n|rel|public.session",
+        "n|type|public.session",
+        "n|rel|public.session_pkey",
+        "n|rel|public.session_token_key"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "user"],
+      "writes": [
+        "s|tbl|public.user",
+        "n|tbl|public.user",
+        "e|tbl|public.user",
+        "n|rel|public.user",
+        "n|type|public.user",
+        "n|rel|public.user_pkey",
+        "n|rel|public.user_email_key"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "verification"],
+      "writes": [
+        "s|tbl|public.verification",
+        "n|tbl|public.verification",
+        "e|tbl|public.verification",
+        "n|rel|public.verification",
+        "n|type|public.verification",
+        "n|rel|public.verification_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "account", "account_userId_idx"],
+      "writes": [
+        "s|idx|public.account_userId_idx",
+        "n|idx|public.account_userId_idx",
+        "e|idx|public.account_userId_idx",
+        "n|rel|public.account_userId_idx"
+      ],
+      "reads": ["n|tbl|public.account", "n|sch|public", "n|col|public.account.userId"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "clippings", "clippings_user_newest_idx"],
+      "writes": [
+        "s|idx|public.clippings_user_newest_idx",
+        "n|idx|public.clippings_user_newest_idx",
+        "e|idx|public.clippings_user_newest_idx",
+        "n|rel|public.clippings_user_newest_idx"
+      ],
+      "reads": [
+        "n|tbl|public.clippings",
+        "n|sch|public",
+        "n|col|public.clippings.user_id",
+        "n|col|public.clippings.created_at",
+        "n|col|public.clippings.id"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "session", "session_userId_idx"],
+      "writes": [
+        "s|idx|public.session_userId_idx",
+        "n|idx|public.session_userId_idx",
+        "e|idx|public.session_userId_idx",
+        "n|rel|public.session_userId_idx"
+      ],
+      "reads": ["n|tbl|public.session", "n|sch|public", "n|col|public.session.userId"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "verification", "verification_identifier_idx"],
+      "writes": [
+        "s|idx|public.verification_identifier_idx",
+        "n|idx|public.verification_identifier_idx",
+        "e|idx|public.verification_identifier_idx",
+        "n|rel|public.verification_identifier_idx"
+      ],
+      "reads": ["n|tbl|public.verification", "n|sch|public", "n|col|public.verification.identifier"]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "account"],
+      "writes": [
+        "s|fk|public.account.account_userId_user_id_fkey",
+        "n|fk|public.account.account_userId_user_id_fkey",
+        "e|fk|public.account.account_userId_user_id_fkey",
+        "n|con|public.account.account_userId_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.account",
+        "n|sch|public",
+        "n|tbl|public.user",
+        "n|sch|public",
+        "n|col|public.account.userId",
+        "n|col|public.user.id",
+        "e|uniqueness|public.user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "clippings"],
+      "writes": [
+        "s|fk|public.clippings.clippings_user_id_user_id_fkey",
+        "n|fk|public.clippings.clippings_user_id_user_id_fkey",
+        "e|fk|public.clippings.clippings_user_id_user_id_fkey",
+        "n|con|public.clippings.clippings_user_id_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.clippings",
+        "n|sch|public",
+        "n|tbl|public.user",
+        "n|sch|public",
+        "n|col|public.clippings.user_id",
+        "n|col|public.user.id",
+        "e|uniqueness|public.user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "session"],
+      "writes": [
+        "s|fk|public.session.session_userId_user_id_fkey",
+        "n|fk|public.session.session_userId_user_id_fkey",
+        "e|fk|public.session.session_userId_user_id_fkey",
+        "n|con|public.session.session_userId_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.session",
+        "n|sch|public",
+        "n|tbl|public.user",
+        "n|sch|public",
+        "n|col|public.session.userId",
+        "n|col|public.user.id",
+        "e|uniqueness|public.user.id"
+      ]
+    }
+  ],
   "ddl": [
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "account",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "clippings",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "session",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "user",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
       "isRlsEnabled": false,
+      "entityType": "tables"
+    },
+    {
+      "schema": "public",
       "name": "verification",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "account",
       "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -55,12 +223,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "account",
       "name": "accountId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -68,12 +236,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "account",
       "name": "providerId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -81,25 +249,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "account",
       "name": "userId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
       "type": "text",
       "typeSchema": null,
-      "notNull": false,
+      "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "account",
       "name": "accessToken",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -107,12 +275,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "account",
       "name": "refreshToken",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -120,25 +288,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "account",
       "name": "idToken",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "timestamp with time zone",
+      "type": "text",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "account",
       "name": "accessTokenExpiresAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": false,
@@ -146,25 +314,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "account",
       "name": "refreshTokenExpiresAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "text",
+      "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "account",
       "name": "scope",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -172,12 +340,25 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "password",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "account",
+      "name": "password",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "account",
+      "name": "createdAt",
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
@@ -185,12 +366,12 @@
       "default": "now()",
       "generated": null,
       "identity": null,
-      "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "account",
+      "name": "updatedAt",
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
@@ -198,12 +379,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "updatedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "clippings",
+      "name": "id",
       "type": "uuid",
       "typeSchema": null,
       "notNull": true,
@@ -211,25 +392,12 @@
       "default": "gen_random_uuid()",
       "generated": null,
       "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
+      "entityType": "columns"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "clippings",
       "name": "user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -237,12 +405,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "clippings",
       "name": "url",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -250,12 +418,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "clippings",
       "name": "url_normalized",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -263,12 +431,25 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "title",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "clippings",
+      "name": "title",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "clippings",
+      "name": "note",
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -276,12 +457,12 @@
       "default": "''",
       "generated": null,
       "identity": null,
-      "name": "note",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "clippings",
+      "name": "status",
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -289,12 +470,12 @@
       "default": "'pending'",
       "generated": null,
       "identity": null,
-      "name": "status",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "clippings",
+      "name": "source",
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -302,12 +483,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "source",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "clippings",
+      "name": "client_id",
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -315,25 +496,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "client_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
+      "entityType": "columns"
     },
     {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "clippings",
       "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
@@ -341,25 +509,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "clippings",
       "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "clippings"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
-    },
-    {
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
@@ -367,12 +522,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "expiresAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "session",
+      "name": "id",
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -380,12 +535,38 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "token",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "session",
+      "name": "expiresAt",
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "session",
+      "name": "token",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "session",
+      "name": "createdAt",
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
@@ -393,12 +574,12 @@
       "default": "now()",
       "generated": null,
       "identity": null,
-      "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "session",
+      "name": "updatedAt",
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
@@ -406,25 +587,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "updatedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
+      "entityType": "columns"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "session",
       "name": "ipAddress",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -432,25 +600,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "session",
       "name": "userAgent",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
-    },
-    {
       "type": "text",
       "typeSchema": null,
-      "notNull": true,
+      "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "session",
       "name": "userId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -458,12 +626,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "user",
       "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -471,12 +639,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "user",
       "name": "name",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -484,12 +652,25 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "email",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "user",
+      "name": "email",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "user",
+      "name": "emailVerified",
       "type": "boolean",
       "typeSchema": null,
       "notNull": true,
@@ -497,12 +678,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "emailVerified",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "user",
+      "name": "image",
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -510,25 +691,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "image",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
+      "entityType": "columns"
     },
     {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "user",
       "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
@@ -536,25 +704,25 @@
       "default": "now()",
       "generated": null,
       "identity": null,
-      "name": "updatedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
+      "entityType": "columns"
     },
     {
-      "type": "text",
+      "schema": "public",
+      "table": "user",
+      "name": "updatedAt",
+      "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
-      "default": null,
+      "default": "now()",
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "verification",
       "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "verification"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -562,12 +730,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "verification",
       "name": "identifier",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "verification"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -575,12 +743,25 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "value",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "verification"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "verification",
+      "name": "value",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "verification",
+      "name": "expiresAt",
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
@@ -588,25 +769,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "expiresAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "verification"
+      "entityType": "columns"
     },
     {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "verification",
       "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "verification"
-    },
-    {
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
@@ -614,12 +782,25 @@
       "default": "now()",
       "generated": null,
       "identity": null,
-      "name": "updatedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "verification"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "verification",
+      "name": "updatedAt",
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "account",
+      "name": "account_userId_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -635,12 +816,12 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "account_userId_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "account"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "clippings",
+      "name": "clippings_user_newest_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -670,12 +851,12 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "clippings_user_newest_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "clippings"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "session",
+      "name": "session_userId_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -691,12 +872,12 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "session_userId_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "session"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "verification",
+      "name": "verification_identifier_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -712,12 +893,12 @@
       "with": "",
       "method": "btree",
       "concurrently": false,
-      "name": "verification_identifier_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "verification"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "account",
+      "name": "account_userId_user_id_fkey",
       "nameExplicit": false,
       "columns": ["userId"],
       "schemaTo": "public",
@@ -725,12 +906,12 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "account_userId_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "account"
+      "entityType": "fks"
     },
     {
+      "schema": "public",
+      "table": "clippings",
+      "name": "clippings_user_id_user_id_fkey",
       "nameExplicit": false,
       "columns": ["user_id"],
       "schemaTo": "public",
@@ -738,12 +919,12 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "clippings_user_id_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "clippings"
+      "entityType": "fks"
     },
     {
+      "schema": "public",
+      "table": "session",
+      "name": "session_userId_user_id_fkey",
       "nameExplicit": false,
       "columns": ["userId"],
       "schemaTo": "public",
@@ -751,92 +932,88 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "session_userId_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "session"
+      "entityType": "fks"
     },
     {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "account_pkey",
       "schema": "public",
       "table": "account",
+      "name": "account_pkey",
+      "columns": ["id"],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "clippings_pkey",
       "schema": "public",
       "table": "clippings",
+      "name": "clippings_pkey",
+      "columns": ["id"],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "session_pkey",
       "schema": "public",
       "table": "session",
+      "name": "session_pkey",
+      "columns": ["id"],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "user_pkey",
       "schema": "public",
       "table": "user",
-      "entityType": "pks"
-    },
-    {
+      "name": "user_pkey",
       "columns": ["id"],
       "nameExplicit": false,
-      "name": "verification_pkey",
-      "schema": "public",
-      "table": "verification",
       "entityType": "pks"
     },
     {
+      "schema": "public",
+      "table": "verification",
+      "name": "verification_pkey",
+      "columns": ["id"],
+      "nameExplicit": false,
+      "entityType": "pks"
+    },
+    {
+      "schema": "public",
+      "table": "clippings",
+      "name": "clippings_user_id_url_normalized_key",
       "nameExplicit": true,
       "columns": ["user_id", "url_normalized"],
       "nullsNotDistinct": false,
-      "name": "clippings_user_id_url_normalized_key",
-      "entityType": "uniques",
-      "schema": "public",
-      "table": "clippings"
+      "entityType": "uniques"
     },
     {
+      "schema": "public",
+      "table": "session",
+      "name": "session_token_key",
       "nameExplicit": true,
       "columns": ["token"],
       "nullsNotDistinct": false,
-      "name": "session_token_key",
-      "schema": "public",
-      "table": "session",
       "entityType": "uniques"
     },
     {
+      "schema": "public",
+      "table": "user",
+      "name": "user_email_key",
       "nameExplicit": true,
       "columns": ["email"],
       "nullsNotDistinct": false,
-      "name": "user_email_key",
-      "schema": "public",
-      "table": "user",
       "entityType": "uniques"
     },
     {
-      "value": "\"status\" in ('pending', 'ready', 'failed')",
-      "name": "clippings_status_check",
-      "entityType": "checks",
       "schema": "public",
-      "table": "clippings"
+      "table": "clippings",
+      "name": "clippings_status_check",
+      "value": "\"status\" in ('pending', 'ready', 'failed')",
+      "entityType": "checks"
     },
     {
-      "value": "\"source\" in ('web', 'extension', 'mcp', 'digest')",
-      "name": "clippings_source_check",
-      "entityType": "checks",
       "schema": "public",
-      "table": "clippings"
+      "table": "clippings",
+      "name": "clippings_source_check",
+      "value": "\"source\" in ('web', 'extension', 'mcp', 'digest')",
+      "entityType": "checks"
     }
-  ],
-  "renames": []
+  ]
 }
