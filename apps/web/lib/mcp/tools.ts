@@ -1,6 +1,6 @@
 import { utc } from "@date-fns/utc";
 import type { CallToolResult, McpServer, ServerContext } from "@modelcontextprotocol/server";
-import { endOfDay, isValid, parseISO } from "date-fns";
+import { addDays, addMilliseconds, isValid, parseISO } from "date-fns";
 import * as z from "zod";
 
 import {
@@ -144,15 +144,19 @@ const failure = (message: string): CallToolResult => ({
   isError: true,
 });
 
+const FULL_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const FULL_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$/;
+
 /**
- * An ISO 8601 date or datetime as a moment, read as UTC when it names no offset. A date alone
- * means the whole day: its start for `since`, its end for `until`. Null when it isn't ISO 8601.
+ * A full ISO 8601 date (2026-03-01) or datetime as a moment, read as UTC when it names no offset;
+ * null for anything else, such as a partial date. A date alone means the whole UTC day.
  */
-function parseMoment(value: string, edge: "start" | "end"): Date | null {
+function parseMoment(value: string): { at: Date; wholeDay: boolean } | null {
   const text = value.trim();
-  const moment = parseISO(text, { in: utc });
-  if (!isValid(moment)) return null;
-  return edge === "end" && /^\d{4}-\d{2}-\d{2}$/.test(text) ? endOfDay(moment) : moment;
+  const wholeDay = FULL_DATE.test(text);
+  if (!wholeDay && !FULL_DATETIME.test(text)) return null;
+  const at = parseISO(text, { in: utc });
+  return isValid(at) ? { at, wholeDay } : null;
 }
 
 const momentSchema = (bound: "since" | "until") =>
@@ -160,7 +164,7 @@ const momentSchema = (bound: "since" | "until") =>
     .string()
     .optional()
     .describe(
-      `Only clippings saved ${bound === "since" ? "on or after" : "on or before"} this ISO 8601 date (2026-03-01, the whole day) or datetime (2026-03-01T09:00:00Z). Without an offset it is UTC.`,
+      `Only clippings saved ${bound === "since" ? "on or after" : "on or before"} this full ISO 8601 date (2026-03-01, the whole day; not a partial one such as 2026-03) or datetime (2026-03-01T09:00:00Z). Without an offset it is UTC.`,
     );
 
 /**
@@ -305,19 +309,25 @@ export function registerClippingTools(
     },
     async ({ tags, since, until, pinned, cursor, limit }, ctx) => {
       const caller = callerFrom(ctx);
-      const savedSince = since === undefined ? undefined : parseMoment(since, "start");
-      if (savedSince === null) {
-        return failure("since isn't an ISO 8601 date or datetime, such as 2026-03-01.");
+      const sinceMoment = since === undefined ? undefined : parseMoment(since);
+      if (sinceMoment === null) {
+        return failure("since isn't a full ISO 8601 date or datetime, such as 2026-03-01.");
       }
-      const savedUntil = until === undefined ? undefined : parseMoment(until, "end");
-      if (savedUntil === null) {
-        return failure("until isn't an ISO 8601 date or datetime, such as 2026-03-01.");
+      const untilMoment = until === undefined ? undefined : parseMoment(until);
+      if (untilMoment === null) {
+        return failure("until isn't a full ISO 8601 date or datetime, such as 2026-03-01.");
       }
+      // `until` is inclusive: a date takes in its whole day, a datetime its own millisecond.
+      const savedBefore = untilMoment
+        ? untilMoment.wholeDay
+          ? addDays(untilMoment.at, 1)
+          : addMilliseconds(untilMoment.at, 1)
+        : undefined;
       try {
         const page = await clippings.listSavedClippings(caller.userId, {
           tags,
-          savedSince,
-          savedUntil,
+          savedSince: sinceMoment?.at,
+          savedBefore,
           pinned,
           cursor,
           limit: limit ?? DEFAULT_LIMIT,

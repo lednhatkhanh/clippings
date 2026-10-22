@@ -11,7 +11,6 @@ import {
   isNotNull,
   isNull,
   lt,
-  lte,
   ne,
   or,
   sql,
@@ -103,8 +102,8 @@ export interface ListSavedClippingsInput {
   tags?: readonly string[];
   /** Only clippings saved at or after this time. */
   savedSince?: Date;
-  /** Only clippings saved at or before this time. */
-  savedUntil?: Date;
+  /** Only clippings saved before this time. */
+  savedBefore?: Date;
   /** True: only pinned clippings. False: only unpinned ones. Left out: both. */
   pinned?: boolean;
 }
@@ -868,7 +867,14 @@ export function createClippingsService({
    */
   async function listSavedClippings(
     userId: string,
-    { cursor, limit = 20, tags: tagNames, savedSince, savedUntil, pinned }: ListSavedClippingsInput,
+    {
+      cursor,
+      limit = 20,
+      tags: tagNames,
+      savedSince,
+      savedBefore,
+      pinned,
+    }: ListSavedClippingsInput,
   ): Promise<SavedClippingsPage> {
     const after = cursor ? decodeCursor(cursor) : null;
     // One extra row says whether another page follows without a second query.
@@ -881,7 +887,7 @@ export function createClippingsService({
           live,
           taggedWithAll(db, userId, tagNames),
           savedSince ? gte(clippings.createdAt, savedSince) : undefined,
-          savedUntil ? lte(clippings.createdAt, savedUntil) : undefined,
+          savedBefore ? lt(clippings.createdAt, savedBefore) : undefined,
           pinned === undefined
             ? undefined
             : pinned
@@ -1117,10 +1123,12 @@ export function createClippingsService({
                 .select({ id: clippings.id })
                 .from(clippings)
                 .where(and(eq(clippings.userId, userId), live, inArray(clippings.id, valid)))
-                // Locked, so a delete or another tagging of them waits. In id order, so two calls
-                // over the same clippings can't deadlock.
+                // Locked, so a delete or another tagging of them waits. `no key update`, not
+                // `update`: linking a tag takes a key-share lock on the clipping for the foreign
+                // key, which `update` would block while a merge waits on us. In id order, so two
+                // calls over the same clippings can't deadlock.
                 .orderBy(clippings.id)
-                .for("update")
+                .for("no key update")
             ).map((row) => row.id),
       );
       const notFound = ids.filter((id) => !owned.has(id));
@@ -1148,6 +1156,10 @@ export function createClippingsService({
             );
       const addIds = await tagIdsNamed(addNames);
       const removeIds = await tagIdsNamed(removeNames);
+      // The check above compares in JavaScript; Postgres's `lower` can see two names as one tag.
+      if ([...addIds].some((tagId) => removeIds.has(tagId))) {
+        throw new InvalidTagsError("A tag can't be added and removed in the same call");
+      }
 
       const links = await tx
         .select({ clippingId: clippingTags.clippingId, tagId: clippingTags.tagId })
@@ -1273,12 +1285,14 @@ export function createClippingsService({
   ): Promise<Clipping | null> {
     if (!UUID.test(clippingId)) return null;
     const accepted = await db.transaction(async (tx) => {
-      // Locked, so a concurrent edit of the tags can't be lost under the replace below.
+      // Locked, so a concurrent edit of the tags can't be lost under the replace below. `no key
+      // update` still excludes other lockers like this one, but not the key-share lock a tag
+      // link takes for its foreign key, which would deadlock against a concurrent tag merge.
       const [row] = await tx
         .select({ id: clippings.id })
         .from(clippings)
         .where(and(eq(clippings.id, clippingId), eq(clippings.userId, userId), live))
-        .for("update");
+        .for("no key update");
       if (!row) return false;
       const suggestion = and(
         eq(clippingTagSuggestions.clippingId, clippingId),

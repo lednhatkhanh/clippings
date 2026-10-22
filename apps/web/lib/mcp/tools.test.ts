@@ -380,7 +380,14 @@ describe.skipIf(!TEST_DATABASE_URL)("the MCP tools", () => {
 
     it("answers a bad date or cursor with a tool error", async () => {
       await saveAs(ada, "a");
-      for (const args of [{ since: "last week" }, { until: "2026-13-45" }, { cursor: "garbage" }]) {
+      for (const args of [
+        { since: "last week" },
+        { until: "2026-13-45" },
+        { since: "2026-03" },
+        { until: "2026-03" },
+        { until: "2026" },
+        { cursor: "garbage" },
+      ]) {
         expect((await callTool(ada, "list_clippings", args)).isError).toBe(true);
       }
     });
