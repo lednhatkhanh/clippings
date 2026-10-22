@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseDigest } from "./digester.ts";
+import { digestFromResponse, parseDigest } from "./digester.ts";
 
 const clipping = (id: string) => ({ id, title: id, summary: null, tags: [], note: "" });
 const input = {
@@ -132,5 +132,30 @@ describe("parseDigest", () => {
     expect(
       parseDigest({ groups: [group(["a"])], resurfaced: [null, 3, "x"] }, input).resurfaced,
     ).toEqual([]);
+  });
+});
+
+describe("digestFromResponse", () => {
+  const call = {
+    type: "tool_use" as const,
+    id: "toolu_1",
+    name: "save_digest",
+    input: { groups: [group(["a"])], resurfaced: [] },
+  };
+  const reply = (stop_reason: "tool_use" | "max_tokens" | "end_turn", content: unknown[]) =>
+    ({ stop_reason, content }) as Parameters<typeof digestFromResponse>[0];
+
+  it("parses the save_digest call", () => {
+    expect(digestFromResponse(reply("tool_use", [call]), input).groups).toHaveLength(1);
+  });
+
+  it("throws when the reply was cut off, even with a call that parses", () => {
+    expect(() => digestFromResponse(reply("max_tokens", [call]), input)).toThrow("cut off");
+  });
+
+  it("throws when there is no call", () => {
+    expect(() =>
+      digestFromResponse(reply("end_turn", [{ type: "text", text: "Hi" }]), input),
+    ).toThrow("didn't return a digest");
   });
 });

@@ -117,6 +117,8 @@ export async function createServiceFixture() {
     /** The throwaway database's URL, for code that opens its own pool (Better Auth in web tests). */
     databaseUrl: database.url,
     service,
+    /** The clock the services read, for a service the test builds itself. */
+    clock,
     digests: createDigestService({ pool, clock, digester, clippings: service }),
     /** Every `digest` call the fake digester got, in order. */
     digested,

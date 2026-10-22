@@ -1,9 +1,12 @@
-import { utc, UTCDate } from "@date-fns/utc";
+import { utc } from "@date-fns/utc";
 import {
   addDays,
   addWeeks,
+  differenceInSeconds,
   format,
+  getYear,
   isBefore,
+  isMonday,
   isValid,
   parseISO,
   startOfWeek,
@@ -33,6 +36,12 @@ const MAX_RELATED = 3;
 const RELATED_FROM = 10;
 /** A note longer than this is cut before the digester reads it. */
 const MAX_NOTE_LENGTH_READ = 500;
+/** How many users' digests are written at once. */
+const CONCURRENCY = 5;
+/** No new model calls start with less than this left before the deadline. */
+const MIN_SECONDS_LEFT = 30;
+/** The first year `?week=` may name; anything earlier is no week of the user's. */
+const FIRST_WEEK_YEAR = 2000;
 /** The earlier weeks the page lists. */
 const MAX_LISTED_WEEKS = 52;
 
@@ -68,12 +77,14 @@ export function lastFinishedWeek(now: Date): string {
 
 /** The Sunday (UTC) of the week that starts on this Monday. */
 function weekEndOf(weekStart: string): string {
-  return format(addDays(new UTCDate(weekStart), 6), WEEK_FORMAT);
+  return format(addDays(parseISO(weekStart, { in: utc }), 6), WEEK_FORMAT);
 }
 
-/** Whether this is a real calendar day written as `yyyy-MM-dd`. */
+/** Whether this is the Monday of a week, written as `yyyy-MM-dd`, in a range a digest can be in. */
 function isWeekParam(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) && isValid(parseISO(value));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = parseISO(value, { in: utc });
+  return isValid(date) && getYear(date) >= FIRST_WEEK_YEAR && isMonday(date);
 }
 
 /** Reads a stored digest, tolerating nothing: a row that doesn't have the shape is skipped. */
@@ -180,7 +191,7 @@ export function createDigestService({
 
   /** Writes the user's digest of the week, unless they have one already. True when it wrote one. */
   async function generateFor(userId: string, weekStart: string): Promise<boolean> {
-    const start = new UTCDate(weekStart);
+    const start = parseISO(weekStart, { in: utc });
     const end = addWeeks(start, 1);
     const week = await weekClippings(userId, start, end);
     // Everything of the week was deleted since the user was picked.
@@ -206,10 +217,20 @@ export function createDigestService({
    * them. A user whose digest fails is logged and left for the next run; the others are not held
    * up by them. Users are picked in no particular order, so users that keep failing can't crowd
    * out the rest.
+   *
+   * The users are taken five at a time, and a batch starts only when at least 30 seconds are left
+   * before `deadline`, so a run ends inside the route's time; the users left over wait for the
+   * next run.
    */
-  async function generateWeeklyDigests({ limit }: { limit: number }): Promise<number> {
+  async function generateWeeklyDigests({
+    limit,
+    deadline,
+  }: {
+    limit: number;
+    deadline: Date;
+  }): Promise<number> {
     const weekStart = lastFinishedWeek(clock.now());
-    const start = new UTCDate(weekStart);
+    const start = parseISO(weekStart, { in: utc });
     const end = addWeeks(start, 1);
     const pending = await db
       .select({ userId: clippings.userId })
@@ -236,20 +257,24 @@ export function createDigestService({
       .orderBy(sql`random()`)
       .limit(limit);
 
-    const outcomes = await Promise.allSettled(
-      pending.map(({ userId }) => generateFor(userId, weekStart)),
-    );
     let written = 0;
-    outcomes.forEach((outcome, index) => {
-      if (outcome.status === "fulfilled") {
-        if (outcome.value) written += 1;
-      } else {
-        console.error(
-          `Couldn't write the digest of ${weekStart} for user ${pending[index]!.userId}`,
-          outcome.reason,
-        );
-      }
-    });
+    for (let from = 0; from < pending.length; from += CONCURRENCY) {
+      if (differenceInSeconds(deadline, clock.now()) < MIN_SECONDS_LEFT) break;
+      const batch = pending.slice(from, from + CONCURRENCY);
+      const outcomes = await Promise.allSettled(
+        batch.map(({ userId }) => generateFor(userId, weekStart)),
+      );
+      outcomes.forEach((outcome, index) => {
+        if (outcome.status === "fulfilled") {
+          if (outcome.value) written += 1;
+        } else {
+          console.error(
+            `Couldn't write the digest of ${weekStart} for user ${batch[index]!.userId}`,
+            outcome.reason,
+          );
+        }
+      });
+    }
     return written;
   }
 

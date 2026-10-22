@@ -75,6 +75,11 @@ for going offline; a second build gets a new build id, so it triggers the update
   loopback and private addresses on purpose: a link to `http://127.0.0.1:...` ends as failed, which
   is also the way to see the failed row and Retry.
 
+Call the crons by hand with the secret from `local.env`: `curl -H "Authorization: Bearer $CRON_SECRET"
+http://localhost:3100/api/cron/sweep`, and `/api/cron/digest` for the weekly digests. A digest is
+written for the last finished Monday to Sunday (UTC), so backdate a few clippings into it first
+(`update clippings set created_at = ...`); a second call the same week writes nothing.
+
 Read the fakes' output with `preview_logs`. Stop what you started when you are done:
 `preview_stop` for the servers, `agent-browser close` for the browser session, and
 `docker stop clippings-pg` for the container.

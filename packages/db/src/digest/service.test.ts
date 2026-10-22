@@ -1,9 +1,9 @@
-import { differenceInMilliseconds, parseISO } from "date-fns";
+import { addMinutes, addSeconds, differenceInMilliseconds, parseISO } from "date-fns";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { createServiceFixture, type ServiceFixture } from "../test/service-fixture.ts";
 import { TEST_DATABASE_URL } from "../test/temp-database.ts";
-import { lastFinishedWeek } from "./service.ts";
+import { createDigestService, lastFinishedWeek } from "./service.ts";
 
 describe("lastFinishedWeek", () => {
   it.each([
@@ -33,6 +33,13 @@ describe.skipIf(!TEST_DATABASE_URL)("the weekly digest", () => {
   // Monday 2026-09-21 to Sunday 2026-09-27.
   const WEEK = "2026-09-21";
   const IN_WEEK = "2026-09-23T10:00:00.000Z";
+
+  /** One run of the cron with ten minutes to spare. */
+  const generate = (limit = 10) =>
+    fixture.digests.generateWeeklyDigests({
+      limit,
+      deadline: addMinutes(fixture.clock.now(), 10),
+    });
 
   /** Saves and reads a page, then backdates the clipping to when it "was saved". */
   async function save(
@@ -77,7 +84,7 @@ describe.skipIf(!TEST_DATABASE_URL)("the weekly digest", () => {
     await save(ana, "before", "2026-09-20T23:59:59.000Z");
     await save(ana, "after", "2026-09-28T00:00:00.000Z");
 
-    expect(await fixture.digests.generateWeeklyDigests({ limit: 10 })).toBe(1);
+    expect(await generate()).toBe(1);
 
     expect(fixture.digested).toEqual([
       {
@@ -114,7 +121,7 @@ describe.skipIf(!TEST_DATABASE_URL)("the weekly digest", () => {
     const last = await save(ana, "sunday", "2026-09-27T23:59:59.999Z");
     await save(ana, "next-monday", "2026-09-28T00:00:00.000Z");
 
-    await fixture.digests.generateWeeklyDigests({ limit: 10 });
+    await generate();
 
     expect(fixture.digested[0]!.clippings.map(({ id }) => id)).toEqual([last, first]);
   });
@@ -123,7 +130,7 @@ describe.skipIf(!TEST_DATABASE_URL)("the weekly digest", () => {
     const ana = await fixture.createUser("ana");
     await save(ana, "this-week", "2026-09-29T10:00:00.000Z");
 
-    expect(await fixture.digests.generateWeeklyDigests({ limit: 10 })).toBe(0);
+    expect(await generate()).toBe(0);
 
     expect(fixture.digested).toEqual([]);
     expect(await fixture.digests.getDigest(ana)).toBeNull();
@@ -134,7 +141,7 @@ describe.skipIf(!TEST_DATABASE_URL)("the weekly digest", () => {
     await save(ana, "this-week", "2026-09-29T10:00:00.000Z");
     advanceTo("2026-10-05T00:00:00.000Z");
 
-    expect(await fixture.digests.generateWeeklyDigests({ limit: 10 })).toBe(1);
+    expect(await generate()).toBe(1);
 
     expect(fixture.digested[0]!.weekStart).toBe("2026-09-28");
     expect(await fixture.digests.listDigestWeeks(ana)).toEqual([
@@ -146,8 +153,8 @@ describe.skipIf(!TEST_DATABASE_URL)("the weekly digest", () => {
     const ana = await fixture.createUser("ana");
     await save(ana, "one", IN_WEEK);
 
-    expect(await fixture.digests.generateWeeklyDigests({ limit: 10 })).toBe(1);
-    expect(await fixture.digests.generateWeeklyDigests({ limit: 10 })).toBe(0);
+    expect(await generate()).toBe(1);
+    expect(await generate()).toBe(0);
 
     expect(fixture.digested).toHaveLength(1);
     const { rows } = await fixture.pool.query(`select 1 from weekly_digests`);
@@ -163,7 +170,7 @@ describe.skipIf(!TEST_DATABASE_URL)("the weekly digest", () => {
     await fixture.service.deleteClipping(bob, gone);
     const kept = await save(cy, "cy-kept", IN_WEEK);
 
-    expect(await fixture.digests.generateWeeklyDigests({ limit: 10 })).toBe(1);
+    expect(await generate()).toBe(1);
 
     expect(fixture.digested.map((call) => call.clippings.map(({ id }) => id))).toEqual([[kept]]);
     expect(await fixture.digests.getDigest(ana)).toBeNull();
@@ -176,7 +183,7 @@ describe.skipIf(!TEST_DATABASE_URL)("the weekly digest", () => {
     const gone = await save(ana, "gone", "2026-09-24T10:00:00.000Z");
     await fixture.service.deleteClipping(ana, gone);
 
-    await fixture.digests.generateWeeklyDigests({ limit: 10 });
+    await generate();
 
     expect(fixture.digested[0]!.clippings.map(({ id }) => id)).toEqual([kept]);
   });
@@ -187,7 +194,7 @@ describe.skipIf(!TEST_DATABASE_URL)("the weekly digest", () => {
     const anas = await save(ana, "anas", IN_WEEK, { tags: ["private"] });
     const bobs = await save(bob, "bobs", "2026-09-25T10:00:00.000Z");
 
-    expect(await fixture.digests.generateWeeklyDigests({ limit: 10 })).toBe(2);
+    expect(await generate()).toBe(2);
 
     const seen = fixture.digested.map((call) => call.clippings.map(({ id }) => id));
     expect(seen).toHaveLength(2);
@@ -216,9 +223,9 @@ describe.skipIf(!TEST_DATABASE_URL)("the weekly digest", () => {
       await save(await fixture.createUser(name), `page-${name}`, IN_WEEK);
     }
 
-    expect(await fixture.digests.generateWeeklyDigests({ limit: 2 })).toBe(2);
-    expect(await fixture.digests.generateWeeklyDigests({ limit: 2 })).toBe(1);
-    expect(await fixture.digests.generateWeeklyDigests({ limit: 2 })).toBe(0);
+    expect(await generate(2)).toBe(2);
+    expect(await generate(2)).toBe(1);
+    expect(await generate(2)).toBe(0);
 
     expect(fixture.digested).toHaveLength(3);
   });
@@ -230,14 +237,14 @@ describe.skipIf(!TEST_DATABASE_URL)("the weekly digest", () => {
     await save(bob, "bobs", IN_WEEK);
     fixture.failDigestsWith(broken);
 
-    expect(await fixture.digests.generateWeeklyDigests({ limit: 10 })).toBe(1);
+    expect(await generate()).toBe(1);
     expect(await fixture.digests.getDigest(ana)).toBeNull();
     expect(await fixture.digests.getDigest(bob)).not.toBeNull();
 
     // The model comes back: the next run writes the digest that is missing and no other.
     fixture.digested.length = 0;
     fixture.healDigester();
-    expect(await fixture.digests.generateWeeklyDigests({ limit: 10 })).toBe(1);
+    expect(await generate()).toBe(1);
     expect(fixture.digested.map((call) => call.clippings.map(({ id }) => id))).toEqual([[broken]]);
     expect(await fixture.digests.getDigest(ana)).not.toBeNull();
   });
@@ -255,7 +262,7 @@ describe.skipIf(!TEST_DATABASE_URL)("the weekly digest", () => {
     // Saved after the week: close in meaning, but not "from your archive".
     await save(ana, "newer-garden", "2026-09-29T10:00:00.000Z", { text: "garden" });
 
-    await fixture.digests.generateWeeklyDigests({ limit: 10 });
+    await generate();
 
     const input = fixture.digested[0]!;
     expect(input.clippings.map(({ id }) => id)).toEqual([second, first]);
@@ -276,7 +283,7 @@ describe.skipIf(!TEST_DATABASE_URL)("the weekly digest", () => {
     const ana = await fixture.createUser("ana");
     const renamed = await save(ana, "renamed", IN_WEEK);
     const deleted = await save(ana, "deleted", "2026-09-24T10:00:00.000Z");
-    await fixture.digests.generateWeeklyDigests({ limit: 10 });
+    await generate();
 
     await fixture.service.updateClipping(ana, renamed, { title: "My own title" });
     await fixture.service.deleteClipping(ana, deleted);
@@ -293,10 +300,10 @@ describe.skipIf(!TEST_DATABASE_URL)("the weekly digest", () => {
   it("reads the latest week by default, any of the user's weeks by date, and nothing for a bad date", async () => {
     const ana = await fixture.createUser("ana");
     await save(ana, "week-one", IN_WEEK);
-    await fixture.digests.generateWeeklyDigests({ limit: 10 });
+    await generate();
     await save(ana, "week-two", "2026-09-30T10:00:00.000Z");
     advanceTo("2026-10-05T00:00:00.000Z");
-    await fixture.digests.generateWeeklyDigests({ limit: 10 });
+    await generate();
 
     expect((await fixture.digests.listDigestWeeks(ana)).map((week) => week.weekStart)).toEqual([
       "2026-09-28",
@@ -309,10 +316,69 @@ describe.skipIf(!TEST_DATABASE_URL)("the weekly digest", () => {
     expect(await fixture.digests.getDigest(ana, "last week")).toBeNull();
   });
 
+  it.each([
+    ["0000-01-01", "year 0"],
+    ["1999-12-27", "a Monday before 2000"],
+    ["2026-09-22", "a Tuesday"],
+    ["2026-09-27", "a Sunday"],
+    ["2026-13-01", "no month"],
+  ])("finds no digest for ?week=%s (%s), and no database error", async (week) => {
+    const ana = await fixture.createUser("ana");
+
+    expect(await fixture.digests.getDigest(ana, week)).toBeNull();
+  });
+
+  it("starts no batch of users with under 30 seconds left, and leaves the rest for the next run", async () => {
+    for (const name of ["u1", "u2", "u3", "u4", "u5", "u6", "u7"]) {
+      await save(await fixture.createUser(name), `page-${name}`, IN_WEEK);
+    }
+    // Each digest takes ten seconds of the minute the run has, and five are written at once.
+    const slow = createDigestService({
+      pool: fixture.pool,
+      clock: fixture.clock,
+      clippings: fixture.service,
+      digester: {
+        digest: async (input) => {
+          fixture.advanceClock(10_000);
+          return {
+            groups: [
+              {
+                title: "Slow",
+                summary: "Slowly.",
+                clippingIds: input.clippings.map(({ id }) => id),
+              },
+            ],
+            resurfaced: [],
+          };
+        },
+      },
+    });
+
+    const first = await slow.generateWeeklyDigests({
+      limit: 20,
+      deadline: addSeconds(fixture.clock.now(), 60),
+    });
+    expect(first).toBe(5);
+
+    expect(await generate(20)).toBe(2);
+  });
+
+  it("starts nothing when the deadline is under 30 seconds away", async () => {
+    await save(await fixture.createUser("ana"), "one", IN_WEEK);
+
+    const written = await fixture.digests.generateWeeklyDigests({
+      limit: 10,
+      deadline: addSeconds(fixture.clock.now(), 29),
+    });
+
+    expect(written).toBe(0);
+    expect(fixture.digested).toEqual([]);
+  });
+
   it("goes away with the user", async () => {
     const ana = await fixture.createUser("ana");
     await save(ana, "one", IN_WEEK);
-    await fixture.digests.generateWeeklyDigests({ limit: 10 });
+    await generate();
 
     await fixture.deleteUser(ana);
 

@@ -3,5 +3,8 @@
   "git": {
     "deploymentEnabled": false
   },
-  "crons": [{ "path": "/api/cron/sweep", "schedule": "0 4 * * *" }]
+  "crons": [
+    { "path": "/api/cron/sweep", "schedule": "0 4 * * *" },
+    { "path": "/api/cron/digest", "schedule": "0 5 * * *" }
+  ]
 }

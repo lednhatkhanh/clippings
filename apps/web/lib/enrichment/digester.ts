@@ -113,6 +113,20 @@ export function parseDigest(
   return { groups, resurfaced };
 }
 
+/**
+ * The digest in the model's reply. Throws when the reply was cut off by `max_tokens`, whose tool
+ * call may look whole yet lack groups, or has no `save_digest` call, so the week is tried again.
+ */
+export function digestFromResponse(
+  response: Pick<Anthropic.Message, "content" | "stop_reason">,
+  input: Pick<DigesterInput, "clippings" | "related">,
+): WeeklyDigest {
+  if (response.stop_reason === "max_tokens") throw new Error("The model's digest was cut off");
+  const call = response.content.find((block) => block.type === "tool_use");
+  if (!call) throw new Error("The model didn't return a digest");
+  return parseDigest(call.input as Record<string, unknown>, input);
+}
+
 /** Escapes what would read as markup, so a page's words can't close the tag they sit in. */
 const escape = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;");
 
@@ -151,9 +165,7 @@ export function createDigester(): Digester {
         tool_choice: { type: "tool", name: DIGEST_TOOL.name },
         messages: [{ role: "user", content: userMessage(input) }],
       });
-      const call = response.content.find((block) => block.type === "tool_use");
-      if (!call) throw new Error("The model didn't return a digest");
-      return parseDigest(call.input as Record<string, unknown>, input);
+      return digestFromResponse(response, input);
     },
   };
 }

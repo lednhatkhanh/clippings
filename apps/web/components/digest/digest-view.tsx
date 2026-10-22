@@ -60,7 +60,7 @@ export function DigestView({
       ) : (
         digest.groups.map((group) => (
           <section
-            key={group.title}
+            key={group.clippings[0]!.id}
             aria-label={group.title}
             className="flex flex-col gap-3 rounded-xl paper p-5"
           >
