@@ -14,9 +14,10 @@ import { clippingLink } from "./search-results.ts";
 
 const ORIGIN = "https://clippings.example";
 
-function post(body: unknown): Request {
+function post(body: unknown, signal?: AbortSignal): Request {
   return new Request(`${ORIGIN}/api/ask`, {
     method: "POST",
+    signal,
     headers: { "content-type": "application/json" },
     body: typeof body === "string" ? body : JSON.stringify(body),
   });
@@ -191,6 +192,52 @@ describe.skipIf(!TEST_DATABASE_URL)("POST /api/ask, answering from the clippings
       { type: "done" },
     ]);
     expect(requests).toEqual([]);
+  });
+
+  it("never asks the model for a caller that already left", async () => {
+    const ana = await fixture.createUser("ana");
+    await save(ana, "Compost needs turning weekly");
+    const answer = vi.fn<Answerer>();
+
+    const response = await handleAsk(
+      post({ question: "compost" }, AbortSignal.abort()),
+      deps(ana, answer),
+    );
+
+    expect(response.body).toBeNull();
+    expect(answer).not.toHaveBeenCalled();
+  });
+
+  it("stops the model call when the caller cancels the stream", async () => {
+    const ana = await fixture.createUser("ana");
+    await save(ana, "Compost needs turning weekly");
+    let given: AbortSignal | undefined;
+    // A model that goes on until its call is aborted.
+    const slow: Answerer = async (_params, signal) => {
+      given = signal;
+      const aborted = new Promise((resolve) =>
+        signal.addEventListener("abort", resolve, { once: true }),
+      );
+      return {
+        [Symbol.asyncIterator]: () => ({
+          next: async () => {
+            await aborted;
+            return { done: true, value: undefined };
+          },
+        }),
+      };
+    };
+
+    const response = await handleAsk(post({ question: "compost" }), deps(ana, slow));
+    const reader = response.body!.getReader();
+    const reading = reader.read();
+    await vi.waitFor(() => expect(given).toBeDefined());
+    expect(given!.aborted).toBe(false);
+
+    await reader.cancel();
+    await reading;
+
+    expect(given!.aborted).toBe(true);
   });
 
   it("ends the stream with an error when the model call fails", async () => {

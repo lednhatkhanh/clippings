@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { AskEvent } from "@clippings/shared";
 
-import { answerEvents, ASK_UNANSWERED } from "./stream-events.ts";
+import { answerEvents, ASK_CUT_OFF, ASK_UNANSWERED } from "./stream-events.ts";
 
 type ModelEvent = Anthropic.RawMessageStreamEvent;
 
@@ -97,15 +97,25 @@ describe("answerEvents", () => {
   it("ignores events that carry no answer", async () => {
     const start: ModelEvent = { type: "content_block_stop", index: 0 };
 
-    expect(await events(start, text("Hi"), stop("max_tokens"))).toEqual([
+    expect(await events(start, text("Hi"), stop("end_turn"))).toEqual([
       { type: "text", text: "Hi" },
       { type: "done" },
+    ]);
+  });
+
+  it("keeps the answer and says it was cut off when the model hit its token limit", async () => {
+    expect(await events(text("Half of "), cite(LINK), text("an ans"), stop("max_tokens"))).toEqual([
+      { type: "text", text: "Half of " },
+      { type: "citation", clippingId: "c1", title: "First", citedText: "quoted" },
+      { type: "text", text: "an ans" },
+      { type: "error", message: ASK_CUT_OFF },
     ]);
   });
 
   it.each([
     ["the model declines", [stop("refusal")]],
     ["the model says nothing", [text(""), stop("end_turn")]],
+    ["the model hit its token limit before saying anything", [stop("max_tokens")]],
   ])("ends in an error when %s", async (_name, modelEvents) => {
     const result = await events(...modelEvents);
 

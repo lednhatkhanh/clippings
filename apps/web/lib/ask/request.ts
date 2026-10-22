@@ -25,13 +25,22 @@ export async function retrieveSources(
   clippings: AskClippings,
   userId: string,
   question: string,
+  signal?: AbortSignal,
 ): Promise<AskSource[]> {
-  const { items } = await clippings.searchClippings(userId, { q: question, limit: ASK_HIT_LIMIT });
+  // A question's filler words ("how do I") are in no clipping, so any one word may match.
+  const { items } = await clippings.searchClippings(userId, {
+    q: question,
+    limit: ASK_HIT_LIMIT,
+    words: "any",
+  });
+  // The embedder takes no signal, so the first check comes once the search is back.
+  signal?.throwIfAborted();
   return Promise.all(
-    items.map(async ({ clipping }) => ({
-      clipping,
-      pageText: (await clippings.getClippingText(userId, clipping.id))?.text ?? null,
-    })),
+    items.map(async ({ clipping }) => {
+      signal?.throwIfAborted();
+      const text = await clippings.getClippingText(userId, clipping.id);
+      return { clipping, pageText: text?.text ?? null };
+    }),
   );
 }
 
@@ -43,16 +52,18 @@ export interface PreparedAsk {
 
 /**
  * The model request for a question, built from the user's own clippings (every query is scoped by
- * `userId`), or null when none of them has anything to read about it.
+ * `userId`), or null when none of them has anything to read about it. Throws when `signal` aborts
+ * before they are read.
  */
 export async function prepareAsk(
   clippings: AskClippings,
   userId: string,
   question: string,
   origin: string,
+  signal?: AbortSignal,
 ): Promise<PreparedAsk | null> {
   const { blocks, clippingsByLink } = buildSearchResults(
-    await retrieveSources(clippings, userId, question),
+    await retrieveSources(clippings, userId, question, signal),
     origin,
   );
   if (blocks.length === 0) return null;

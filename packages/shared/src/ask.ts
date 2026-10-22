@@ -1,7 +1,12 @@
 import * as z from "zod";
 
-/** Longest question `POST /api/ask` takes, in characters. */
-export const MAX_QUESTION_LENGTH = 500;
+import { MAX_QUERY_LENGTH } from "./search.ts";
+
+/**
+ * Longest question `POST /api/ask` takes, in characters: as much as search reads of a query, so
+ * the search and the model see the same question.
+ */
+export const MAX_QUESTION_LENGTH = MAX_QUERY_LENGTH;
 
 /** `POST /api/ask`: a question to answer from the signed-in user's own clippings. */
 export const askRequestSchema = z.object({

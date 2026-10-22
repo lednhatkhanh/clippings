@@ -53,7 +53,7 @@ describe.skipIf(!TEST_DATABASE_URL)("preparing a question for the model", () => 
       note: "for the boat trip",
     });
 
-    const prepared = await prepare(ana, "tide");
+    const prepared = await prepare(ana, "when is high tide");
 
     expect(prepared?.params).toMatchObject({
       model: ASK_MODEL,
@@ -73,7 +73,7 @@ describe.skipIf(!TEST_DATABASE_URL)("preparing a question for the model", () => 
                 { type: "text", text: "Page text: High tide comes twice a day." },
               ],
             },
-            { type: "text", text: "tide" },
+            { type: "text", text: "when is high tide" },
           ],
         },
       ],

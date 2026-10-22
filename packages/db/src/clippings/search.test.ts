@@ -209,6 +209,34 @@ describe.skipIf(!TEST_DATABASE_URL)("searching clippings", () => {
     expect(unrelated.items).toEqual([]);
   });
 
+  it("with words: any, finds a clipping by one word of a question, ranking more words higher", async () => {
+    const ana = await fixture.createUser("ana");
+    await clip(ana, {
+      url: "https://example.com/a",
+      title: "Notes",
+      note: "turn the compost weekly",
+    });
+    await clip(ana, {
+      url: "https://example.com/b",
+      title: "Notes",
+      note: "compost bins, reviewed",
+    });
+    await clip(ana, { url: "https://example.com/c", title: "Bread baking" });
+    // The keyword half alone: the question can't be embedded.
+    fixture.setEmbedding("down");
+    const question = "how often do I turn the compost";
+
+    const all = await fixture.service.searchClippings(ana, { q: question });
+    const any = await fixture.service.searchClippings(ana, { q: question, words: "any" });
+
+    expect(all.items).toEqual([]);
+    // Both compost notes match; the one with more of the question's words comes first.
+    expect(any.items.map((hit) => hit.clipping.note)).toEqual([
+      "turn the compost weekly",
+      "compost bins, reviewed",
+    ]);
+  });
+
   it("finds nothing for a blank query, and takes web-search syntax", async () => {
     const ana = await fixture.createUser("ana");
     await clip(ana, { url: "https://example.com/a", title: "Cold brew coffee" });

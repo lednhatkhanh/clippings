@@ -20,6 +20,9 @@ export interface AskDeps {
 
 const encoder = new TextEncoder();
 
+/** The answer to a request whose caller already left (nginx's 499): nobody reads it. */
+const gone = () => new Response(null, { status: 499 });
+
 /** The events as a newline-delimited JSON response, ended early when the caller goes away. */
 function ndjson(events: AsyncGenerator<AskEvent>, abort: AbortController): Response {
   const body = new ReadableStream<Uint8Array>({
@@ -75,11 +78,20 @@ export async function handleAsk(request: Request, deps: AskDeps): Promise<Respon
 
   let prepared: Awaited<ReturnType<typeof prepareAsk>>;
   try {
-    prepared = await prepareAsk(deps.clippings, userId, body.data.question, deps.origin);
+    prepared = await prepareAsk(
+      deps.clippings,
+      userId,
+      body.data.question,
+      deps.origin,
+      request.signal,
+    );
   } catch (error) {
+    if (request.signal.aborted) return gone();
     console.error("Couldn't search the clippings for a question", error);
     return new Response("Couldn't search your clippings", { status: 500 });
   }
+  // The caller left while the clippings were read: nobody is waiting for an answer.
+  if (request.signal.aborted) return gone();
 
   const abort = new AbortController();
   request.signal.addEventListener("abort", () => abort.abort(), { once: true });
