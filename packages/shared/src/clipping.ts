@@ -43,6 +43,11 @@ export interface Clipping {
   /** Whether the user pinned it above the newest-first list. */
   pinned: boolean;
   /**
+   * ISO 8601: when the page was first found gone, after several weekly checks in a row. Null while
+   * the link answers or hasn't been found gone.
+   */
+  linkDeadSince: string | null;
+  /**
    * Tag names enrichment suggests and the user has neither added nor dismissed. Only the detail
    * read fills it, and only while the user has tag suggestions on; empty everywhere else.
    */

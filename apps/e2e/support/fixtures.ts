@@ -78,7 +78,10 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
           pool: database,
           jobs: { requestEnrichment: async () => {}, requestEnrichments: async () => {} },
           clock: systemClock,
-          fetcher: { fetchPage: unavailable("Fetching a page") },
+          fetcher: {
+            fetchPage: unavailable("Fetching a page"),
+            checkLink: unavailable("Checking a link"),
+          },
           summarizer: { summarize: unavailable("Summarizing") },
           embedder: { embed: unavailable("Embedding") },
         }),

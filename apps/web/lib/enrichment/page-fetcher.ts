@@ -14,6 +14,11 @@ const MAX_BYTES = 2_000_000;
 // function killed with the clipping still pending.
 const FETCH_BUDGET_MS = 20_000;
 const MAX_REDIRECTS = 5;
+// A link check only needs the status line, so it takes the first chunk of the body and hangs up.
+const CHECK_MAX_BYTES = 1_024;
+// A link that hasn't answered in this long counts as gone for the check; the run it belongs to
+// has a minute for many of them.
+const CHECK_BUDGET_MS = 10_000;
 
 export class PageFetchError extends Error {
   constructor(message: string) {
@@ -64,9 +69,11 @@ export interface PageFetcherOptions {
   maxBytes?: number;
   /** For the whole fetch, redirects included. */
   budgetMs?: number;
+  /** For the whole link check, redirects included. */
+  checkBudgetMs?: number;
 }
 
-type RequestOptions = Required<Omit<PageFetcherOptions, "agent" | "budgetMs">> &
+type RequestOptions = Required<Omit<PageFetcherOptions, "agent" | "budgetMs" | "checkBudgetMs">> &
   Pick<PageFetcherOptions, "agent">;
 
 interface RawResponse {
@@ -135,42 +142,66 @@ function decode(body: Buffer, contentType: string): string {
   }
 }
 
+/** Follows redirects itself so every hop is checked; the first answer that isn't one. */
+async function follow(
+  address: string,
+  signal: AbortSignal,
+  options: RequestOptions,
+): Promise<RawResponse> {
+  let url = new URL(address);
+  for (let hops = 0; hops <= MAX_REDIRECTS; hops++) {
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      throw new PageFetchError(`Not a web address: ${url.href}`);
+    }
+    const response = await requestOnce(url, signal, options);
+    const { status, headers } = response;
+    if (status >= 300 && status < 400 && headers.location) {
+      url = new URL(headers.location, url);
+      continue;
+    }
+    return response;
+  }
+  throw new PageFetchError("Too many redirects");
+}
+
 /** The real fetcher: follows redirects itself so every hop is checked, and never reaches an internal address. */
 export function createPageFetcher({
   lookup = dnsLookup as Lookup,
   agent,
   maxBytes = MAX_BYTES,
   budgetMs = FETCH_BUDGET_MS,
+  checkBudgetMs = CHECK_BUDGET_MS,
 }: PageFetcherOptions = {}): PageFetcher {
   return {
     async fetchPage(address) {
-      let url = new URL(address);
-      const signal = AbortSignal.timeout(budgetMs);
-      for (let hops = 0; hops <= MAX_REDIRECTS; hops++) {
-        if (url.protocol !== "http:" && url.protocol !== "https:") {
-          throw new PageFetchError(`Not a web address: ${url.href}`);
-        }
-        const { status, headers, body } = await requestOnce(url, signal, {
+      const { status, headers, body } = await follow(address, AbortSignal.timeout(budgetMs), {
+        lookup,
+        agent,
+        maxBytes,
+      });
+      if (status < 200 || status >= 300) throw new PageFetchError(`The site answered ${status}`);
+
+      const contentType = headers["content-type"] ?? "";
+      const text = decode(body, contentType);
+      if (/html/i.test(contentType) || (!contentType && /<html|<body/i.test(text))) {
+        return extractPage(text);
+      }
+      if (/^text\/plain/i.test(contentType)) return { title: null, text: text.slice(0, 20_000) };
+      throw new PageFetchError(`Can't read ${contentType || "this kind of file"}`);
+    },
+
+    async checkLink(address) {
+      // A GET, not a HEAD: plenty of live sites answer HEAD with 405 or 404.
+      try {
+        const { status } = await follow(address, AbortSignal.timeout(checkBudgetMs), {
           lookup,
           agent,
-          maxBytes,
+          maxBytes: CHECK_MAX_BYTES,
         });
-
-        if (status >= 300 && status < 400 && headers.location) {
-          url = new URL(headers.location, url);
-          continue;
-        }
-        if (status < 200 || status >= 300) throw new PageFetchError(`The site answered ${status}`);
-
-        const contentType = headers["content-type"] ?? "";
-        const text = decode(body, contentType);
-        if (/html/i.test(contentType) || (!contentType && /<html|<body/i.test(text))) {
-          return extractPage(text);
-        }
-        if (/^text\/plain/i.test(contentType)) return { title: null, text: text.slice(0, 20_000) };
-        throw new PageFetchError(`Can't read ${contentType || "this kind of file"}`);
+        return status >= 200 && status < 300 ? "alive" : "dead";
+      } catch {
+        return "dead";
       }
-      throw new PageFetchError("Too many redirects");
     },
   };
 }

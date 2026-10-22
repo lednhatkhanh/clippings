@@ -24,9 +24,16 @@ export interface FetchedPage {
   text: string;
 }
 
-/** Fetches a page over the network. Throws when the page can't be read. */
+/** Fetches a page over the network. */
 export interface PageFetcher {
+  /** Reads the page. Throws when it can't be read. */
   fetchPage: (url: string) => Promise<FetchedPage>;
+  /**
+   * Whether the page still answers: "alive" when it resolves to a 2xx, "dead" for anything else
+   * (an error status, no such host, a refused connection, a timeout, an address the fetcher won't
+   * reach). Never throws: one check says little, the service weighs several.
+   */
+  checkLink: (url: string) => Promise<"alive" | "dead">;
 }
 
 /** What the summarizer makes of a page. */

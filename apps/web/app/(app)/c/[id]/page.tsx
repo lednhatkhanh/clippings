@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound, redirect, unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 
+import { DeadLinkNotice } from "@/components/clippings/dead-link-notice.tsx";
 import { DeleteClippingButton } from "@/components/clippings/delete-clipping-button.tsx";
 import { DetailActions } from "@/components/clippings/detail-actions.tsx";
 import { DetailSheet, Sheet } from "@/components/clippings/detail-sheet.tsx";
@@ -63,12 +64,19 @@ function RawMetadata({ clipping }: { clipping: Clipping }) {
   );
 }
 
-/** One of the user's clippings with its save date worded as of now, or null if they have none. */
+/**
+ * One of the user's clippings with its save date worded as of now, or null if they have none.
+ * A clipping whose link seems dead also brings the page text it kept, for the notice to offer.
+ */
 async function loadClipping(userId: string, clippingId: string) {
-  const clipping = await getClippings().getClipping(userId, clippingId);
-  return clipping
-    ? { clipping, savedOn: formatAbsoluteDate(clipping.createdAt, constructNow(undefined)) }
+  const service = getClippings();
+  const clipping = await service.getClipping(userId, clippingId);
+  if (!clipping) return null;
+  const now = constructNow(undefined);
+  const savedText = clipping.linkDeadSince
+    ? await service.getClippingText(userId, clippingId)
     : null;
+  return { clipping, now, savedOn: formatAbsoluteDate(clipping.createdAt, now), savedText };
 }
 
 /** The clipping's text and actions, inside the sheet the page puts around it. */
@@ -85,7 +93,7 @@ async function ClippingDetail({ params }: Pick<PageProps<"/c/[id]">, "params">) 
     return <LoadError message="Couldn't load this clipping." />;
   }
   if (!loaded) notFound();
-  const { clipping, savedOn } = loaded;
+  const { clipping, now, savedOn, savedText } = loaded;
 
   return (
     <div className="flex flex-col gap-5">
@@ -111,6 +119,10 @@ async function ClippingDetail({ params }: Pick<PageProps<"/c/[id]">, "params">) 
           </span>
         </p>
       </header>
+
+      {clipping.linkDeadSince ? (
+        <DeadLinkNotice deadSince={clipping.linkDeadSince} savedText={savedText} now={now} />
+      ) : null}
 
       <div className="flex items-center gap-2 print:hidden">
         <LinkButton

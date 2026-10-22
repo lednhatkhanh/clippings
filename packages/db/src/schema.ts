@@ -371,6 +371,13 @@ export const clippings = pgTable(
     // When the user pinned it above the newest-first list; null when not pinned. Deleting and
     // undoing leave it alone.
     pinnedAt: timestamptz("pinned_at"),
+    // When the weekly link check last looked at the page; null before the first look.
+    linkCheckedAt: timestamptz("link_checked_at"),
+    // Checks in a row that found the page gone. Any live answer resets it to 0.
+    linkFailures: integer("link_failures").notNull().default(0),
+    // When the page was first found gone for `LINK_DEAD_AFTER_FAILURES` checks in a row; null
+    // while it answers. The first time stays through further failures.
+    linkDeadSince: timestamptz("link_dead_since"),
     // What keyword search matches, kept up to date by Postgres. `simple` doesn't stem, so words
     // in any language are matched as written. The weights rank both titles over note over excerpt.
     searchTsv: tsvector("search_tsv").generatedAlwaysAs(

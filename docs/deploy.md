@@ -111,7 +111,9 @@ defaults to `https://qstash.upstash.io`, so an account in another region must se
 console lists, or the token is rejected. A daily Vercel Cron (`vercel.json`, 04:00 UTC) calls
 `/api/cron/sweep` with `CRON_SECRET` as a bearer token, re-publishes clippings stuck in pending or
 failed for more than an hour, and embeds up to 50 ready clippings that have no embedding (saved
-before search by meaning, or while Voyage AI was down). Vercel only runs crons on the production
+before search by meaning, or while Voyage AI was down). It also checks up to 40 ready clippings
+whose link was last checked more than a week ago, and marks a link dead after three failed checks
+in a row. Vercel only runs crons on the production
 deployment. Add a payment method to the Voyage AI account even though usage stays inside the free
 tokens: its documented limits (2,000 requests a minute for `voyage-4`) start at Tier 1, which needs
 one ([rate limits](https://docs.voyageai.com/docs/rate-limits)), and every search makes a request.

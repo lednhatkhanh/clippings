@@ -1,4 +1,13 @@
-import { constructNow, isAfter, isBefore, isValid, parseISO, subHours, subSeconds } from "date-fns";
+import {
+  constructNow,
+  isAfter,
+  isBefore,
+  isValid,
+  parseISO,
+  subDays,
+  subHours,
+  subSeconds,
+} from "date-fns";
 import {
   and,
   asc,
@@ -220,6 +229,7 @@ const toClipping = (row: ClippingRow, tagList: Tag[] = []): Clipping => ({
   clientId: row.clientId,
   tags: tagList,
   pinned: row.pinnedAt !== null,
+  linkDeadSince: row.linkDeadSince ? formatIsoUtc(row.linkDeadSince) : null,
   suggestedTags: [],
   createdAt: formatIsoUtc(row.createdAt),
 });
@@ -360,6 +370,13 @@ const SWEEP_BATCH_SIZE = 100;
 const PURGE_AFTER_HOURS = 24;
 const PURGE_BATCH_SIZE = 1000;
 
+/** How long a clipping's link is left alone after a check. */
+const LINK_RECHECK_AFTER_DAYS = 7;
+/** Checks in a row that must find a page gone before it is marked dead: one bad day is not rot. */
+const LINK_DEAD_AFTER_FAILURES = 3;
+/** Links checked at once, so a run stays short without hammering one network path. */
+const LINK_CHECK_CONCURRENCY = 5;
+
 /**
  * Most imported clippings the daily drain requests. QStash's free tier allows 1,000 messages a
  * day, and every delivery counts, retries included (at most 4 per job, usually 1). 400 jobs cost
@@ -485,7 +502,7 @@ export class InvalidUrlError extends Error {
 /**
  * The rules about clippings. Every operation a user triggers takes the acting user and scopes its
  * queries by them, so no caller can reach another user's rows. `enrichClipping`, `sweepStuck`,
- * `embedMissing` and `purgeDeleted` are the exceptions: they are system jobs, reached only through the signed QStash
+ * `embedMissing`, `purgeDeleted` and `checkLinks` are the exceptions: they are system jobs, reached only through the signed QStash
  * handler and the cron secret, and they act across users.
  */
 export function createClippingsService({
@@ -1861,6 +1878,65 @@ export function createClippingsService({
     return purged.length;
   }
 
+  /**
+   * For the daily cron: checks up to `limit` ready clippings whose link was last checked more
+   * than a week ago or never, the longest-unchecked first, and returns how many it checked and
+   * how many of those answered dead this time. A live answer clears the failures; a dead one
+   * counts one, and the third in a row marks the clipping dead since that check (kept through
+   * further failures). Each result is written as it arrives, so a run cut short loses only the
+   * links still in flight.
+   */
+  async function checkLinks({
+    limit,
+  }: {
+    limit: number;
+  }): Promise<{ checked: number; dead: number }> {
+    const now = clock.now();
+    const due = await db
+      .select({ id: clippings.id, url: clippings.url })
+      .from(clippings)
+      .where(
+        and(
+          eq(clippings.status, "ready"),
+          live,
+          or(
+            isNull(clippings.linkCheckedAt),
+            lt(clippings.linkCheckedAt, subDays(now, LINK_RECHECK_AFTER_DAYS)),
+          ),
+        ),
+      )
+      .orderBy(sql`${clippings.linkCheckedAt} asc nulls first`, asc(clippings.id))
+      .limit(limit);
+
+    let next = 0;
+    let dead = 0;
+    async function worker() {
+      while (next < due.length) {
+        const { id, url } = due[next++]!;
+        const verdict = await fetcher.checkLink(url);
+        if (verdict === "alive") {
+          await db
+            .update(clippings)
+            .set({ linkCheckedAt: now, linkFailures: 0, linkDeadSince: null })
+            .where(eq(clippings.id, id));
+        } else {
+          dead += 1;
+          // `link_failures` and `link_dead_since` on the right are the values before this update.
+          await db
+            .update(clippings)
+            .set({
+              linkCheckedAt: now,
+              linkFailures: sql`${clippings.linkFailures} + 1`,
+              linkDeadSince: sql`case when ${clippings.linkFailures} + 1 >= ${LINK_DEAD_AFTER_FAILURES} then coalesce(${clippings.linkDeadSince}, ${now}) else ${clippings.linkDeadSince} end`,
+            })
+            .where(eq(clippings.id, id));
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: LINK_CHECK_CONCURRENCY }, worker));
+    return { checked: due.length, dead };
+  }
+
   return {
     saveClipping,
     listTags,
@@ -1891,6 +1967,7 @@ export function createClippingsService({
     sweepStuck,
     embedMissing,
     purgeDeleted,
+    checkLinks,
   };
 }
 

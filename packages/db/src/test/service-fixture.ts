@@ -51,12 +51,20 @@ export async function createServiceFixture() {
     string,
     { page: { title: string | null; text: string }; summary: PageSummary } | { error: Error }
   >();
+  /** What a link check finds at each URL: "alive" unless set to "dead". */
+  const links = new Map<string, "alive" | "dead">();
+  /** The URLs `checkLink` was asked about, in order. */
+  const checkedLinks: string[] = [];
   const fetcher: PageFetcher = {
     fetchPage: async (url) => {
       const entry = web.get(url);
       if (!entry) throw new Error(`Nothing at ${url}`);
       if ("error" in entry) throw entry.error;
       return entry.page;
+    },
+    checkLink: async (url) => {
+      checkedLinks.push(url);
+      return links.get(url) ?? "alive";
     },
   };
   /** The `userTags` each summarize call got, in order: undefined when suggestions were off. */
@@ -91,6 +99,10 @@ export async function createServiceFixture() {
     /** The fixture's pool, for tests that set up rows no service writes (Better Auth's). */
     pool,
     web,
+    /** What a link check finds at each URL; a URL not in it is alive. */
+    links,
+    /** Every URL a link check was run on, in order. */
+    checkedLinks,
     enrichmentRequests,
     /** Every `requestEnrichments` call: the ids in order and the window they were spread over. */
     batchedEnrichmentRequests,
