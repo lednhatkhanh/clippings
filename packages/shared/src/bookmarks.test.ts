@@ -429,28 +429,30 @@ describe("parseBookmarksHtml", () => {
       );
 
     it("reads a run of lists then folders in linear time", () => {
+      // Every list left open, then every folder: as deep as a file of this size can nest.
       const listsThenFolders = (count: number) =>
         `<!DOCTYPE NETSCAPE-Bookmark-file-1>${"<DL>".repeat(count)}${"<H3>".repeat(count)}`;
-      // Best of five after a warm-up, so one slow run on a busy machine (a GC pause, a noisy
-      // neighbour) doesn't decide it.
+      // As many tags, each list closed at once, so it never nests.
+      const shallowLists = (count: number) =>
+        `<!DOCTYPE NETSCAPE-Bookmark-file-1>${"<DL></DL>".repeat(count)}`;
+      // Best of five after a warm-up, so one slow run on a busy machine doesn't decide it.
       const fastest = (html: string) => {
         parseBookmarksHtml(html);
         return Math.min(...[1, 2, 3, 4, 5].map(() => timed(() => parseBookmarksHtml(html)).ms));
       };
-      // Half the largest file: quadratic already shows at this size, and CI runners are many
-      // times slower than a laptop.
+      // Half the largest file: quadratic already shows at this size.
       const count = Math.floor(MAX_BOOKMARKS_FILE_BYTES / 16);
-      const full = listsThenFolders(count);
-      expect(timed(() => parseBookmarksHtml(full)).result).toEqual({
+      const deep = listsThenFolders(count);
+      expect(timed(() => parseBookmarksHtml(deep)).result).toEqual({
         ok: true,
         bookmarks: [],
         skipped: [],
       });
-      // Four times the input takes about four times as long when linear and sixteen when
-      // quadratic. A ratio, not a time limit, so a slow CI machine doesn't fail it. The smaller
-      // input is a quarter, not an eighth: at an eighth it parses in a few milliseconds, where
-      // one hiccup doubles its time and the ratio with it.
-      const ratio = fastest(full) / Math.max(fastest(listsThenFolders(count / 4)), 1);
+      // The deepest file against a flat one of the same size, not against a smaller deep one:
+      // both pay the same allocation and GC, which on a CI runner grows faster than the input
+      // and made a ratio between sizes flaky. Linear work makes them about equal (under 2 on a
+      // laptop); work that grows with the depth makes the deep one hundreds of times slower.
+      const ratio = fastest(deep) / Math.max(fastest(shallowLists(count)), 1);
       expect(ratio).toBeLessThan(10);
     }, 30_000);
 
