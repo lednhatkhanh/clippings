@@ -1,0 +1,60 @@
+name: claude-review
+
+# Claude reviews every ready pull request into `main` with the repo's `code-review` skill
+# (.claude/skills/code-review) and posts the result as a comment. It reads the code and comments;
+# it never pushes, and like `claude.yml` it holds no deploy or database secret.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    # Drafts wait for `ready_for_review`. A fork's pull request gets no secrets, so it can't run.
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # A new push replaces the review of the old one.
+    concurrency:
+      group: claude-review-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      # The action trades the OIDC token for a Claude GitHub App token (the default auth).
+      id-token: write
+      actions: read
+    steps:
+      # Full history: the skill diffs `<base sha>...HEAD`, which needs the merge base.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      # The skill passes its fixed point as the argument. It runs unattended, so the prompt says
+      # what to do where the skill would ask, and where to put the report. The settings in
+      # .claude/settings.json already allow the read-only git and gh commands; the tools named
+      # here are the ones they don't cover.
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            /code-review ${{ github.event.pull_request.base.sha }}
+
+            This run is unattended: nobody can answer a question. The fixed point above is the
+            pull request's base commit. If the skill would ask where the spec is, take the issues
+            the commit messages and the pull request body reference (`gh issue view`); if there
+            are none, skip the Spec axis and say "no spec available". When the review is done,
+            post the aggregated report once as a comment on pull request
+            ${{ github.repository }}#${{ github.event.pull_request.number }} with `gh pr comment`.
+            Do not edit files, commit or push.
+          claude_args: |
+            --model claude-opus-5-5
+            --max-turns 30
+            --allowedTools "Skill,Agent,Read,Grep,Glob,Bash(git rev-parse:*),Bash(gh pr comment:*)"
