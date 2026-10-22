@@ -1,6 +1,14 @@
 "use client";
 
-import { Bookmark, CalendarDays, MessageCircleQuestion, Plus, Search, Settings2, Tag } from "lucide-react";
+import {
+  Bookmark,
+  CalendarDays,
+  MessageCircleQuestion,
+  Plus,
+  Search,
+  Settings2,
+  Tag,
+} from "lucide-react";
 import { Button } from "react-aria-components";
 
 import { cn } from "@clippings/ui";
