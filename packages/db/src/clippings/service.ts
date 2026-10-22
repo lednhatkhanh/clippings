@@ -11,6 +11,7 @@ import {
   isNotNull,
   isNull,
   lt,
+  lte,
   ne,
   or,
   sql,
@@ -92,6 +93,42 @@ export interface ListClippingsInput {
   tags?: readonly string[];
   /** Only clippings saved from these; all of them when empty or left out. */
   sources?: readonly ClippingSource[];
+}
+
+/** A filtered list of the user's clippings, newest saved first, pinned or not. */
+export interface ListSavedClippingsInput {
+  cursor?: string;
+  limit?: number;
+  /** Only clippings with every one of these tags, by name, ignoring case. */
+  tags?: readonly string[];
+  /** Only clippings saved at or after this time. */
+  savedSince?: Date;
+  /** Only clippings saved at or before this time. */
+  savedUntil?: Date;
+  /** True: only pinned clippings. False: only unpinned ones. Left out: both. */
+  pinned?: boolean;
+}
+
+export interface SavedClippingsPage {
+  items: Clipping[];
+  /** Pass back as `cursor` for the next page; null on the last page. */
+  nextCursor: string | null;
+}
+
+/** The most clippings `tagClippings` changes in one call. */
+export const MAX_BULK_CLIPPINGS = 100;
+
+/** Tags to put on and take off a set of clippings; each keeps its other tags. */
+export interface TagClippingsInput {
+  add?: readonly string[];
+  remove?: readonly string[];
+}
+
+export interface TagClippingsResult {
+  /** How many clippings now carry a different set of tags. */
+  changed: number;
+  /** The ids that aren't one of the user's clippings, in the order given. */
+  notFound: string[];
 }
 
 export interface SearchClippingsInput {
@@ -404,6 +441,15 @@ function decodeCursor(cursor: string): { at: Date; id: string } {
   throw new InvalidCursorError();
 }
 
+/** Rows saved after the page boundary the cursor names, in newest-first order. */
+const afterCursor = (after: { at: Date; id: string } | null) =>
+  after
+    ? or(
+        lt(clippings.createdAt, after.at),
+        and(eq(clippings.createdAt, after.at), lt(clippings.id, after.id)),
+      )
+    : undefined;
+
 export class InvalidCursorError extends Error {
   constructor() {
     super("Not a page cursor");
@@ -442,6 +488,13 @@ function checkedTagNames(names: readonly string[]): string[] {
     throw new InvalidTagsError(`A clipping can have at most ${MAX_TAGS_PER_CLIPPING} tags`);
   }
   return kept;
+}
+
+export class TooManyClippingsError extends Error {
+  constructor() {
+    super(`At most ${MAX_BULK_CLIPPINGS} clippings can be changed at once`);
+    this.name = "TooManyClippingsError";
+  }
 }
 
 export class InvalidTagColorError extends Error {
@@ -585,6 +638,17 @@ export function createClippingsService({
       .from(tags)
       .where(eq(tags.userId, userId))
       .orderBy(tagKey(tags.name), tags.name);
+  }
+
+  /** The user's tag with this name, ignoring case; null when they have none. */
+  async function findTagByName(userId: string, name: string): Promise<Tag | null> {
+    const [wanted] = normalizeTagNames([name]);
+    if (!wanted) return null;
+    const [found] = await db
+      .select(tagColumns)
+      .from(tags)
+      .where(and(eq(tags.userId, userId), sql`${tagKey(tags.name)} in ${keysOf([wanted])}`));
+    return found ?? null;
   }
 
   /** The user's tags, by name, each with how many of their clippings carry it. */
@@ -780,18 +844,7 @@ export function createClippingsService({
     const rows = await db
       .select(clippingColumns)
       .from(clippings)
-      .where(
-        and(
-          matching,
-          isNull(clippings.pinnedAt),
-          after
-            ? or(
-                lt(clippings.createdAt, after.at),
-                and(eq(clippings.createdAt, after.at), lt(clippings.id, after.id)),
-              )
-            : undefined,
-        ),
-      )
+      .where(and(matching, isNull(clippings.pinnedAt), afterCursor(after)))
       .orderBy(desc(clippings.createdAt), desc(clippings.id))
       .limit(limit + 1);
 
@@ -804,6 +857,45 @@ export function createClippingsService({
     return {
       pinned,
       items,
+      nextCursor: rows.length > limit && last ? encodeCursor(last) : null,
+    };
+  }
+
+  /**
+   * One newest-saved-first list of the user's clippings that pages without gaps, pinned ones
+   * among the rest by when they were saved. Unlike `listClippings` it sets no pinned group apart,
+   * so a filter on `pinned` and on the save time is a plain filter.
+   */
+  async function listSavedClippings(
+    userId: string,
+    { cursor, limit = 20, tags: tagNames, savedSince, savedUntil, pinned }: ListSavedClippingsInput,
+  ): Promise<SavedClippingsPage> {
+    const after = cursor ? decodeCursor(cursor) : null;
+    // One extra row says whether another page follows without a second query.
+    const rows = await db
+      .select(clippingColumns)
+      .from(clippings)
+      .where(
+        and(
+          eq(clippings.userId, userId),
+          live,
+          taggedWithAll(db, userId, tagNames),
+          savedSince ? gte(clippings.createdAt, savedSince) : undefined,
+          savedUntil ? lte(clippings.createdAt, savedUntil) : undefined,
+          pinned === undefined
+            ? undefined
+            : pinned
+              ? isNotNull(clippings.pinnedAt)
+              : isNull(clippings.pinnedAt),
+          afterCursor(after),
+        ),
+      )
+      .orderBy(desc(clippings.createdAt), desc(clippings.id))
+      .limit(limit + 1);
+    const pageRows = rows.slice(0, limit);
+    const last = pageRows.at(-1);
+    return {
+      items: await withTags(userId, pageRows),
       nextCursor: rows.length > limit && last ? encodeCursor(last) : null,
     };
   }
@@ -916,9 +1008,13 @@ export function createClippingsService({
   /**
    * The user's other clippings nearest in meaning to this one, nearest first, by exact cosine
    * distance (no ANN index, ADR 0001). Empty when the user has no such clipping or it has no
-   * embedding yet.
+   * embedding yet. At most `limit` of them, five by default.
    */
-  async function relatedClippings(userId: string, clippingId: string): Promise<Clipping[]> {
+  async function relatedClippings(
+    userId: string,
+    clippingId: string,
+    limit: number = RELATED_LIMIT,
+  ): Promise<Clipping[]> {
     if (!UUID.test(clippingId)) return [];
     const target = db
       .select({ embedding })
@@ -937,7 +1033,7 @@ export function createClippingsService({
         ),
       )
       .orderBy(asc(distance), desc(clippings.createdAt), desc(clippings.id))
-      .limit(RELATED_LIMIT);
+      .limit(limit);
     return withTags(userId, rows);
   }
 
@@ -989,6 +1085,113 @@ export function createClippingsService({
       return row;
     });
     return updated ? oneWithTags(userId, updated) : null;
+  }
+
+  /**
+   * Puts the `add` tags on each of the user's clippings and takes the `remove` tags off, in one
+   * transaction: each clipping keeps its other tags, and a tag the user doesn't have yet is
+   * created. Names match ignoring case. Ids that aren't the user's live clippings are not touched
+   * and come back in `notFound`. Throws, changing nothing, when a name is too long, a clipping
+   * would end up with too many tags, or a name is both added and removed.
+   */
+  async function tagClippings(
+    userId: string,
+    clippingIds: readonly string[],
+    { add = [], remove = [] }: TagClippingsInput,
+  ): Promise<TagClippingsResult> {
+    const ids = [...new Set(clippingIds)];
+    if (ids.length > MAX_BULK_CLIPPINGS) throw new TooManyClippingsError();
+    const addNames = checkedTagNames(add);
+    const removeNames = normalizeTagNames(remove);
+    const removing = new Set(removeNames.map(tagNameKey));
+    if (addNames.some((name) => removing.has(tagNameKey(name)))) {
+      throw new InvalidTagsError("A tag can't be added and removed in the same call");
+    }
+    const valid = ids.filter((id) => UUID.test(id));
+    return db.transaction(async (tx) => {
+      const owned = new Set(
+        valid.length === 0
+          ? []
+          : (
+              await tx
+                .select({ id: clippings.id })
+                .from(clippings)
+                .where(and(eq(clippings.userId, userId), live, inArray(clippings.id, valid)))
+                // Locked, so a delete or another tagging of them waits. In id order, so two calls
+                // over the same clippings can't deadlock.
+                .orderBy(clippings.id)
+                .for("update")
+            ).map((row) => row.id),
+      );
+      const notFound = ids.filter((id) => !owned.has(id));
+      if (owned.size === 0) return { changed: 0, notFound };
+
+      if (addNames.length > 0) {
+        await tx
+          .insert(tags)
+          // Sorted, as in `setTags`, so two calls creating the same tags can't deadlock.
+          .values(addNames.toSorted().map((name) => ({ userId, name, createdAt: clock.now() })))
+          .onConflictDoNothing();
+      }
+      const tagIdsNamed = async (names: string[]) =>
+        names.length === 0
+          ? new Set<string>()
+          : new Set(
+              (
+                await tx
+                  .select({ id: tags.id })
+                  .from(tags)
+                  .where(
+                    and(eq(tags.userId, userId), sql`${tagKey(tags.name)} in ${keysOf(names)}`),
+                  )
+              ).map((tag) => tag.id),
+            );
+      const addIds = await tagIdsNamed(addNames);
+      const removeIds = await tagIdsNamed(removeNames);
+
+      const links = await tx
+        .select({ clippingId: clippingTags.clippingId, tagId: clippingTags.tagId })
+        .from(clippingTags)
+        .where(and(eq(clippingTags.userId, userId), inArray(clippingTags.clippingId, [...owned])));
+      const current = new Map<string, Set<string>>([...owned].map((id) => [id, new Set()]));
+      for (const { clippingId, tagId } of links) current.get(clippingId)!.add(tagId);
+
+      const toLink: { clippingId: string; tagId: string; userId: string }[] = [];
+      const toUnlink: { clippingId: string; tagId: string }[] = [];
+      const changedIds: string[] = [];
+      for (const [clippingId, have] of current) {
+        const gained = [...addIds].filter((tagId) => !have.has(tagId));
+        const lost = [...removeIds].filter((tagId) => have.has(tagId));
+        if (gained.length === 0 && lost.length === 0) continue;
+        if (have.size + gained.length - lost.length > MAX_TAGS_PER_CLIPPING) {
+          throw new InvalidTagsError(`A clipping can have at most ${MAX_TAGS_PER_CLIPPING} tags`);
+        }
+        changedIds.push(clippingId);
+        toLink.push(...gained.map((tagId) => ({ clippingId, tagId, userId })));
+        toUnlink.push(...lost.map((tagId) => ({ clippingId, tagId })));
+      }
+      if (toLink.length > 0) await tx.insert(clippingTags).values(toLink).onConflictDoNothing();
+      if (toUnlink.length > 0) {
+        await tx
+          .delete(clippingTags)
+          .where(
+            and(
+              eq(clippingTags.userId, userId),
+              inArray(clippingTags.clippingId, [
+                ...new Set(toUnlink.map((link) => link.clippingId)),
+              ]),
+              inArray(clippingTags.tagId, [...removeIds]),
+            ),
+          );
+      }
+      if (changedIds.length > 0) {
+        await tx
+          .update(clippings)
+          .set({ updatedAt: clock.now() })
+          .where(and(eq(clippings.userId, userId), inArray(clippings.id, changedIds)));
+      }
+      return { changed: changedIds.length, notFound };
+    });
   }
 
   /**
@@ -1792,15 +1995,18 @@ export function createClippingsService({
     saveClipping,
     listTags,
     listTagSummaries,
+    findTagByName,
     renameTag,
     mergeTag,
     deleteTag,
     setTagColor,
     listClippings,
+    listSavedClippings,
     searchClippings,
     relatedClippings,
     exportClippings,
     updateClipping,
+    tagClippings,
     getClipping,
     hasClippingOfUrl,
     deleteClipping,
