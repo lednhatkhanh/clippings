@@ -113,6 +113,13 @@ export interface SearchClippingsInput {
   sources?: readonly ClippingSource[];
   sort?: SearchSort;
   limit?: number;
+  /**
+   * How the keyword half treats the query's words: `"all"` (the default) needs every one, with the
+   * last also matching as a prefix, in web-search syntax; `"any"` needs one, so a question's filler
+   * words don't rule a clipping out, and a clipping with more of the words ranks higher. `"any"`
+   * reads the query as plain words.
+   */
+  words?: "all" | "any";
 }
 
 export interface SearchResults {
@@ -283,7 +290,11 @@ function taggedWithAll(db: Database, userId: string, names: readonly string[] = 
  * prefix, so results appear while it is still being typed. A last word that is an operator, a
  * negation or inside an open quote is left to web-search syntax.
  */
-function keywordQuery(text: string): SQL {
+function keywordQuery(text: string, match: "all" | "any"): SQL {
+  if (match === "any") {
+    const unique = new Set(text.toLowerCase().match(/[\p{L}\p{N}]+/gu));
+    if (unique.size > 0) return sql`to_tsquery('simple', ${[...unique].join(" | ")})`;
+  }
   const words = text.split(/\s+/);
   const last = words.at(-1) ?? "";
   const inOpenQuote = (text.split('"').length - 1) % 2 === 1;
@@ -858,6 +869,7 @@ export function createClippingsService({
       sources,
       sort = "relevance",
       limit = SEARCH_RESULT_LIMIT,
+      words = "all",
     }: SearchClippingsInput,
   ): Promise<SearchResults> {
     const text = q.trim().slice(0, MAX_QUERY_LENGTH).trim();
@@ -868,7 +880,7 @@ export function createClippingsService({
       return null;
     });
 
-    const query = keywordQuery(text);
+    const query = keywordQuery(text, words);
     const scope = and(
       eq(clippings.userId, userId),
       live,

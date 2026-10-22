@@ -1,6 +1,6 @@
 "use client";
 
-import { Bookmark, CalendarDays, Plus, Search, Settings2, Tag } from "lucide-react";
+import { Bookmark, CalendarDays, MessageCircleQuestion, Plus, Search, Settings2, Tag } from "lucide-react";
 import { Button } from "react-aria-components";
 
 import { cn } from "@clippings/ui";
@@ -56,6 +56,9 @@ export function AppNav() {
         <ul className="flex flex-1 medium:flex-none medium:flex-col medium:gap-1 large:w-full">
           <li className="flex flex-1 medium:flex-none large:w-full">
             <NavLink href="/" icon={Bookmark} label="Clippings" />
+          </li>
+          <li className="flex flex-1 medium:flex-none large:w-full">
+            <NavLink href="/ask" icon={MessageCircleQuestion} label="Ask" />
           </li>
           <li className="flex flex-1 medium:flex-none large:w-full">
             <NavLink href="/tags" icon={Tag} label="Tags" />

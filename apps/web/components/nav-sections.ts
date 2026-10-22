@@ -3,6 +3,7 @@ import type { Route } from "next";
 /** The navigation's sections, in the order the rail lists them. */
 export const SECTION_HREFS = [
   "/",
+  "/ask",
   "/tags",
   "/digest",
   "/settings",
