@@ -74,7 +74,7 @@ describe("handleSweepRequest", () => {
     expect(embeds()).toBe(1);
     expect(drains()).toBe(1);
     expect(purges()).toBe(1);
-    expect(linkLimits()).toEqual([40]);
+    expect(linkLimits()).toEqual([20]);
   });
 
   it("still purges when the import drain fails, and says so", async () => {
