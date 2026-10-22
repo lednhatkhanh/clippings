@@ -66,7 +66,8 @@ for going offline; a second build gets a new build id, so it triggers the update
 - **Anthropic** answers the page-reading tool call after four seconds, so the pending state is
   visible. Its title is the page's own, prefixed with `Read:`. When the request asks for tag
   suggestions, it suggests the user's first two tags and one new tag, the first long word of the
-  page title.
+  page title. A `save_digest` request (the weekly digest) gets one group of all the week's
+  clippings and the first archive clipping brought back.
 - **Voyage AI** embeds a text as its words (one hashed axis per word), so search by meaning finds
   texts that share a word even where keyword search wouldn't, such as a word in the summary.
   Real semantic quality stays with the user.

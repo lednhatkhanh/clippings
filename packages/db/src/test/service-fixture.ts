@@ -3,15 +3,19 @@ import pg from "pg";
 
 import type {
   Clock,
+  Digester,
+  DigesterInput,
   Embedder,
   EmbeddingPurpose,
   JobPublisher,
   PageFetcher,
   PageSummary,
   Summarizer,
+  WeeklyDigest,
 } from "../clippings/ports.ts";
 import { createClippingsService } from "../clippings/service.ts";
 import { createConnectionsService } from "../connections/service.ts";
+import { createDigestService } from "../digest/service.ts";
 import { migrate } from "../migrate.ts";
 import { createPool } from "../pool.ts";
 import { EMBEDDING_DIMENSIONS } from "../schema.ts";
@@ -82,10 +86,46 @@ export async function createServiceFixture() {
     },
   };
 
+  /** What the digester was asked, in order. */
+  const digested: DigesterInput[] = [];
+  /** Clippings that make the digester fail when they are in the week it reads. */
+  const digesterFailures = new Set<string>();
+  const digester: Digester = {
+    digest: async (input) => {
+      digested.push(input);
+      if (input.clippings.some(({ id }) => digesterFailures.has(id))) {
+        throw new Error("the digester is down");
+      }
+      const result: WeeklyDigest = {
+        groups: [
+          {
+            title: "The week",
+            summary: `${input.clippings.length} clippings.`,
+            clippingIds: input.clippings.map(({ id }) => id),
+          },
+        ],
+        resurfaced: input.related[0]
+          ? [{ clippingId: input.related[0].id, why: "It fits this week." }]
+          : [],
+      };
+      return result;
+    },
+  };
+  const service = createClippingsService({ pool, jobs, clock, fetcher, summarizer, embedder });
+
   return {
     /** The throwaway database's URL, for code that opens its own pool (Better Auth in web tests). */
     databaseUrl: database.url,
-    service: createClippingsService({ pool, jobs, clock, fetcher, summarizer, embedder }),
+    service,
+    digests: createDigestService({ pool, clock, digester, clippings: service }),
+    /** Every `digest` call the fake digester got, in order. */
+    digested,
+    /** Makes the digester fail for the user who has this clipping in the week. */
+    failDigestsWith: (clippingId: string) => {
+      digesterFailures.add(clippingId);
+    },
+    /** Makes the digester work again for every user. */
+    healDigester: () => digesterFailures.clear(),
     settings: createSettingsService({ pool, clock }),
     connections: createConnectionsService({ pool, clock }),
     /** The fixture's pool, for tests that set up rows no service writes (Better Auth's). */

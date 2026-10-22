@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   customType,
+  date,
   foreignKey,
   index,
   integer,
@@ -557,5 +558,27 @@ export const userSettings = pgTable(
       "user_settings_density_check",
       sql`${table.density} in (${inList(APPEARANCE_VALUES.density)})`,
     ),
+  ],
+);
+
+/**
+ * A user's digest of one finished week (Monday to Sunday, UTC), written once by the daily cron.
+ * `week_start` is that Monday. `digest` is the model's grouping of the week's clippings and the
+ * older ones it brought back, as clipping ids with the model's words; titles are read from the
+ * clippings when the page is shown, so a rename or a delete shows through.
+ */
+export const weeklyDigests = pgTable(
+  "weekly_digests",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    weekStart: date("week_start", { mode: "string" }).notNull(),
+    digest: jsonb("digest").notNull(),
+    // No default: the service stamps it from its clock.
+    createdAt: timestamptz("created_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ name: "weekly_digests_pkey", columns: [table.userId, table.weekStart] }),
   ],
 );
