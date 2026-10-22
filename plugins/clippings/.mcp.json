@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "clippings": {
+      "type": "http",
+      "url": "https://clippings-space.vercel.app/mcp"
+    }
+  }
+}

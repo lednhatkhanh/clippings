@@ -1,0 +1,8 @@
+{
+  "name": "clippings",
+  "description": "Save, find, review and tidy your Clippings library from Claude: the Clippings connector plus a skill that teaches Claude to use it well.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Khanh Le"
+  }
+}
