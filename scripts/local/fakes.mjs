@@ -139,7 +139,14 @@ function suggestTags(message, title) {
 
 listen(8081, "fake anthropic", (request, response, body) => {
   const payload = JSON.parse(body || "{}");
-  const message = String(payload.messages?.[0]?.content ?? "");
+  // The content is a string or a list of blocks (a PDF comes as a document block before the text).
+  const content = payload.messages?.[0]?.content ?? "";
+  const message = Array.isArray(content)
+    ? content
+        .filter((block) => block.type === "text")
+        .map((block) => block.text)
+        .join("\n")
+    : String(content);
   const title = /^Page title: (.*)$/m.exec(message)?.[1];
   // Present when the tool asks for suggestions (tag suggestions are on for the user).
   const suggests = Boolean(payload.tools?.[0]?.input_schema?.properties?.existing_tags);

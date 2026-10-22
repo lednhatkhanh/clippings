@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseReading } from "./summarizer.ts";
+import { parseReading, summaryRequest } from "./summarizer.ts";
 
 const reading = { title: "A title", summary: "A summary.", excerpt: "An excerpt." };
 
@@ -137,5 +137,42 @@ describe("parseReading suggestions", () => {
     expect(() => parseReading({ ...rest, existing_tags: [], new_tags: [] }, mine)).toThrow(
       /no summary/,
     );
+  });
+});
+
+describe("summaryRequest", () => {
+  const html = { url: "https://example.com/a", title: "A page", text: "Some words." };
+  const pdf = {
+    url: "https://example.com/paper.pdf",
+    title: "paper",
+    text: "",
+    document: { mediaType: "application/pdf" as const, data: "JVBERi0xLjc=" },
+  };
+  const blocks = (request: ReturnType<typeof summaryRequest>) => {
+    const { content } = request.messages[0]!;
+    return typeof content === "string" ? [] : content;
+  };
+
+  it("sends a PDF as a base64 document block ahead of the text", () => {
+    const [first, second, ...rest] = blocks(summaryRequest(pdf));
+    expect(first).toEqual({
+      type: "document",
+      source: { type: "base64", media_type: "application/pdf", data: "JVBERi0xLjc=" },
+    });
+    expect(second).toMatchObject({ type: "text", text: expect.stringContaining("PDF") });
+    expect(rest).toEqual([]);
+  });
+
+  it("sends a page as text alone, with no document block", () => {
+    const content = blocks(summaryRequest(html));
+    expect(content.map((block) => block.type)).toEqual(["text"]);
+    expect(content[0]).toMatchObject({ text: expect.stringContaining("Some words.") });
+  });
+
+  it("asks for the reading the same way for a PDF as for a page, tags included", () => {
+    const request = summaryRequest({ ...pdf, userTags: ["papers"] });
+    expect(request.tool_choice).toEqual({ type: "tool", name: "save_reading" });
+    expect(request.tools?.[0]).toMatchObject({ name: "save_reading", strict: true });
+    expect(JSON.stringify(blocks(request))).toContain("<your_tags>\\npapers\\n</your_tags>");
   });
 });

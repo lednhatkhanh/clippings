@@ -125,6 +125,35 @@ function userMessage(
   return `URL: ${url}\nPage title: ${title ?? "(none)"}\n\n${tags}<page>\n${text}\n</page>`;
 }
 
+/**
+ * The model request for a page. A PDF goes in as a `document` block ahead of the text, and the
+ * message says so, since its `<page>` has no text of its own.
+ */
+export function summaryRequest(page: SummarizerInput): Anthropic.MessageCreateParamsNonStreaming {
+  const { userTags, document } = page;
+  const text = userMessage(page, userTags);
+  const content: Anthropic.ContentBlockParam[] = document
+    ? [
+        {
+          type: "document",
+          source: { type: "base64", media_type: document.mediaType, data: document.data },
+        },
+        {
+          type: "text",
+          text: `The page is the attached PDF, not HTML.\n\n${text}`,
+        },
+      ]
+    : [{ type: "text", text }];
+  return {
+    model: SUMMARIZER_MODEL,
+    max_tokens: 1024,
+    system: userTags ? SYSTEM + TAGS_SYSTEM : SYSTEM,
+    tools: [userTags ? READING_WITH_TAGS_TOOL : READING_TOOL],
+    tool_choice: { type: "tool", name: READING_TOOL.name },
+    messages: [{ role: "user", content }],
+  };
+}
+
 /** Claude Haiku, asked for a structured reading of the page. Reads `ANTHROPIC_API_KEY`. */
 export function createSummarizer(): Summarizer {
   // Built on first use, so a missing key breaks enrichment and not every page that loads.
@@ -135,14 +164,7 @@ export function createSummarizer(): Summarizer {
       // No SDK retries and a hard limit: QStash retries the whole job, and the page fetch plus
       // this call must stay inside the route's 60 s.
       client ??= new Anthropic({ maxRetries: 0, timeout: MODEL_TIMEOUT_MS });
-      const response = await client.messages.create({
-        model: SUMMARIZER_MODEL,
-        max_tokens: 1024,
-        system: userTags ? SYSTEM + TAGS_SYSTEM : SYSTEM,
-        tools: [userTags ? READING_WITH_TAGS_TOOL : READING_TOOL],
-        tool_choice: { type: "tool", name: READING_TOOL.name },
-        messages: [{ role: "user", content: userMessage(page, userTags) }],
-      });
+      const response = await client.messages.create(summaryRequest(page));
       const call = response.content.find((block) => block.type === "tool_use");
       if (!call) throw new Error("The model didn't return a reading");
       return parseReading(call.input as Record<string, unknown>, userTags);
