@@ -19,7 +19,20 @@ import { cn } from "../cn.ts";
 
 export { DialogTrigger };
 
-export interface ModalProps extends Omit<ModalOverlayProps, "className"> {
+export interface ModalProps extends Omit<
+  ModalOverlayProps,
+  "className" | "isOpen" | "defaultOpen"
+> {
+  /**
+   * Controlled only: the modal settles on sheet or dialog while closed and keeps that shape until
+   * it closes again, which needs to know when it is open.
+   */
+  isOpen: boolean;
+  /**
+   * On a phone's sheet, a swipe, Escape and a tap outside all close it or none does: without
+   * `isDismissable`, or with `isKeyboardDismissDisabled`, the sheet can't be dismissed at all.
+   */
+  isDismissable?: boolean;
   /**
    * `dialog` (default): a bottom sheet on phones that swipes down to close, centered from the
    * medium size class up, with padding. `palette`: a wide panel near the top at every size and no
@@ -66,7 +79,7 @@ function BottomSheet({
       preventDismissal={!isDismissable || isKeyboardDismissDisabled}
       className="z-50"
     >
-      <SheetBackdrop className="bg-scrim modal-sheet-backdrop" swipeAnimation="modal-fade-in" />
+      <SheetBackdrop className="modal-scrim bg-scrim" swipeAnimation="modal-fade-in" />
       <Sheet
         overscrollPadding
         className="modal-sheet w-full max-w-130 rounded-t-xl-increased glass-float text-ink"
@@ -130,16 +143,18 @@ function Centered({ children, variant, ...props }: ModalProps) {
   );
 }
 
-/** Below the medium size class, where a dialog is a bottom sheet. */
+/** Below the medium size class (`--breakpoint-medium` in theme.css), where a dialog is a sheet. */
 const COMPACT_QUERY = "(width < 37.5rem)";
+
+function subscribeToCompact(onChange: () => void) {
+  const query = matchMedia(COMPACT_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
 
 function useIsCompact() {
   return useSyncExternalStore(
-    (onChange) => {
-      const query = matchMedia(COMPACT_QUERY);
-      query.addEventListener("change", onChange);
-      return () => query.removeEventListener("change", onChange);
-    },
+    subscribeToCompact,
     () => matchMedia(COMPACT_QUERY).matches,
     // A modal opens only after hydration, so the server's answer is never shown.
     () => false,

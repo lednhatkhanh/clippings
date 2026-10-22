@@ -100,9 +100,10 @@
 
 /*
  * The phone's bottom sheet (`Modal`'s `BottomSheet`). React Aria's Sheet moves it by scrolling, so
- * it enters, follows a swipe and leaves on the browser's own scroll physics; the backdrop's fade
- * (`modal-fade-in`, as its `swipeAnimation`) tracks how much of the sheet is in view. Reduced
- * motion jumps the scroll, so the sheet appears and goes without travel.
+ * it enters, follows a swipe and leaves on the browser's own scroll physics; the backdrop (the
+ * scrim, blurred like the dialog's) fades by `modal-fade-in` as its `swipeAnimation`, tracking how
+ * much of the sheet is in view. Reduced motion jumps the scroll, so the sheet appears and goes
+ * without travel.
  */
 @utility modal-sheet {
   /* Its overscroll padding is a viewport tall, so the height limit measures the content alone. */
@@ -110,6 +111,11 @@
   max-height: calc(100% - 2rem);
   overflow: clip;
   outline: none;
+
+  /* Reduced motion jumps the scroll, so the scroll-driven fades never play: fade the sheet in. */
+  @media (prefers-reduced-motion: reduce) {
+    animation: modal-fade-in var(--motion-spring-fade-duration) var(--motion-spring-fade) both;
+  }
 }
 
 /* A grip at the top edge that says the sheet swipes down. */
@@ -120,18 +126,8 @@
   translate: -50% 0;
   width: 2.25rem;
   height: 0.3125rem;
-  border-radius: 9999px;
+  border-radius: var(--radius-full);
   background: var(--color-line-strong);
-}
-
-@utility modal-sheet-backdrop {
-  -webkit-backdrop-filter: blur(3px);
-  backdrop-filter: blur(3px);
-
-  @media (prefers-reduced-transparency: reduce) {
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
 }
 
 /*
