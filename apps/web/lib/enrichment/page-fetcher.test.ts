@@ -308,6 +308,43 @@ describe("createPageFetcher", () => {
       expect(await fetcher.checkLink(url())).toBe("dead");
     });
 
+    it.each([401, 403, 406, 429])(
+      "can't tell when the site answers %i: it is there and won't say more",
+      async (status) => {
+        server = await startServer((_request, response) => response.writeHead(status).end());
+        const fetcher = createPageFetcher({ lookup, agent: server.agent });
+
+        expect(await fetcher.checkLink(url())).toBe("unknown");
+      },
+    );
+
+    it("finds a page behind a redirect to a bot wall unknown", async () => {
+      server = await startServer((request, response) => {
+        if (request.url === "/start") {
+          response.writeHead(302, { location: "/wall" });
+        } else {
+          response.writeHead(403);
+        }
+        response.end();
+      });
+      const fetcher = createPageFetcher({ lookup, agent: server.agent });
+
+      expect(await fetcher.checkLink(url("/start"))).toBe("unknown");
+    });
+
+    it("accepts any kind of file, so a server isn't tempted to answer 406", async () => {
+      let accept: string | undefined;
+      server = await startServer((request, response) => {
+        accept = request.headers.accept;
+        response.writeHead(200).end();
+      });
+      const fetcher = createPageFetcher({ lookup, agent: server.agent });
+
+      await fetcher.checkLink(url());
+
+      expect(accept).toBe("*/*");
+    });
+
     it("finds a redirect to a missing page dead, and a redirect loop dead", async () => {
       server = await startServer((request, response) => {
         if (request.url === "/gone") {

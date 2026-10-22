@@ -51,10 +51,12 @@ export async function createServiceFixture() {
     string,
     { page: { title: string | null; text: string }; summary: PageSummary } | { error: Error }
   >();
-  /** What a link check finds at each URL: "alive" unless set to "dead". */
-  const links = new Map<string, "alive" | "dead">();
+  /** What a link check finds at each URL: "alive" unless set otherwise. */
+  const links = new Map<string, "alive" | "dead" | "unknown">();
   /** The URLs `checkLink` was asked about, in order. */
   const checkedLinks: string[] = [];
+  /** Runs while a check of the URL is in flight, before it answers: what happens meanwhile. */
+  const duringLinkCheck = new Map<string, () => Promise<void>>();
   const fetcher: PageFetcher = {
     fetchPage: async (url) => {
       const entry = web.get(url);
@@ -64,6 +66,7 @@ export async function createServiceFixture() {
     },
     checkLink: async (url) => {
       checkedLinks.push(url);
+      await duringLinkCheck.get(url)?.();
       return links.get(url) ?? "alive";
     },
   };
@@ -103,6 +106,8 @@ export async function createServiceFixture() {
     links,
     /** Every URL a link check was run on, in order. */
     checkedLinks,
+    /** Something to do while a check of a URL is in flight, before it answers. */
+    duringLinkCheck,
     enrichmentRequests,
     /** Every `requestEnrichments` call: the ids in order and the window they were spread over. */
     batchedEnrichmentRequests,

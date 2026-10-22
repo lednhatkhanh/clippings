@@ -14,11 +14,12 @@ const MAX_BYTES = 2_000_000;
 // function killed with the clipping still pending.
 const FETCH_BUDGET_MS = 20_000;
 const MAX_REDIRECTS = 5;
+const READ_ACCEPT = "text/html,application/xhtml+xml,text/plain;q=0.8";
 // A link check only needs the status line, so it takes the first chunk of the body and hangs up.
 const CHECK_MAX_BYTES = 1_024;
-// A link that hasn't answered in this long counts as gone for the check; the run it belongs to
-// has a minute for many of them.
-const CHECK_BUDGET_MS = 10_000;
+// A link that hasn't answered in this long counts as gone for the check, so a run of timeouts is
+// short: the service checks ten at once.
+const CHECK_BUDGET_MS = 5_000;
 
 export class PageFetchError extends Error {
   constructor(message: string) {
@@ -74,7 +75,10 @@ export interface PageFetcherOptions {
 }
 
 type RequestOptions = Required<Omit<PageFetcherOptions, "agent" | "budgetMs" | "checkBudgetMs">> &
-  Pick<PageFetcherOptions, "agent">;
+  Pick<PageFetcherOptions, "agent"> & {
+    /** The `Accept` header; the one a page read sends by default. */
+    accept?: string;
+  };
 
 interface RawResponse {
   status: number;
@@ -86,7 +90,7 @@ interface RawResponse {
 function requestOnce(
   url: URL,
   signal: AbortSignal,
-  { lookup, agent, maxBytes }: RequestOptions,
+  { lookup, agent, maxBytes, accept = READ_ACCEPT }: RequestOptions,
 ): Promise<RawResponse> {
   // An IP in the URL skips DNS, so `publicOnlyLookup` never sees it.
   const host = url.hostname.replace(/^\[|\]$/g, "");
@@ -104,7 +108,7 @@ function requestOnce(
         signal,
         headers: {
           "user-agent": "Clippings/1.0 (reads pages people saved)",
-          accept: "text/html,application/xhtml+xml,text/plain;q=0.8",
+          accept,
           "accept-encoding": "identity",
         },
       },
@@ -197,8 +201,14 @@ export function createPageFetcher({
           lookup,
           agent,
           maxBytes: CHECK_MAX_BYTES,
+          // Any kind of file is a link that works; a narrow Accept gets some servers' 406.
+          accept: "*/*",
         });
-        return status >= 200 && status < 300 ? "alive" : "dead";
+        if (status >= 200 && status < 300) return "alive";
+        // A 4xx other than "gone" says the site is there and won't say more (a bot wall, a login,
+        // a rate limit): no evidence either way.
+        const refused = status >= 400 && status < 500 && status !== 404 && status !== 410;
+        return refused ? "unknown" : "dead";
       } catch {
         return "dead";
       }

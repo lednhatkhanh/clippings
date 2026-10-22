@@ -20,7 +20,10 @@ describe.skipIf(!TEST_DATABASE_URL)("the link check", () => {
 
   const urlOf = (name: string) => `https://example.com/${name}`;
 
-  /** Saves a clipping of `/name` and reads it, so it is ready. */
+  /**
+   * Saves a clipping of `/name` and reads it, so it is ready, then forgets the check the reading
+   * counts as, so it is due like a clipping read long ago.
+   */
   async function saveReady(name: string, userId = ana) {
     const url = urlOf(name);
     fixture.web.set(url, {
@@ -29,6 +32,9 @@ describe.skipIf(!TEST_DATABASE_URL)("the link check", () => {
     });
     const { clipping } = await fixture.service.saveClipping(userId, { url, source: "web" });
     await fixture.service.enrichClipping(clipping.id);
+    await fixture.pool.query("update clippings set link_checked_at = null where id = $1", [
+      clipping.id,
+    ]);
     return clipping.id;
   }
 
@@ -81,6 +87,21 @@ describe.skipIf(!TEST_DATABASE_URL)("the link check", () => {
   });
 
   describe("how often", () => {
+    it("leaves a clipping alone for a week after it was read, which just fetched the page", async () => {
+      const { clipping } = await fixture.service.saveClipping(ana, {
+        url: urlOf("fresh"),
+        source: "web",
+      });
+      fixture.web.set(urlOf("fresh"), {
+        page: { title: "fresh", text: "Fresh." },
+        summary: { title: "fresh", summary: "Fresh.", excerpt: "Fresh" },
+      });
+      await fixture.service.enrichClipping(clipping.id);
+
+      expect((await checkAfter(6)).checked).toBe(0);
+      expect((await checkAfter(2)).checked).toBe(1);
+    });
+
     it("checks a link again only once its last check is more than 7 days old", async () => {
       await saveReady("page");
       await fixture.service.checkLinks({ limit: 10 });
@@ -109,6 +130,158 @@ describe.skipIf(!TEST_DATABASE_URL)("the link check", () => {
       await fixture.service.checkLinks({ limit: 1 });
       expect(fixture.checkedLinks).toEqual([urlOf("b")]);
       expect(await deadSince(a)).toBeNull();
+    });
+  });
+
+  describe("a link whose site won't say", () => {
+    it("is neither a strike nor a reset", async () => {
+      const id = await saveReady("walled");
+      const url = urlOf("walled");
+      fixture.links.set(url, "dead");
+      await fixture.service.checkLinks({ limit: 10 });
+      await checkAfter(8);
+      fixture.links.set(url, "unknown");
+      expect(await checkAfter(8)).toEqual({ checked: 1, dead: 0 });
+      // Still two strikes: the next dead answer is the third.
+      fixture.links.set(url, "dead");
+      await checkAfter(8);
+      expect(await deadSince(id)).not.toBeNull();
+    });
+
+    it("only stamps the check, so the link waits a week for the next one", async () => {
+      await saveReady("walled");
+      fixture.links.set(urlOf("walled"), "unknown");
+      await fixture.service.checkLinks({ limit: 10 });
+
+      expect((await checkAfter(6)).checked).toBe(0);
+    });
+
+    it("does not clear a dead mark", async () => {
+      const id = await saveReady("walled");
+      const url = urlOf("walled");
+      fixture.links.set(url, "dead");
+      await fixture.service.checkLinks({ limit: 10 });
+      await checkAfter(8);
+      await checkAfter(8);
+      const first = await deadSince(id);
+
+      fixture.links.set(url, "unknown");
+      await checkAfter(8);
+
+      expect(await deadSince(id)).toBe(first);
+    });
+  });
+
+  describe("a clipping that starts over", () => {
+    async function makeDead(name: string) {
+      const id = await saveReady(name);
+      fixture.links.set(urlOf(name), "dead");
+      await fixture.service.checkLinks({ limit: 10 });
+      await checkAfter(8);
+      await checkAfter(8);
+      expect(await deadSince(id)).not.toBeNull();
+      return id;
+    }
+
+    it("is not dead any more when deleted and saved again", async () => {
+      const id = await makeDead("revived");
+      await fixture.service.deleteClipping(ana, id);
+
+      await fixture.service.saveClipping(ana, { url: urlOf("revived"), source: "web" });
+
+      expect(await deadSince(id)).toBeNull();
+    });
+
+    it("is not dead any more when deleted and imported again", async () => {
+      const id = await makeDead("revived");
+      await fixture.service.deleteClipping(ana, id);
+
+      await fixture.service.importClippings(
+        ana,
+        [{ url: urlOf("revived"), addedAt: null, folders: [] }],
+        { foldersAsTags: false },
+      );
+
+      expect(await deadSince(id)).toBeNull();
+    });
+
+    it("starts the count over: the old strikes don't carry into the new life", async () => {
+      const id = await makeDead("revived");
+      await fixture.service.deleteClipping(ana, id);
+      await fixture.service.saveClipping(ana, { url: urlOf("revived"), source: "web" });
+      await fixture.service.enrichClipping(id);
+
+      // Two strikes in the new life are not three.
+      await checkAfter(8);
+      await checkAfter(8);
+      expect(await deadSince(id)).toBeNull();
+      await checkAfter(8);
+      expect(await deadSince(id)).not.toBeNull();
+    });
+
+    it("is not dead any more once it is read again, and is not checked for a week", async () => {
+      const id = await makeDead("reread");
+      await fixture.service.reEnrichClipping(ana, id);
+      await fixture.service.enrichClipping(id);
+
+      expect(await deadSince(id)).toBeNull();
+      expect((await checkAfter(6)).checked).toBe(0);
+    });
+  });
+
+  describe("a check that overlaps something else", () => {
+    const rows = (id: string) =>
+      fixture.pool.query<{ link_failures: number; link_checked_at: Date | null }>(
+        "select link_failures, link_checked_at from clippings where id = $1",
+        [id],
+      );
+
+    it("counts one strike when two runs check the same link at once", async () => {
+      const id = await saveReady("twice");
+      fixture.links.set(urlOf("twice"), "dead");
+      // Both runs have chosen the link before either writes.
+      let inFlight = 0;
+      let release!: () => void;
+      const bothIn = new Promise<void>((resolve) => (release = resolve));
+      fixture.duringLinkCheck.set(urlOf("twice"), async () => {
+        if (++inFlight === 2) release();
+        await bothIn;
+      });
+
+      const results = await Promise.all([
+        fixture.service.checkLinks({ limit: 10 }),
+        fixture.service.checkLinks({ limit: 10 }),
+      ]);
+
+      expect(results.map((result) => result.checked).toSorted((a, b) => a - b)).toEqual([0, 1]);
+      expect(results.reduce((sum, result) => sum + result.dead, 0)).toBe(1);
+      expect((await rows(id)).rows[0]!.link_failures).toBe(1);
+    });
+
+    it("writes nothing for a clipping deleted and saved and read again while it was checked", async () => {
+      const id = await saveReady("replaced");
+      fixture.links.set(urlOf("replaced"), "dead");
+      fixture.duringLinkCheck.set(urlOf("replaced"), async () => {
+        await fixture.service.deleteClipping(ana, id);
+        await fixture.service.saveClipping(ana, { url: urlOf("replaced"), source: "web" });
+        await fixture.service.enrichClipping(id);
+      });
+
+      expect(await fixture.service.checkLinks({ limit: 10 })).toEqual({ checked: 0, dead: 0 });
+
+      expect((await rows(id)).rows[0]!.link_failures).toBe(0);
+    });
+
+    it("writes nothing for a clipping deleted while it was checked", async () => {
+      const id = await saveReady("removed");
+      fixture.links.set(urlOf("removed"), "dead");
+      fixture.duringLinkCheck.set(urlOf("removed"), async () => {
+        await fixture.service.deleteClipping(ana, id);
+      });
+
+      expect(await fixture.service.checkLinks({ limit: 10 })).toEqual({ checked: 0, dead: 0 });
+
+      expect((await rows(id)).rows[0]).toEqual({ link_failures: 0, link_checked_at: null });
     });
   });
 

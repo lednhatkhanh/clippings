@@ -207,6 +207,9 @@ type ClippingRow = Omit<typeof clippings.$inferSelect, "searchTsv" | "embedding"
 /** Not deleted: every read and edit the user makes sees only these. */
 const live = isNull(clippings.deletedAt);
 
+/** A clipping starting over has no link verdict yet: the last one was about another life of the row. */
+const noLinkVerdict = { linkCheckedAt: null, linkFailures: 0, linkDeadSince: null };
+
 /** The columns every status change writes together. */
 const statusChange = (status: ClippingRow["status"], at: Date) => ({
   status,
@@ -375,7 +378,7 @@ const LINK_RECHECK_AFTER_DAYS = 7;
 /** Checks in a row that must find a page gone before it is marked dead: one bad day is not rot. */
 const LINK_DEAD_AFTER_FAILURES = 3;
 /** Links checked at once, so a run stays short without hammering one network path. */
-const LINK_CHECK_CONCURRENCY = 5;
+const LINK_CHECK_CONCURRENCY = 10;
 
 /**
  * Most imported clippings the daily drain requests. QStash's free tier allows 1,000 messages a
@@ -740,6 +743,7 @@ export function createClippingsService({
       clientId: input.clientId ?? null,
       deletedAt: null,
       createdAt: now,
+      ...noLinkVerdict,
       ...statusChange("pending", now),
     };
     const created = await db.transaction(async (tx) => {
@@ -1440,6 +1444,10 @@ export function createClippingsService({
           summary: read.summary,
           excerpt: read.excerpt,
           embedding: meaning,
+          // The fetch just got a 2xx: the link is alive as of now.
+          linkCheckedAt: now,
+          linkFailures: 0,
+          linkDeadSince: null,
           ...statusChange("ready", now),
         })
         .where(and(eq(clippings.id, clippingId), eq(clippings.status, "pending")))
@@ -1749,6 +1757,7 @@ export function createClippingsService({
                 status: "pending",
                 statusChangedAt: now,
                 importRequestedAt: null,
+                ...noLinkVerdict,
                 updatedAt: now,
               },
               setWhere: isNotNull(clippings.deletedAt),
@@ -1883,8 +1892,12 @@ export function createClippingsService({
    * than a week ago or never, the longest-unchecked first, and returns how many it checked and
    * how many of those answered dead this time. A live answer clears the failures; a dead one
    * counts one, and the third in a row marks the clipping dead since that check (kept through
-   * further failures). Each result is written as it arrives, so a run cut short loses only the
-   * links still in flight.
+   * further failures); an unknown one (the site refuses robots, say) only stamps the check. Each
+   * result is written as it arrives, so a run cut short loses only the links still in flight.
+   *
+   * A write goes through only while the row is still the one that was checked: ready, live, at
+   * the same url and with the same last check. A clipping deleted and saved again meanwhile, or
+   * checked by an overlapping run, is left alone, and isn't counted.
    */
   async function checkLinks({
     limit,
@@ -1893,7 +1906,7 @@ export function createClippingsService({
   }): Promise<{ checked: number; dead: number }> {
     const now = clock.now();
     const due = await db
-      .select({ id: clippings.id, url: clippings.url })
+      .select({ id: clippings.id, url: clippings.url, checkedAt: clippings.linkCheckedAt })
       .from(clippings)
       .where(
         and(
@@ -1909,32 +1922,45 @@ export function createClippingsService({
       .limit(limit);
 
     let next = 0;
+    let checked = 0;
     let dead = 0;
     async function worker() {
       while (next < due.length) {
-        const { id, url } = due[next++]!;
+        const { id, url, checkedAt } = due[next++]!;
         const verdict = await fetcher.checkLink(url);
-        if (verdict === "alive") {
-          await db
-            .update(clippings)
-            .set({ linkCheckedAt: now, linkFailures: 0, linkDeadSince: null })
-            .where(eq(clippings.id, id));
-        } else {
-          dead += 1;
-          // `link_failures` and `link_dead_since` on the right are the values before this update.
-          await db
-            .update(clippings)
-            .set({
-              linkCheckedAt: now,
-              linkFailures: sql`${clippings.linkFailures} + 1`,
-              linkDeadSince: sql`case when ${clippings.linkFailures} + 1 >= ${LINK_DEAD_AFTER_FAILURES} then coalesce(${clippings.linkDeadSince}, ${now}) else ${clippings.linkDeadSince} end`,
-            })
-            .where(eq(clippings.id, id));
-        }
+        const update = db
+          .update(clippings)
+          .set(
+            verdict === "alive"
+              ? { linkCheckedAt: now, linkFailures: 0, linkDeadSince: null }
+              : verdict === "unknown"
+                ? { linkCheckedAt: now }
+                : {
+                    linkCheckedAt: now,
+                    // The columns on the right are the values before this update.
+                    linkFailures: sql`${clippings.linkFailures} + 1`,
+                    linkDeadSince: sql`case when ${clippings.linkFailures} + 1 >= ${LINK_DEAD_AFTER_FAILURES} then coalesce(${clippings.linkDeadSince}, ${now}) else ${clippings.linkDeadSince} end`,
+                  },
+          )
+          .where(
+            and(
+              eq(clippings.id, id),
+              eq(clippings.status, "ready"),
+              live,
+              eq(clippings.url, url),
+              checkedAt === null
+                ? isNull(clippings.linkCheckedAt)
+                : eq(clippings.linkCheckedAt, checkedAt),
+            ),
+          );
+        const [written] = await update.returning({ id: clippings.id });
+        if (!written) continue;
+        checked += 1;
+        if (verdict === "dead") dead += 1;
       }
     }
     await Promise.all(Array.from({ length: LINK_CHECK_CONCURRENCY }, worker));
-    return { checked: due.length, dead };
+    return { checked, dead };
   }
 
   return {

@@ -12,11 +12,11 @@ export interface SweepRequestDeps {
 }
 
 /**
- * Links checked per run. Five run at once with a 10 s budget each, so even a run of nothing but
- * timeouts takes 40 s and stays inside the route's 60 s. The check goes last, after the work that
+ * Links checked per run. Ten run at once with a 5 s budget each, so even a run of nothing but
+ * timeouts takes 20 s and stays inside the route's 60 s. The check goes last, after the work that
  * must not be skipped, and each result is written as it arrives.
  */
-const LINK_CHECK_LIMIT = 20;
+const LINK_CHECK_LIMIT = 40;
 
 function isAuthorized(authorization: string | null, secret: string | undefined): boolean {
   if (!secret || !authorization) return false;
@@ -28,9 +28,9 @@ function isAuthorized(authorization: string | null, secret: string | undefined):
 /**
  * The daily cron: requests enrichment again for clippings stuck in pending or failed, embeds ready
  * clippings that have no embedding, requests the day's share of the imported backlog, and removes
- * clippings deleted more than a day ago, then checks the week's due share of links. The drain needs the queue, which can be down: its failure
- * is logged and reported as `importsFailed`, and the purge still runs, since a deleted clipping must
- * not outlive its day because of it.
+ * clippings deleted more than a day ago, then checks the links that are due. The drain needs the
+ * queue, which can be down: its failure is logged and reported as `importsFailed`, and the purge
+ * still runs, since a deleted clipping must not outlive its day because of it.
  */
 export async function handleSweepRequest(
   request: Request,

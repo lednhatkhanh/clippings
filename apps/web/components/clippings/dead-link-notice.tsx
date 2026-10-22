@@ -27,7 +27,7 @@ export function DeadLinkNotice({
         <span>
           This link seems dead since{" "}
           <time dateTime={deadSince}>{formatAbsoluteDate(deadSince, now)}</time>. The page
-          didn&apos;t answer in the last few weekly checks.
+          didn&apos;t answer the last few checks.
         </span>
       </p>
       {savedText && paragraphs.length > 0 ? (
