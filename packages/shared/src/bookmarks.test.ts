@@ -431,9 +431,12 @@ describe("parseBookmarksHtml", () => {
     it("reads a run of lists then folders in linear time", () => {
       const listsThenFolders = (count: number) =>
         `<!DOCTYPE NETSCAPE-Bookmark-file-1>${"<DL>".repeat(count)}${"<H3>".repeat(count)}`;
-      // Best of three, so one slow run on a busy machine doesn't decide it.
-      const fastest = (html: string) =>
-        Math.min(...[1, 2, 3].map(() => timed(() => parseBookmarksHtml(html)).ms));
+      // Best of five after a warm-up, so one slow run on a busy machine (a GC pause, a noisy
+      // neighbour) doesn't decide it.
+      const fastest = (html: string) => {
+        parseBookmarksHtml(html);
+        return Math.min(...[1, 2, 3, 4, 5].map(() => timed(() => parseBookmarksHtml(html)).ms));
+      };
       // Half the largest file: quadratic already shows at this size, and CI runners are many
       // times slower than a laptop.
       const count = Math.floor(MAX_BOOKMARKS_FILE_BYTES / 16);
@@ -443,11 +446,12 @@ describe("parseBookmarksHtml", () => {
         bookmarks: [],
         skipped: [],
       });
-      // Eight times the input takes about eight times as long when linear and sixty-four when
-      // quadratic. A ratio, not a time limit, so a slow CI machine doesn't fail it; the wide gap
-      // leaves room for a busy machine's noise either way.
-      const ratio = fastest(full) / Math.max(fastest(listsThenFolders(count / 8)), 1);
-      expect(ratio).toBeLessThan(24);
+      // Four times the input takes about four times as long when linear and sixteen when
+      // quadratic. A ratio, not a time limit, so a slow CI machine doesn't fail it. The smaller
+      // input is a quarter, not an eighth: at an eighth it parses in a few milliseconds, where
+      // one hiccup doubles its time and the ratio with it.
+      const ratio = fastest(full) / Math.max(fastest(listsThenFolders(count / 4)), 1);
+      expect(ratio).toBeLessThan(10);
     }, 30_000);
 
     it("names no more folders than the cap, however deep and however many links", () => {
