@@ -20,8 +20,13 @@ export interface JobPublisher {
 export interface FetchedPage {
   /** The page's own `<title>`, when it has one. */
   title: string | null;
-  /** Its readable text, cut to what the summarizer can take. */
+  /** Its readable text, cut to what the summarizer can take. Empty for a PDF, which is in `document`. */
   text: string;
+  /**
+   * The file itself, base64, when the page is a PDF the summarizer reads directly. Left out for
+   * HTML and text pages.
+   */
+  document?: { mediaType: "application/pdf"; data: string };
 }
 
 /** Fetches a page over the network. Throws when the page can't be read. */

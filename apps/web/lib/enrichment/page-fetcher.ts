@@ -73,6 +73,8 @@ interface RawResponse {
   status: number;
   headers: http.IncomingHttpHeaders;
   body: Buffer;
+  /** The body was cut off at the size limit. */
+  truncated: boolean;
 }
 
 /** One request, without following a redirect. */
@@ -97,24 +99,29 @@ function requestOnce(
         signal,
         headers: {
           "user-agent": "Clippings/1.0 (reads pages people saved)",
-          accept: "text/html,application/xhtml+xml,text/plain;q=0.8",
+          accept: "text/html,application/xhtml+xml,application/pdf,text/plain;q=0.8",
           "accept-encoding": "identity",
         },
       },
       (response) => {
         const chunks: Buffer[] = [];
         let size = 0;
+        let truncated = false;
         const finish = () =>
           resolveResponse({
             status: response.statusCode ?? 0,
             headers: response.headers,
             body: Buffer.concat(chunks),
+            truncated,
           });
         response.on("data", (chunk: Buffer) => {
           chunks.push(chunk);
           size += chunk.length;
           // The start of a long page is enough to summarize it.
-          if (size > maxBytes) response.destroy();
+          if (size > maxBytes) {
+            truncated = true;
+            response.destroy();
+          }
         });
         response.on("end", finish);
         response.on("close", finish);
@@ -135,6 +142,30 @@ function decode(body: Buffer, contentType: string): string {
   }
 }
 
+const PDF_MAGIC = "%PDF-";
+
+/** A PDF by its Content-Type, or by its first bytes when a server calls it a generic download. */
+function isPdf(contentType: string, body: Buffer): boolean {
+  if (/^application\/(x-)?pdf\b/i.test(contentType)) return true;
+  return (
+    /^(application|binary)\/octet-stream\b/i.test(contentType) &&
+    body.subarray(0, PDF_MAGIC.length).toString("latin1") === PDF_MAGIC
+  );
+}
+
+/** The file name in the URL's path, as a stand-in title for a PDF that has none of its own. */
+function fileNameTitle(url: URL): string | null {
+  const last = url.pathname.split("/").findLast(Boolean);
+  if (!last) return null;
+  let name = last;
+  try {
+    name = decodeURIComponent(last);
+  } catch {
+    // Keep the raw segment when it isn't valid percent-encoding.
+  }
+  return name.replace(/\.pdf$/i, "").trim() || null;
+}
+
 /** The real fetcher: follows redirects itself so every hop is checked, and never reaches an internal address. */
 export function createPageFetcher({
   lookup = dnsLookup as Lookup,
@@ -150,7 +181,7 @@ export function createPageFetcher({
         if (url.protocol !== "http:" && url.protocol !== "https:") {
           throw new PageFetchError(`Not a web address: ${url.href}`);
         }
-        const { status, headers, body } = await requestOnce(url, signal, {
+        const { status, headers, body, truncated } = await requestOnce(url, signal, {
           lookup,
           agent,
           maxBytes,
@@ -163,6 +194,19 @@ export function createPageFetcher({
         if (status < 200 || status >= 300) throw new PageFetchError(`The site answered ${status}`);
 
         const contentType = headers["content-type"] ?? "";
+        if (isPdf(contentType, body)) {
+          // Half a PDF can't be read, so unlike a long page it fails instead of being cut.
+          if (truncated) {
+            throw new PageFetchError(
+              `The PDF is larger than ${Math.round(maxBytes / 1_000_000)} MB`,
+            );
+          }
+          return {
+            title: fileNameTitle(url),
+            text: "",
+            document: { mediaType: "application/pdf", data: body.toString("base64") },
+          };
+        }
         const text = decode(body, contentType);
         if (/html/i.test(contentType) || (!contentType && /<html|<body/i.test(text))) {
           return extractPage(text);
