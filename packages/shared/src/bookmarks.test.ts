@@ -448,12 +448,12 @@ describe("parseBookmarksHtml", () => {
         bookmarks: [],
         skipped: [],
       });
-      // The deepest file against a flat one of the same size, not against a smaller deep one:
-      // both pay the same allocation and GC, which on a CI runner grows faster than the input
-      // and made a ratio between sizes flaky. Linear work makes them about equal (under 2 on a
-      // laptop); work that grows with the depth makes the deep one hundreds of times slower.
+      // The deepest file against a flat one of the same size, not against a smaller deep one,
+      // which on a CI runner made linear work look superlinear. Linear parsing keeps them about
+      // 2 apart on a laptop and up to about 10 on a busy runner; work that grows with the depth
+      // makes the deep one over a thousand times slower. 100 sits between the two.
       const ratio = fastest(deep) / Math.max(fastest(shallowLists(count)), 1);
-      expect(ratio).toBeLessThan(10);
+      expect(ratio).toBeLessThan(100);
     }, 30_000);
 
     it("names no more folders than the cap, however deep and however many links", () => {
