@@ -430,6 +430,90 @@ describe("createPageFetcher", () => {
     });
   });
 
+  describe("a file that isn't a web page", () => {
+    const PDF = Buffer.from("%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n");
+    const send =
+      (contentType: string, body: Buffer) =>
+      (_request: http.IncomingMessage, response: http.ServerResponse) => {
+        response.writeHead(200, { "content-type": contentType });
+        response.end(body);
+      };
+
+    it("hands a PDF over as base64, with its file name as the title and no text", async () => {
+      server = await startServer(send("application/pdf", PDF));
+      const fetcher = createPageFetcher({ lookup, agent: server.agent });
+
+      const page = await fetcher.fetchPage(
+        `http://public.test:${server.port}/files/Field%20Notes.pdf`,
+      );
+
+      expect(page).toEqual({
+        title: "Field Notes",
+        text: "",
+        document: { mediaType: "application/pdf", data: PDF.toString("base64") },
+      });
+    });
+
+    it("leaves the title empty when the path has no file name", async () => {
+      server = await startServer(send("application/pdf; charset=binary", PDF));
+      const fetcher = createPageFetcher({ lookup, agent: server.agent });
+
+      const page = await fetcher.fetchPage(`http://public.test:${server.port}/`);
+
+      expect(page.title).toBeNull();
+      expect(page.document?.data).toBe(PDF.toString("base64"));
+    });
+
+    it("recognizes a PDF served as a generic download by its first bytes", async () => {
+      server = await startServer(send("application/octet-stream", PDF));
+      const fetcher = createPageFetcher({ lookup, agent: server.agent });
+
+      const page = await fetcher.fetchPage(`http://public.test:${server.port}/download?id=7`);
+
+      expect(page.document?.mediaType).toBe("application/pdf");
+      expect(page.text).toBe("");
+    });
+
+    it("still refuses a generic download that isn't a PDF", async () => {
+      server = await startServer(
+        send("application/octet-stream", Buffer.from("PK\u0003\u0004zip")),
+      );
+      const fetcher = createPageFetcher({ lookup, agent: server.agent });
+
+      await expect(fetcher.fetchPage(`http://public.test:${server.port}/a.zip`)).rejects.toThrow(
+        "Can't read application/octet-stream",
+      );
+    });
+
+    it("fails on a PDF over the size cap instead of passing on half of it", async () => {
+      const big = Buffer.concat([PDF, Buffer.alloc(50_000, 0x20)]);
+      server = await startServer(send("application/pdf", big));
+      const fetcher = createPageFetcher({ lookup, agent: server.agent, maxBytes: 10_000 });
+
+      await expect(fetcher.fetchPage(`http://public.test:${server.port}/big.pdf`)).rejects.toThrow(
+        PageFetchError,
+      );
+    });
+
+    it("takes a PDF exactly at the size cap", async () => {
+      server = await startServer(send("application/pdf", PDF));
+      const fetcher = createPageFetcher({ lookup, agent: server.agent, maxBytes: PDF.length });
+
+      const page = await fetcher.fetchPage(`http://public.test:${server.port}/a.pdf`);
+
+      expect(page.document?.data).toBe(PDF.toString("base64"));
+    });
+
+    it("still refuses other kinds of file", async () => {
+      server = await startServer(send("image/png", Buffer.from([0x89, 0x50, 0x4e, 0x47])));
+      const fetcher = createPageFetcher({ lookup, agent: server.agent });
+
+      await expect(fetcher.fetchPage(`http://public.test:${server.port}/a.png`)).rejects.toThrow(
+        "Can't read image/png",
+      );
+    });
+  });
+
   describe("the time budget", () => {
     it("gives up on a site that never answers", async () => {
       server = await startServer(() => {
