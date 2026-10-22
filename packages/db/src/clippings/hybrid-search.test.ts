@@ -207,6 +207,17 @@ describe.skipIf(!TEST_DATABASE_URL)("related clippings", () => {
     expect(related.map((clipping) => clipping.title)).toEqual(["Engine", "Automobile tyres"]);
   });
 
+  it("returns at most the limit asked for", async () => {
+    const ana = await fixture.createUser("ana");
+    const sedan = await clip(ana, "https://example.com/sedan", "Sedan reviews");
+    await clip(ana, "https://example.com/tyres", "Automobile tyres");
+    await clip(ana, "https://example.com/engine", "Engine");
+
+    const related = await fixture.service.relatedClippings(ana, sedan, 1);
+
+    expect(related.map((clipping) => clipping.title)).toEqual(["Engine"]);
+  });
+
   it("leaves out the clipping itself, deleted clippings and other users' clippings", async () => {
     const ana = await fixture.createUser("ana");
     const ben = await fixture.createUser("ben");

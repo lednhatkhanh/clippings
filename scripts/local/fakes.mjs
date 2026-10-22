@@ -244,7 +244,14 @@ listen(8081, "fake anthropic", (request, response, body) => {
   ) {
     return streamAnswer(payload, response);
   }
-  const message = String(payload.messages?.[0]?.content ?? "");
+  // The content is a string or a list of blocks (a PDF comes as a document block before the text).
+  const content = payload.messages?.[0]?.content ?? "";
+  const message = Array.isArray(content)
+    ? content
+        .filter((block) => block.type === "text")
+        .map((block) => block.text)
+        .join("\n")
+    : String(content);
   const digests = payload.tool_choice?.name === "save_digest";
   const title = /^Page title: (.*)$/m.exec(message)?.[1];
   // Present when the tool asks for suggestions (tag suggestions are on for the user).
