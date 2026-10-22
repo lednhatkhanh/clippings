@@ -1,7 +1,8 @@
 // Stand-ins for the services the app calls out to, so a change can be tried in a browser without
 // credentials: QStash (accepts a publish or a batch, then makes a signed delivery with retries,
 // like the real one), the Anthropic Messages API (answers the page-reading tool call after a short
-// delay) and Voyage AI's embeddings API (a vector built from the words, so texts that share words
+// delay, and a streamed question over search results with an answer that cites the first one) and
+// Voyage AI's embeddings API (a vector built from the words, so texts that share words
 // are close).
 //
 //   node scripts/local/fakes.mjs        QStash on :8080, Anthropic on :8081, Voyage AI on :8082
@@ -137,8 +138,90 @@ function suggestTags(message, title) {
   return { existing_tags: mine.slice(0, 2), new_tags: [word] };
 }
 
+const STREAM_DELAY_MS = 60;
+
+/** One server-sent event, as the Messages API streams it. */
+const sse = (type, data) => `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
+
+/**
+ * A streamed answer to a question asked over `search_result` blocks (the ask page): a lead-in, then
+ * the first result's own words as a cited passage, then a closing sentence. Streamed in small
+ * deltas so the page shows the answer arriving.
+ */
+function streamAnswer(payload, response) {
+  const content = payload.messages?.at(-1)?.content ?? [];
+  const first = content.find((block) => block.type === "search_result");
+  const passage = String(first.content?.[0]?.text ?? "").slice(0, 160);
+  console.log(`[anthropic] ask model=${payload.model} results=${content.length - 1}`);
+
+  const citation = {
+    type: "search_result_location",
+    cited_text: passage,
+    search_result_index: 0,
+    source: first.source,
+    title: first.title,
+    start_block_index: 0,
+    end_block_index: 1,
+  };
+  const words = (text) => text.match(/\S+\s*/g) ?? [];
+  const chunks = [
+    ...words("Here is what your clippings say: ").map((text) => ({ text })),
+    ...words(passage).map((text) => ({ text })),
+    { citation },
+    ...words(" That is all they say about it.").map((text) => ({ text })),
+  ];
+
+  response.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
+  response.write(
+    sse("message_start", {
+      message: {
+        id: "msg_local",
+        type: "message",
+        role: "assistant",
+        model: payload.model,
+        content: [],
+        stop_reason: null,
+        stop_sequence: null,
+        usage: { input_tokens: 10, output_tokens: 1 },
+      },
+    }),
+  );
+  response.write(
+    sse("content_block_start", { index: 0, content_block: { type: "text", text: "" } }),
+  );
+  let next = 0;
+  const step = () => {
+    const chunk = chunks[next++];
+    if (!chunk) {
+      response.write(sse("content_block_stop", { index: 0 }));
+      response.write(
+        sse("message_delta", {
+          delta: { stop_reason: "end_turn", stop_sequence: null },
+          usage: { output_tokens: 10 },
+        }),
+      );
+      response.end(sse("message_stop", {}));
+      return;
+    }
+    const delta = chunk.citation
+      ? { type: "citations_delta", citation: chunk.citation }
+      : { type: "text_delta", text: chunk.text };
+    response.write(sse("content_block_delta", { index: 0, delta }));
+    setTimeout(step, STREAM_DELAY_MS);
+  };
+  step();
+}
+
 listen(8081, "fake anthropic", (request, response, body) => {
   const payload = JSON.parse(body || "{}");
+  const asked = payload.messages?.at(-1)?.content;
+  if (
+    payload.stream &&
+    Array.isArray(asked) &&
+    asked.some((block) => block.type === "search_result")
+  ) {
+    return streamAnswer(payload, response);
+  }
   const message = String(payload.messages?.[0]?.content ?? "");
   const title = /^Page title: (.*)$/m.exec(message)?.[1];
   // Present when the tool asks for suggestions (tag suggestions are on for the user).

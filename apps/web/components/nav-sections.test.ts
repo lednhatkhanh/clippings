@@ -6,11 +6,13 @@ describe("sectionIndex", () => {
   it.each([
     ["/", 0],
     ["/c/abc", 0],
-    ["/tags", 1],
-    ["/tags/anything", 1],
-    ["/settings", 2],
+    ["/ask", 1],
+    ["/tags", 2],
+    ["/tags/anything", 2],
+    ["/settings", 3],
     ["/share", -1],
     ["/tagsmith", -1],
+    ["/asking", -1],
     ["/sign-in", -1],
   ])("puts %s at %i", (pathname, expected) => {
     expect(sectionIndex(pathname)).toBe(expected);
@@ -20,10 +22,13 @@ describe("sectionIndex", () => {
 describe("sectionTransitionType", () => {
   it.each([
     ["/", "/tags", "section-lower"],
+    ["/", "/ask", "section-lower"],
     ["/", "/settings", "section-lower"],
     ["/c/abc", "/settings", "section-lower"],
+    ["/ask", "/tags", "section-lower"],
     ["/tags", "/settings", "section-lower"],
     ["/settings", "/tags", "section-higher"],
+    ["/tags", "/ask", "section-higher"],
     ["/settings", "/", "section-higher"],
     ["/tags", "/", "section-higher"],
     ["/c/abc", "/", "nav-back"],

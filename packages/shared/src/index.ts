@@ -24,6 +24,14 @@ export {
   type SkipReason,
 } from "./bookmarks.ts";
 export {
+  ASK_NO_MATCH,
+  askEventSchema,
+  askRequestSchema,
+  MAX_QUESTION_LENGTH,
+  type AskEvent,
+  type AskRequest,
+} from "./ask.ts";
+export {
   CLIPPING_SOURCES,
   CLIPPING_STATUSES,
   MAX_NOTE_LENGTH,
