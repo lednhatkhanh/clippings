@@ -525,6 +525,9 @@ importers:
       '@clippings/shared':
         specifier: workspace:*
         version: link:../shared
+      '@date-fns/utc':
+        specifier: 'catalog:'
+        version: 2.1.1
       date-fns:
         specifier: 'catalog:'
         version: 4.4.0

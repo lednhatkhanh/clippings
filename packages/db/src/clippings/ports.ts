@@ -79,3 +79,37 @@ export type EmbeddingPurpose = "document" | "query";
 export interface Embedder {
   embed: (text: string, purpose: EmbeddingPurpose) => Promise<number[]>;
 }
+
+/** A clipping as the digester reads it. */
+export interface DigestClipping {
+  id: string;
+  title: string;
+  summary: string | null;
+  /** The user's tag names on it. */
+  tags: string[];
+  note: string;
+}
+
+/** What the digester reads: one finished week of a user's clippings, and some older ones. */
+export interface DigesterInput {
+  /** The week's Monday, `yyyy-MM-dd` (UTC). */
+  weekStart: string;
+  /** Everything saved that week, newest first. */
+  clippings: DigestClipping[];
+  /** Up to 3 older clippings related to the week's, which the digest may bring back. */
+  related: DigestClipping[];
+}
+
+/**
+ * A user's digest of a week, as stored: the week's clippings in groups, and older ones worth
+ * seeing again. Clippings are named by id, and every id comes from the digester's input.
+ */
+export interface WeeklyDigest {
+  groups: { title: string; summary: string; clippingIds: string[] }[];
+  resurfaced: { clippingId: string; why: string }[];
+}
+
+/** Writes the digest of a week: groups the clippings by theme and says why an older one is back. */
+export interface Digester {
+  digest: (input: DigesterInput) => Promise<WeeklyDigest>;
+}

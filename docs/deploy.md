@@ -113,8 +113,12 @@ console lists, or the token is rejected. A daily Vercel Cron (`vercel.json`, 04:
 failed for more than an hour, and embeds up to 50 ready clippings that have no embedding (saved
 before search by meaning, or while Voyage AI was down). It also checks up to 40 ready clippings
 whose link was last checked more than a week ago (ten at once, each given 5 s), and marks a link
-dead after three checks in a row that find the page gone. Vercel only runs crons on the production
-deployment. Add a payment method to the Voyage AI account even though usage stays inside the free
+dead after three checks in a row that find the page gone. A second daily cron (05:00 UTC) calls
+`/api/cron/digest` with the same bearer token and writes the weekly digest of the last finished
+Monday to Sunday (UTC) for up to 20 users who saved clippings that week and have none yet, one
+Haiku call each. It stops starting calls with under 30 seconds of its 60 left, and the next day's
+run takes the rest. Vercel only runs crons on the production deployment. Add a payment method to
+the Voyage AI account even though usage stays inside the free
 tokens: its documented limits (2,000 requests a minute for `voyage-4`) start at Tier 1, which needs
 one ([rate limits](https://docs.voyageai.com/docs/rate-limits)), and every search makes a request.
 

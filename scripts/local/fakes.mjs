@@ -137,6 +137,28 @@ function suggestTags(message, title) {
   return { existing_tags: mine.slice(0, 2), new_tags: [word] };
 }
 
+/**
+ * The weekly digest, when asked for: one group of all the week's clippings (the ids in
+ * `<this_week>`) and the first archive clipping (in `<archive>`) brought back.
+ */
+function weeklyDigest(message) {
+  const idsIn = (tag) => {
+    const section = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`).exec(message)?.[1] ?? "";
+    return [...section.matchAll(/<clipping id="([^"]+)">/g)].map((match) => match[1]);
+  };
+  const [first] = idsIn("archive");
+  return {
+    groups: [
+      {
+        title: "This week's reading",
+        summary: "A stand-in summary of everything saved this week.",
+        clippingIds: idsIn("this_week"),
+      },
+    ],
+    resurfaced: first ? [{ clippingId: first, why: "A stand-in reason it fits this week." }] : [],
+  };
+}
+
 listen(8081, "fake anthropic", (request, response, body) => {
   const payload = JSON.parse(body || "{}");
   // The content is a string or a list of blocks (a PDF comes as a document block before the text).
@@ -147,6 +169,7 @@ listen(8081, "fake anthropic", (request, response, body) => {
         .map((block) => block.text)
         .join("\n")
     : String(content);
+  const digests = payload.tool_choice?.name === "save_digest";
   const title = /^Page title: (.*)$/m.exec(message)?.[1];
   // Present when the tool asks for suggestions (tag suggestions are on for the user).
   const suggests = Boolean(payload.tools?.[0]?.input_schema?.properties?.existing_tags);
@@ -168,12 +191,14 @@ listen(8081, "fake anthropic", (request, response, body) => {
             type: "tool_use",
             id: "toolu_local",
             name: payload.tool_choice?.name ?? "save_reading",
-            input: {
-              title: `Read: ${title ?? "Untitled"}`,
-              summary: "A stand-in summary of the page. It says what the page is about.",
-              excerpt: "A stand-in passage copied from the page.",
-              ...(suggests ? suggestTags(message, title) : {}),
-            },
+            input: digests
+              ? weeklyDigest(message)
+              : {
+                  title: `Read: ${title ?? "Untitled"}`,
+                  summary: "A stand-in summary of the page. It says what the page is about.",
+                  excerpt: "A stand-in passage copied from the page.",
+                  ...(suggests ? suggestTags(message, title) : {}),
+                },
           },
         ],
         usage: { input_tokens: 10, output_tokens: 10 },
