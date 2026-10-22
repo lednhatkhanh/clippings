@@ -84,8 +84,10 @@ TEST_DATABASE_URL=postgres://postgres:postgres@localhost:55432/postgres pnpm tes
 
 ## Connecting Claude
 
-The MCP server is at `<BETTER_AUTH_URL>/mcp`. It has three tools: `save_clipping`,
-`search_clippings` and `list_recent`.
+The MCP server is at `<BETTER_AUTH_URL>/mcp`. Every client gets
+`save_clipping`, `search_clippings`, `list_recent`, `list_clippings` and `related_clippings`; one
+that asks for the write scope also gets `get_clipping`, `update_clipping`, `tag_clippings`,
+`list_tags`, `rename_tag`, `merge_tag`, `delete_clipping` and `restore_clipping`.
 
 - **claude.ai**: Settings → Connectors → Add custom connector, with that URL.
 - **Claude Code**: `claude mcp add --transport http clippings <BETTER_AUTH_URL>/mcp`, then `/mcp`
