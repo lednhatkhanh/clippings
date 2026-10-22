@@ -396,6 +396,7 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
     const WRITE_TOOLS = [
       "delete_clipping",
       "get_clipping",
+      "get_page_text",
       "list_tags",
       "restore_clipping",
       "update_clipping",

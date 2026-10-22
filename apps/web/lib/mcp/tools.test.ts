@@ -19,6 +19,7 @@ import type { McpCaller } from "./tools.ts";
 const WRITE_TOOLS = [
   "delete_clipping",
   "get_clipping",
+  "get_page_text",
   "list_tags",
   "restore_clipping",
   "update_clipping",
@@ -137,6 +138,7 @@ describe.skipIf(!TEST_DATABASE_URL)("the MCP tools", () => {
 
     const calls: [string, Record<string, unknown>][] = [
       ["get_clipping", { id }],
+      ["get_page_text", { id }],
       ["update_clipping", { id, title: "Renamed", note: "changed", tags: ["x"] }],
       ["list_tags", {}],
       ["delete_clipping", { id }],
@@ -316,6 +318,49 @@ describe.skipIf(!TEST_DATABASE_URL)("the MCP tools", () => {
         title: "Garden plan",
         pageTitle: "An essay about gardening",
       });
+    });
+
+    it("returns the page text Clippings saved, and says so when there is none", async () => {
+      fixture.web.set("https://example.com/essay", {
+        page: { title: "Essay | Example", text: "A long essay about gardening." },
+        summary: {
+          title: "An essay about gardening",
+          summary: "Why small gardens beat big ones.",
+          excerpt: "A long essay about gardening",
+        },
+      });
+      const { id } = await save(ada, "https://example.com/essay");
+
+      // Still pending: nothing was read yet.
+      const unread = await callTool(ada, "get_page_text", { id });
+      expect(unread.isError).toBe(true);
+      expect(unread.text).toBe("Clippings has no saved text for that clipping.");
+
+      await fixture.service.enrichClipping(id);
+      expect((await callTool(ada, "get_page_text", { id })).json()).toEqual({
+        id,
+        url: "https://example.com/essay",
+        title: "An essay about gardening",
+        text: "A long essay about gardening.",
+        fetchedAt: "2026-10-01T09:00:00.000Z",
+      });
+    });
+
+    it("keeps users apart for page text, and hides it once the clipping is deleted", async () => {
+      fixture.web.set("https://example.com/ada-only", {
+        page: { title: "Private", text: "Ada's private page text." },
+        summary: { title: "Private", summary: "s", excerpt: "e" },
+      });
+      const { id } = await save(ada, "https://example.com/ada-only");
+      await fixture.service.enrichClipping(id);
+
+      const refused = await callTool(bob, "get_page_text", { id });
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toBe("The user has no clipping with that id.");
+      expect(refused.text).not.toContain("private");
+
+      await callTool(ada, "delete_clipping", { id });
+      expect((await callTool(ada, "get_page_text", { id })).isError).toBe(true);
     });
 
     it("keeps users apart: another user's clipping is not found, read, changed or deleted", async () => {

@@ -42,6 +42,7 @@ export {
   TagNameTakenError,
   TitleTooLongError,
   type ClippingsExport,
+  type ClippingText,
   type ClippingsPage,
   type ClippingsService,
   type EnrichmentOutcome,

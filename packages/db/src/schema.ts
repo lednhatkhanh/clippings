@@ -458,6 +458,29 @@ export const clippingTags = pgTable(
   ],
 );
 
+/**
+ * The readable text of a clipping's page, as the last enrichment read it (cut to what the
+ * summarizer takes). One row per clipping, replaced on every re-read and absent when the page had
+ * no text. The foreign key includes the user id, as in `clipping_tags`.
+ */
+export const clippingTexts = pgTable(
+  "clipping_texts",
+  {
+    clippingId: uuid("clipping_id").primaryKey(),
+    userId: text("user_id").notNull(),
+    text: text("text").notNull(),
+    // No default: the service stamps it from its clock.
+    fetchedAt: timestamptz("fetched_at").notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "clipping_texts_clipping_fkey",
+      columns: [table.clippingId, table.userId],
+      foreignColumns: [clippings.id, clippings.userId],
+    }).onDelete("cascade"),
+  ],
+);
+
 /** Where a tag suggestion came from. */
 export const SUGGESTION_ORIGINS = ["model", "neighbours"] as const;
 
