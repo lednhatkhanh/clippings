@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
@@ -8,6 +10,8 @@ export default defineConfig({
     // start after a lockfile change. Turbo starts them together, so one clear can hit another's
     // writes and fail the run (ENOTEMPTY) before any test runs.
     fsModuleCache: false,
+    // One migrated template per run, copied for each database test.
+    globalSetup: [fileURLToPath(import.meta.resolve("@clippings/db/test-global-setup"))],
     include: ["**/*.test.ts"],
     exclude: ["node_modules", ".next"],
   },

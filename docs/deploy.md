@@ -145,10 +145,15 @@ Repo → Settings → Secrets and variables → Actions.
 | `NEON_PROJECT_ID`                 | `young-forest-43160496`                                     |
 | `NEON_API_KEY`                    | the Neon API key from step 1                                |
 | `PRODUCTION_DATABASE_URL_DIRECT`  | Neon `production` branch, **direct** (not pooled) URL       |
+| `TURBO_TOKEN` (optional)          | Vercel → Account Settings → Tokens, scoped to the team: turns on Turborepo's remote cache in CI |
 
 **Repository variable** (not a secret): `DEVELOPMENT_ALIAS`, a free `*.vercel.app` hostname for the
 development environment, such as `clippings-dev.vercel.app`. If it's unset, development still
 deploys, just without a stable URL.
+
+**Repository variable** (optional, with `TURBO_TOKEN`): `TURBO_TEAM`, the Vercel team's slug. With
+both set, CI's two jobs and later runs replay any lint, typecheck, test or build whose inputs didn't
+change; without them, each job keeps to its own cache.
 
 **Hardening**: Settings → Rules has "Protect default and production branches" (pull request, status
 checks, no force-push, no deletion) covering `main` and `production`. Optionally, Settings →
