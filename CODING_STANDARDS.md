@@ -44,8 +44,8 @@ type-aware) and types (`tsc`); this file holds what none of them says.
 - Motion: entrances settle (`ease-settle` or the paper spring), exits are quicker (`ease-exit`),
   only the saved check and a new tag pop. Multiply any travel distance by
   `--motion-spatial-factor`, which reduced motion sets to 0.
-- After changing `apps/web/lib/pwa/app-icon.ts`, run `pnpm --filter @clippings/web build:app-icons`;
-  `manifest.test.ts` fails on a stale icon.
+- After changing `apps/web/lib/pwa/app-icon.ts` or `launch-screen.ts` (the iOS launch screens), run
+  `pnpm --filter @clippings/web build:app-icons`; `manifest.test.ts` fails on a stale image.
 
 ## Database
 
