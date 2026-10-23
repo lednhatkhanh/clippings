@@ -30,6 +30,7 @@ export {
   type FilterChipsProps,
 } from "./components/filter-chips.tsx";
 export { Dialog, DialogTrigger, Heading, Modal, type ModalProps } from "./components/modal.tsx";
+export { LinkRenderProvider, useLinkRender, type LinkRender } from "./components/link-render.tsx";
 export {
   Menu,
   MenuItem,

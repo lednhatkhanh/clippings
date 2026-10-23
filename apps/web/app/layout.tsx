@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 
+import { NextLinks } from "@/components/next-links.tsx";
 import { ServiceWorker } from "@/components/service-worker.tsx";
 import { APP_DESCRIPTION, APP_NAME } from "@/lib/pwa/app-identity.ts";
 import { DEFAULT_PALETTE } from "@clippings/shared";
@@ -41,7 +42,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH_SCRIPT }} />
       </head>
       <body>
-        {children}
+        <NextLinks>{children}</NextLinks>
         <ServiceWorker />
       </body>
     </html>

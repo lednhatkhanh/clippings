@@ -130,10 +130,29 @@ test.describe("a clipping (/c/<id>)", () => {
     await expect(page.getByRole("textbox", { name: "Note" })).toBeVisible();
   });
 
-  // The way in from another page is a Related link, not a list row. A row isn't a link, so nothing
-  // prefetches its page before the click, and the prefetch the router then starts under the lock
-  // intermittently never lets the navigation commit (about half the runs here). Asking for the
-  // prefetch first makes the lock hand over the whole page instead of the shell.
+  // A row is a grid row, not a link, so the list prefetches the clipping page itself: the first
+  // row's when the list mounts (one shell serves every clipping), then a row's on hover or focus.
+  test("is instant on a navigation from the list", async ({ page, user, clippings }) => {
+    const { clipping } = await clippings.saveClipping(user.id, {
+      url: URL_ON_LIST,
+      source: "web",
+    });
+    await startOn(page, "/", row(page));
+
+    await instant(page, async () => {
+      await row(page).click();
+      await page.waitForURL((url) => url.pathname === `/c/${clipping.id}`);
+      await expectAppShell(page);
+      await expect(
+        page.getByRole("main").getByRole("link", { name: "Clippings", exact: true }),
+      ).toBeVisible();
+      await expect(page.getByRole("textbox", { name: "Note" })).toHaveCount(0);
+    });
+
+    await expect(page.getByRole("heading", { name: URL_ON_LIST, level: 1 })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Note" })).toBeVisible();
+  });
+
   test("is instant on a navigation from another clipping", async ({
     page,
     user,
