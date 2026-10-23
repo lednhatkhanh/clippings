@@ -1115,9 +1115,23 @@ export function createClippingsService({
    * clipping or it has no saved text.
    */
   async function getClippingText(userId: string, clippingId: string): Promise<ClippingText | null> {
-    if (!UUID.test(clippingId)) return null;
-    const [row] = await db
+    return (await getClippingTexts(userId, [clippingId])).get(clippingId) ?? null;
+  }
+
+  /**
+   * `getClippingText` for several clippings in one query: the ones that have text, by id. An id
+   * that is not the user's, not live, without saved text or not a UUID is left out.
+   */
+  async function getClippingTexts(
+    userId: string,
+    clippingIds: readonly string[],
+  ): Promise<Map<string, ClippingText>> {
+    const ids = clippingIds.filter((id) => UUID.test(id));
+    const texts = new Map<string, ClippingText>();
+    if (ids.length === 0) return texts;
+    const rows = await db
       .select({
+        id: clippingTexts.clippingId,
         url: clippings.url,
         title: sql<string>`${shownTitle}`,
         text: clippingTexts.text,
@@ -1128,16 +1142,11 @@ export function createClippingsService({
         clippings,
         and(eq(clippings.id, clippingTexts.clippingId), eq(clippings.userId, clippingTexts.userId)),
       )
-      .where(and(eq(clippingTexts.clippingId, clippingId), eq(clippingTexts.userId, userId), live));
-    return row
-      ? {
-          id: clippingId,
-          url: row.url,
-          title: row.title,
-          text: row.text,
-          fetchedAt: formatIsoUtc(row.fetchedAt),
-        }
-      : null;
+      .where(and(inArray(clippingTexts.clippingId, ids), eq(clippingTexts.userId, userId), live));
+    for (const row of rows) {
+      texts.set(row.id, { ...row, fetchedAt: formatIsoUtc(row.fetchedAt) });
+    }
+    return texts;
   }
 
   /**
@@ -1286,28 +1295,36 @@ export function createClippingsService({
   /**
    * One of the user's clippings, or null when they have no such clipping. The detail read: it
    * also carries the tag suggestions the user hasn't dismissed, while they have suggestions on.
+   * A caller that only shows the row (the list's poll) passes `suggestions: false` to skip them.
    */
-  async function getClipping(userId: string, clippingId: string): Promise<Clipping | null> {
+  async function getClipping(
+    userId: string,
+    clippingId: string,
+    { suggestions = true }: { suggestions?: boolean } = {},
+  ): Promise<Clipping | null> {
     if (!UUID.test(clippingId)) return null;
     const [row] = await db
       .select(clippingColumns)
       .from(clippings)
       .where(and(eq(clippings.id, clippingId), eq(clippings.userId, userId), live));
     if (!row) return null;
-    const clipping = await oneWithTags(userId, row);
-    const suggested = await db
-      .select({ name: clippingTagSuggestions.name })
-      .from(clippingTagSuggestions)
-      .where(
-        and(
-          eq(clippingTagSuggestions.clippingId, clippingId),
-          eq(clippingTagSuggestions.userId, userId),
-          isNull(clippingTagSuggestions.dismissedAt),
-          suggestionsOn(userId),
-          notTaggedAs(clippingId, userId, clippingTagSuggestions.name),
-        ),
-      )
-      .orderBy(clippingTagSuggestions.origin, tagKey(clippingTagSuggestions.name));
+    if (!suggestions) return oneWithTags(userId, row);
+    const [clipping, suggested] = await Promise.all([
+      oneWithTags(userId, row),
+      db
+        .select({ name: clippingTagSuggestions.name })
+        .from(clippingTagSuggestions)
+        .where(
+          and(
+            eq(clippingTagSuggestions.clippingId, clippingId),
+            eq(clippingTagSuggestions.userId, userId),
+            isNull(clippingTagSuggestions.dismissedAt),
+            suggestionsOn(userId),
+            notTaggedAs(clippingId, userId, clippingTagSuggestions.name),
+          ),
+        )
+        .orderBy(clippingTagSuggestions.origin, tagKey(clippingTagSuggestions.name)),
+    ]);
     return { ...clipping, suggestedTags: suggested.map((suggestion) => suggestion.name) };
   }
 
@@ -2207,6 +2224,7 @@ export function createClippingsService({
     relatedClippings,
     exportClippings,
     getClippingText,
+    getClippingTexts,
     updateClipping,
     tagClippings,
     getClipping,

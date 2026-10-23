@@ -92,8 +92,11 @@ export async function loadRows(
   };
 }
 
-/** One of the user's clippings as a list row, or null when they have no such clipping. */
+/**
+ * One of the user's clippings as a list row, or null when they have no such clipping. A pending
+ * row polls this every few seconds, and a row shows no tag suggestions, so they aren't read.
+ */
 export async function loadRow(userId: string, clippingId: string): Promise<ClippingRowData | null> {
-  const clipping = await getClippings().getClipping(userId, clippingId);
+  const clipping = await getClippings().getClipping(userId, clippingId, { suggestions: false });
   return clipping ? toRow(clipping, constructNow(undefined)) : null;
 }
