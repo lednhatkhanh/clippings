@@ -7,6 +7,7 @@ import type {
 } from "react-aria-components";
 
 import { cn } from "../cn.ts";
+import { useLinkRender } from "./link-render.tsx";
 
 // `filled` is the one accent action, `paper` the quiet alternative that lifts on hover, `text` a
 // bare label, `danger` a destructive confirm. `tonal` and `outlined` are older names for `paper`.
@@ -43,5 +44,11 @@ export interface LinkButtonProps extends Omit<AriaLinkProps, "className"> {
 
 /** A link that looks like a button. */
 export function LinkButton({ variant = "text", className, ...props }: LinkButtonProps) {
-  return <AriaLink {...props} className={cn(BASE, VARIANTS[variant], className)} />;
+  return (
+    <AriaLink
+      render={useLinkRender()}
+      {...props}
+      className={cn(BASE, VARIANTS[variant], className)}
+    />
+  );
 }

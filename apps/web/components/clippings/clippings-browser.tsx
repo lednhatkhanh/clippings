@@ -1,7 +1,7 @@
 "use client";
 
 import { debounce, useQueryStates } from "nuqs";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 
 import { useLaunchParam } from "@/components/use-launch-param.ts";
@@ -108,9 +108,34 @@ export function ClippingsBrowser({
   // What the server rendered: it renders again, with fresh rows, after a save or delete.
   const isServerPage = key === toQueryString(initialParams);
 
+  // A search the reader has typed past is cancelled, not just ignored: it would otherwise run to
+  // the end on the server and the connection.
+  const searchUrl = isServerPage ? null : `/api/clippings?${key}`;
+  const inFlight = useRef(new Map<string, AbortController>());
+  useEffect(() => {
+    const requests = inFlight.current;
+    return () => {
+      if (searchUrl) requests.get(searchUrl)?.abort();
+    };
+  }, [searchUrl]);
   const { data, error, isLoading } = useSWR(
-    isServerPage ? null : `/api/clippings?${key}`,
-    fetchRows,
+    searchUrl,
+    (url: string) => {
+      const controller = new AbortController();
+      inFlight.current.set(url, controller);
+      return fetchRows(url, controller.signal)
+        .catch((error: unknown) => {
+          // Cancelled on purpose: no data, and no error to show if the reader comes back to it.
+          if (controller.signal.aborted) return undefined;
+          throw error;
+        })
+        .finally(() => {
+          if (inFlight.current.get(url) === controller) inFlight.current.delete(url);
+        });
+      // No deduping: coming back to a search cancelled moments ago must ask again, not reuse the
+      // empty answer the cancelled one resolved with.
+    },
+    { dedupingInterval: 0 },
   );
   const current = isServerPage ? initialPage : isLoading ? undefined : data;
 
@@ -222,7 +247,7 @@ export function ClippingsBrowser({
           />
         ) : (
           <ClippingList
-            key={`${shown.key}|${pinned.map((row) => row.id).join()}|${rows.map((row) => row.id).join()}`}
+            key={shown.key}
             query={shown.key}
             initialPinned={pinned}
             initialRows={rows}

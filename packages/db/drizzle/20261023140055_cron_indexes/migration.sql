@@ -1,0 +1,4 @@
+CREATE INDEX "clippings_stuck_idx" ON "clippings" ("status_changed_at") WHERE "status" in ('pending', 'failed') and "deleted_at" is null;--> statement-breakpoint
+CREATE INDEX "clippings_link_check_idx" ON "clippings" ("link_checked_at" NULLS FIRST,"id") WHERE "status" = 'ready' and "deleted_at" is null;--> statement-breakpoint
+CREATE INDEX "clippings_unembedded_idx" ON "clippings" ("created_at" DESC) WHERE "status" = 'ready' and "embedding" is null and "deleted_at" is null;--> statement-breakpoint
+CREATE INDEX "clippings_deleted_idx" ON "clippings" ("deleted_at") WHERE "deleted_at" is not null;

@@ -1,14 +1,15 @@
 "use client";
 
 import { Copy, Ellipsis, Pin, PinOff, Share2 } from "lucide-react";
-import { useState } from "react";
+import type { Route } from "next";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   Button as AriaButton,
   GridList,
   GridListItem,
   GridListLoadMoreItem,
 } from "react-aria-components";
-import useSWR from "swr";
 
 import {
   loadMoreClippingsAction,
@@ -24,10 +25,12 @@ import { Button, Menu, MenuItem, MenuTrigger, ProgressBar, TagChips, toasts } fr
 
 import { useRowPresence, type RowPresence } from "./deleted-clippings.tsx";
 import { Favicon } from "./favicon.tsx";
-import { fetchRow, POLL_EVERY_MS } from "./fetch-row.ts";
 import { HighlightedText } from "./highlighted-text.tsx";
 import { copyLinkWithToast, shareLinkWithToast, useCanShare } from "./link-actions.ts";
+import { refreshFirstPage } from "./refresh-first-page.ts";
 import { StatusMotion } from "./status-motion.tsx";
+import { useOnScreen } from "./use-on-screen.ts";
+import { usePendingPoll } from "./use-pending-poll.ts";
 
 /** Whether every animation on an element has finished: a row settles on its last one. */
 const hasSettled = (element: Element) =>
@@ -56,16 +59,38 @@ function ClippingRow({
   onSettle: () => void;
 }) {
   const [row, setRow] = useState(initialRow);
+  // The list keeps its rows mounted across a server refresh, so a row the server sends again
+  // (renamed, retagged, read while off screen) replaces what this row last polled.
+  const [lastInitialRow, setLastInitialRow] = useState(initialRow);
+  if (initialRow !== lastInitialRow) {
+    setLastInitialRow(initialRow);
+    setRow(initialRow);
+  }
   const [retrying, setRetrying] = useState(false);
   const [entering, setEntering] = useState(isNew);
   const online = useOnline();
   const canShare = useCanShare();
+  const router = useRouter();
+  // State, not a ref object: React Aria renders the item's element after this component commits.
+  const [element, setElement] = useState<HTMLDivElement | null>(null);
+  const href = `/c/${row.id}`;
 
   // A pending row asks for itself until enrichment has finished, then shows the result in place.
-  useSWR(row.status === "pending" ? `/api/clippings/${row.id}` : null, fetchRow, {
-    refreshInterval: POLL_EVERY_MS,
-    onSuccess: setRow,
-  });
+  // Only while on screen, and ever more slowly (`poll-schedule.ts`): an imported backlog stays
+  // pending for hours, and its rows must not each hold a request open.
+  const pending = row.status === "pending";
+  const onScreen = useOnScreen(element, pending);
+  usePendingPoll(row.id, pending && onScreen, setRow);
+
+  // The row can't be a link (it's a grid list item), so it warms the detail page itself. Under
+  // partial prefetching the shell is shared by every `/c/<id>`, so this is cheap after the first.
+  const prefetch = () => router.prefetch(href as Route);
+  // A grid list item has no focus prop, so keyboard focus (arrow keys) is listened for here.
+  useEffect(() => {
+    const onFocusIn = () => router.prefetch(href as Route);
+    element?.addEventListener("focusin", onFocusIn);
+    return () => element?.removeEventListener("focusin", onFocusIn);
+  }, [element, router, href]);
 
   async function retry() {
     setRetrying(true);
@@ -79,9 +104,12 @@ function ClippingRow({
 
   return (
     <GridListItem
+      ref={setElement}
       id={row.id}
       textValue={row.title}
-      href={`/c/${row.id}`}
+      href={href}
+      onHoverStart={prefetch}
+      onPressStart={prefetch}
       className="group @container mb-2.5 row-presence rounded-lg"
       // CSS animates a row that is deleted, undone or new (`app/list-motion.css` says why not a
       // view transition), and the list drops the row once its last animation ends.
@@ -185,8 +213,9 @@ function ClippingRow({
  * The rows the list shows. The first page is given, with the pinned group above it; later pages
  * of the list `query` describes (a `toQueryString` result) load as the last row scrolls into
  * view. Pinned rows are the first rows of the same list, so the arrow keys run through them.
- * Pinning moves a row between the groups at once. Remount it (change its `key`) when the first
- * page changes.
+ * Pinning moves a row between the groups at once. Remount it (change its `key`) when `query`
+ * changes; a new first page for the same query (a save or delete refreshed it) merges in, and the
+ * pages already loaded stay.
  */
 export function ClippingList({
   query,
@@ -207,9 +236,28 @@ export function ClippingList({
     rows: initialRows,
   });
   const [cursor, setCursor] = useState(initialCursor);
+  const [loadedMore, setLoadedMore] = useState(false);
+  const [firstPage, setFirstPage] = useState({ pinned: initialPinned, rows: initialRows });
   const [isLoading, setIsLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   const { presence, settle } = useRowPresence();
+  const router = useRouter();
+
+  if (firstPage.pinned !== initialPinned || firstPage.rows !== initialRows) {
+    const next = { pinned: initialPinned, rows: initialRows };
+    setFirstPage(next);
+    setGroups((current) => refreshFirstPage(current, next, loadedMore));
+    if (!loadedMore) setCursor(initialCursor);
+  }
+
+  // The first row is the likeliest one to open, and under partial prefetching warming it warms
+  // the detail page's shell for every row. The others prefetch when the pointer or focus reaches
+  // them.
+  const firstId = (groups.pinned[0] ?? groups.rows[0])?.id;
+  useEffect(() => {
+    if (firstId) router.prefetch(`/c/${firstId}` as Route);
+  }, [firstId, router]);
+
   const params = loadBrowseParams(query);
   const tagHref = (tag: string) => hrefWithTag(params, tag);
   // Search results ignore pins: a pinned result stays where it ranks.
@@ -234,6 +282,7 @@ export function ClippingList({
       const page = await loadMoreClippingsAction(query, cursor);
       setGroups((current) => appendPage(current, page.rows));
       setCursor(page.nextCursor);
+      setLoadedMore(true);
     } catch {
       setFailed(true);
     } finally {

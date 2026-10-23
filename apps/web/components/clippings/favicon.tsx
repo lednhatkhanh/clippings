@@ -45,6 +45,7 @@ export function Favicon({ url, size = "row" }: { url: string; size?: keyof typeo
           width={20}
           height={20}
           loading="lazy"
+          decoding="async"
           referrerPolicy="no-referrer"
           onError={() => setFailed(true)}
           className={cn("rounded-xs", image)}

@@ -33,6 +33,13 @@ describe.skipIf(!TEST_DATABASE_URL)("the saved page text", () => {
     return clipping.id;
   }
 
+  async function saveAndReadAt(userId: string, url: string, text: string) {
+    fixture.web.set(url, { page: { title: "Another page", text }, summary });
+    const { clipping } = await fixture.service.saveClipping(userId, { url, source: "web" });
+    await fixture.service.enrichClipping(clipping.id);
+    return clipping.id;
+  }
+
   it("keeps the text the page was read with, stamped with the read time", async () => {
     const ana = await fixture.createUser("ana");
     setPage("A long essay about gardening, from start to end.");
@@ -111,6 +118,40 @@ describe.skipIf(!TEST_DATABASE_URL)("the saved page text", () => {
       text: "Ana's page.",
     });
     expect(await fixture.service.getClippingText(ana, "not-an-id")).toBeNull();
+  });
+
+  it("reads the text of several clippings at once, leaving out those with none", async () => {
+    const ana = await fixture.createUser("ana");
+    setPage("The first page.");
+    const first = await saveAndRead(ana);
+    const second = (
+      await fixture.service.saveClipping(ana, { url: "https://example.com/other", source: "web" })
+    ).clipping.id;
+    const deleted = await saveAndReadAt(ana, "https://example.com/gone", "A gone page.");
+    await fixture.service.deleteClipping(ana, deleted);
+
+    const texts = await fixture.service.getClippingTexts(ana, [
+      first,
+      second,
+      deleted,
+      "not-an-id",
+    ]);
+
+    expect([...texts.keys()]).toEqual([first]);
+    expect(texts.get(first)).toEqual(await fixture.service.getClippingText(ana, first));
+    expect(await fixture.service.getClippingTexts(ana, [])).toEqual(new Map());
+  });
+
+  it("keeps users apart when reading several texts at once", async () => {
+    const ana = await fixture.createUser("ana");
+    const ben = await fixture.createUser("ben");
+    setPage("A page.");
+    const anas = await saveAndRead(ana);
+    const bens = await saveAndRead(ben);
+
+    const texts = await fixture.service.getClippingTexts(ana, [anas, bens]);
+
+    expect([...texts.keys()]).toEqual([anas]);
   });
 
   it("hides the text of a deleted clipping, and shows it again after an undo", async () => {

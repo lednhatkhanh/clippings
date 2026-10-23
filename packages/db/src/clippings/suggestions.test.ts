@@ -144,6 +144,18 @@ describe.skipIf(!TEST_DATABASE_URL)("tag suggestions", () => {
       expect((await fixture.service.listTags(ana)).map((tag) => tag.name)).toEqual(["css", "web"]);
     });
 
+    it("a read that asks for no suggestions leaves them out", async () => {
+      const ana = await fixture.createUser("ana");
+      await fixture.settings.setSuggestTags(ana, true);
+      const id = await clip(ana, "https://example.com/a", { tags: ["web"], suggested: ["css"] });
+
+      const row = await fixture.service.getClipping(ana, id, { suggestions: false });
+
+      expect(row?.tags.map((tag) => tag.name)).toEqual(["web"]);
+      expect(row?.suggestedTags).toEqual([]);
+      expect(await suggestedFor(ana, id)).toEqual(["css"]);
+    });
+
     it("accepting a name that isn't a suggestion changes nothing", async () => {
       const ana = await fixture.createUser("ana");
       await fixture.settings.setSuggestTags(ana, true);
