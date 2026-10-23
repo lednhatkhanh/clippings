@@ -35,7 +35,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        vercel() { pnpm dlx vercel@64.2.0 "$@"; }
+        vercel() { pnpm dlx vercel@65.1.0 "$@"; }
 
         if [ "$PRODUCTION" = "true" ]; then
           environment=production
