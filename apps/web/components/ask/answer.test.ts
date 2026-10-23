@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import type { AskEvent } from "@clippings/shared";
 
 import {
+  answerMarkdown,
   ASKING_ANSWER,
+  citeNumber,
   CUT_OFF_MESSAGE,
   endAnswer,
   readEvents,
@@ -118,5 +120,48 @@ describe("readEvents", () => {
     ["an event missing a field", '{"type":"citation","clippingId":"a"}\n'],
   ])("skips %s", (_name, chunk) => {
     expect(readEvents("", chunk + line(text("ok")))).toEqual({ events: [text("ok")], rest: "" });
+  });
+});
+
+describe("answerMarkdown", () => {
+  it.each([
+    ["a marker as a citation link", ["A.", 1], "A.[1](#cite-1)"],
+    [
+      "a marker before the line break that ends a list item",
+      ["- **A:** one\n", 1, "- two"],
+      "- **A:** one[1](#cite-1)\n- two",
+    ],
+    [
+      "a marker before the blank line that ends a paragraph",
+      ["One.\n\n", 2, "Two."],
+      "One.[2](#cite-2)\n\nTwo.",
+    ],
+    ["markers in a row", ["A.", 1, 2], "A.[1](#cite-1)[2](#cite-2)"],
+    ["a marker after a `!`, escaped so it isn't an image", ["Great!", 1], "Great\\![1](#cite-1)"],
+    [
+      "a marker after a closing fence, on its own line",
+      ["```\ncode\n```\n", 1, "Next."],
+      "```\ncode\n```\n\n[1](#cite-1)\nNext.",
+    ],
+  ])("writes %s", (_name, parts, markdown) => {
+    expect(
+      answerMarkdown(
+        parts.map((part) =>
+          typeof part === "string" ? { type: "text", text: part } : { type: "cite", number: part },
+        ),
+      ),
+    ).toBe(markdown);
+  });
+});
+
+describe("citeNumber", () => {
+  it.each([
+    ["#cite-3", 3],
+    ["#cite-12", 12],
+    ["https://example.com/#cite-3", null],
+    ["#cite-", null],
+    [undefined, null],
+  ])("reads %s as %s", (href, number) => {
+    expect(citeNumber(href)).toBe(number);
   });
 });

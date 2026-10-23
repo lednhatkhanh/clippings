@@ -35,21 +35,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      # No `version` input: reads `packageManager` / `devEngines.packageManager` from package.json.
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-
+      # Turborepo's local cache, and Turbopack's: a build that turbo can't replay still compiles
+      # only what changed (about a minute cold on a runner).
       - uses: actions/cache@v6
         with:
-          path: .turbo
-          key: ${{ runner.os }}-turbo-${{ github.sha }}
-          restore-keys: ${{ runner.os }}-turbo-
+          path: |
+            .turbo
+            apps/web/.next/cache
+          # Not `turbo-` alone: as a restore prefix it would also match the e2e job's keys.
+          key: ${{ runner.os }}-turbo-check-${{ github.sha }}
+          restore-keys: ${{ runner.os }}-turbo-check-
 
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup
 
       - name: Check root files
         run: pnpm check:root
@@ -58,6 +55,11 @@ jobs:
       - name: Lint, format, typecheck, test, build
         run: node scripts/run-checks.mjs
         env:
+          # Turborepo's remote cache on Vercel, shared by both jobs and across runs, so a task whose
+          # inputs didn't change replays. Without the secret, turbo keeps to the local cache. Set
+          # only on the turbo steps, so install scripts never see the token.
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ vars.TURBO_TEAM }}
           BEFORE_SHA: ${{ github.event.before }}
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
 
@@ -76,9 +78,9 @@ jobs:
           include-hidden-files: true
 
   # The end-to-end suite (apps/e2e): a production build of the web app in a real browser, on the
-  # same kind of Postgres. Its own job and task, so `pnpm test` stays fast and needs no browser.
+  # same kind of Postgres. Its own job and task, so `pnpm test` stays fast and needs no browser. It
+  # runs alongside `check` rather than after it: a run takes as long as the slower of the two.
   e2e:
-    needs: check
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
@@ -96,14 +98,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v7
+      # As in `check`, under its own key: the end-to-end build has its own task hash and directory,
+      # and two jobs can't save one key.
+      - uses: actions/cache@v6
         with:
-          node-version-file: .node-version
-          cache: pnpm
+          path: |
+            .turbo
+            apps/web/.next-e2e/cache
+          key: ${{ runner.os }}-turbo-e2e-${{ github.sha }}
+          restore-keys: ${{ runner.os }}-turbo-e2e-
 
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup
 
       # No browser cache: restoring one costs about as much as downloading Chromium.
       - name: Install Chromium
@@ -117,6 +122,8 @@ jobs:
       - name: End-to-end tests
         run: pnpm e2e
         env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ vars.TURBO_TEAM }}
           E2E_DATABASE_URL: postgres://postgres:postgres@localhost:5432/clippings_e2e
 
       - uses: actions/upload-artifact@v7

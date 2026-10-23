@@ -16,11 +16,10 @@ import type {
 import { createClippingsService } from "../clippings/service.ts";
 import { createConnectionsService } from "../connections/service.ts";
 import { createDigestService } from "../digest/service.ts";
-import { migrate } from "../migrate.ts";
 import { createPool } from "../pool.ts";
 import { EMBEDDING_DIMENSIONS } from "../schema.ts";
 import { createSettingsService } from "../settings/service.ts";
-import { createTempDatabase, type TempDatabase } from "./temp-database.ts";
+import { createMigratedDatabase, type TempDatabase } from "./temp-database.ts";
 
 /**
  * A migrated, throwaway database with the Clippings service on top and in-memory ports: a clock
@@ -30,8 +29,7 @@ import { createTempDatabase, type TempDatabase } from "./temp-database.ts";
  * that knows what words mean only from `meanings`.
  */
 export async function createServiceFixture() {
-  const database: TempDatabase = await createTempDatabase();
-  await migrate({ connectionString: database.url });
+  const database: TempDatabase = await createMigratedDatabase();
   const pool: pg.Pool = createPool(database.url);
 
   let now = parseISO("2026-10-01T09:00:00.000Z");

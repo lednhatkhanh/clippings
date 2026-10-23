@@ -166,9 +166,10 @@ const STREAM_DELAY_MS = 60;
 const sse = (type, data) => `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
 
 /**
- * A streamed answer to a question asked over `search_result` blocks (the ask page): a lead-in, then
- * the first result's own words as a cited passage, then a closing sentence. Streamed in small
- * deltas so the page shows the answer arriving.
+ * A streamed answer to a question asked over `search_result` blocks (the ask page), in Markdown: a
+ * lead-in, then a list whose first item quotes the first result as a cited passage. Like the real
+ * API, each cited passage is its own text block whose citation comes before its text. Streamed in
+ * small deltas so the page shows the answer arriving.
  */
 function streamAnswer(payload, response) {
   const content = payload.messages?.at(-1)?.content ?? [];
@@ -185,13 +186,24 @@ function streamAnswer(payload, response) {
     start_block_index: 0,
     end_block_index: 1,
   };
-  const words = (text) => text.match(/\S+\s*/g) ?? [];
-  const chunks = [
-    ...words("Here is what your clippings say: ").map((text) => ({ text })),
-    ...words(passage).map((text) => ({ text })),
-    { citation },
-    ...words(" That is all they say about it.").map((text) => ({ text })),
+  const words = (text) => text.match(/\s*\S+\s*/g) ?? [];
+  const blocks = [
+    { text: "Your clippings cover it:\n\n- **What they say:** " },
+    { citation, text: passage },
+    { text: "\n- **What else:** nothing more on this." },
   ];
+  // Each block as its start, its deltas (a citation first) and its stop.
+  const events = blocks.flatMap((block, index) => [
+    ["content_block_start", { index, content_block: { type: "text", text: "", citations: [] } }],
+    ...(block.citation
+      ? [["content_block_delta", { index, delta: { type: "citations_delta", citation } }]]
+      : []),
+    ...words(block.text).map((text) => [
+      "content_block_delta",
+      { index, delta: { type: "text_delta", text } },
+    ]),
+    ["content_block_stop", { index }],
+  ]);
 
   response.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
   response.write(
@@ -208,14 +220,10 @@ function streamAnswer(payload, response) {
       },
     }),
   );
-  response.write(
-    sse("content_block_start", { index: 0, content_block: { type: "text", text: "" } }),
-  );
   let next = 0;
   const step = () => {
-    const chunk = chunks[next++];
-    if (!chunk) {
-      response.write(sse("content_block_stop", { index: 0 }));
+    const event = events[next++];
+    if (!event) {
       response.write(
         sse("message_delta", {
           delta: { stop_reason: "end_turn", stop_sequence: null },
@@ -225,10 +233,7 @@ function streamAnswer(payload, response) {
       response.end(sse("message_stop", {}));
       return;
     }
-    const delta = chunk.citation
-      ? { type: "citations_delta", citation: chunk.citation }
-      : { type: "text_delta", text: chunk.text };
-    response.write(sse("content_block_delta", { index: 0, delta }));
+    response.write(sse(...event));
     setTimeout(step, STREAM_DELAY_MS);
   };
   step();

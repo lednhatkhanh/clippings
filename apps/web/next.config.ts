@@ -19,6 +19,15 @@ const config: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   reactCompiler: true,
+  // The app icons and install screenshots in public/ keep their names across deploys, so a day's
+  // caching, then a background check, rather than Next's revalidate-every-time default.
+  headers: async () =>
+    ["/icons/:file*", "/screenshots/:file*"].map((source) => ({
+      source,
+      headers: [
+        { key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" },
+      ],
+    })),
   experimental: {
     // Keeps a visited page's data for 30 s, so the in-app back link finds the list already rendered
     // and its row's sheet morphs back (React Aria's list renders a newly mounted row a commit late).

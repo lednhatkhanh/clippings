@@ -33,6 +33,8 @@ const cite = (source: string, citedText = "quoted"): ModelEvent => ({
   },
 });
 
+const blockStop: ModelEvent = { type: "content_block_stop", index: 0 };
+
 const stop = (reason: "end_turn" | "refusal" | "max_tokens"): ModelEvent =>
   ({
     type: "message_delta",
@@ -58,6 +60,42 @@ describe("answerEvents", () => {
       { type: "text", text: "high." },
       { type: "citation", clippingId: "c1", title: "First", citedText: "High tide" },
       { type: "done" },
+    ]);
+  });
+
+  it("puts a block's citations after its text, where the model sends them before it", async () => {
+    expect(
+      await events(
+        cite(LINK),
+        text("Cited "),
+        text("part."),
+        blockStop,
+        text(" Plain."),
+        stop("end_turn"),
+      ),
+    ).toEqual([
+      { type: "text", text: "Cited " },
+      { type: "text", text: "part." },
+      { type: "citation", clippingId: "c1", title: "First", citedText: "quoted" },
+      { type: "text", text: " Plain." },
+      { type: "done" },
+    ]);
+  });
+
+  it("still sends a block's citations when the stream fails inside it", async () => {
+    async function* failing() {
+      yield cite(LINK);
+      yield text("Cited.");
+      throw new Error("connection reset");
+    }
+    const out: AskEvent[] = [];
+
+    await expect(async () => {
+      for await (const event of answerEvents(failing(), CLIPPINGS)) out.push(event);
+    }).rejects.toThrow("connection reset");
+    expect(out).toEqual([
+      { type: "text", text: "Cited." },
+      { type: "citation", clippingId: "c1", title: "First", citedText: "quoted" },
     ]);
   });
 
@@ -95,7 +133,11 @@ describe("answerEvents", () => {
   });
 
   it("ignores events that carry no answer", async () => {
-    const start: ModelEvent = { type: "content_block_stop", index: 0 };
+    const start: ModelEvent = {
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "text", text: "", citations: null },
+    };
 
     expect(await events(start, text("Hi"), stop("end_turn"))).toEqual([
       { type: "text", text: "Hi" },
@@ -104,10 +146,12 @@ describe("answerEvents", () => {
   });
 
   it("keeps the answer and says it was cut off when the model hit its token limit", async () => {
-    expect(await events(text("Half of "), cite(LINK), text("an ans"), stop("max_tokens"))).toEqual([
+    expect(
+      await events(text("Half of "), blockStop, cite(LINK), text("an ans"), stop("max_tokens")),
+    ).toEqual([
       { type: "text", text: "Half of " },
-      { type: "citation", clippingId: "c1", title: "First", citedText: "quoted" },
       { type: "text", text: "an ans" },
+      { type: "citation", clippingId: "c1", title: "First", citedText: "quoted" },
       { type: "error", message: ASK_CUT_OFF },
     ]);
   });
