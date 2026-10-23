@@ -34,7 +34,7 @@ describe("POST /api/ask, before anything is searched", () => {
   const deps = (userId: string | null): AskDeps => ({
     getUserId: async () => userId,
     // Reaching the service from here would be a bug.
-    clippings: { searchClippings, getClippingText: vi.fn() },
+    clippings: { searchClippings, getClippingTexts: vi.fn() },
     origin: ORIGIN,
     answer,
   });

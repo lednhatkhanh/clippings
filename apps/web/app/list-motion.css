@@ -54,6 +54,15 @@
  * the content's min-content width, a truncated title's full length.
  */
 @utility row-presence {
+  /*
+   * A row far off screen skips layout and paint, so a list that has loaded many pages stays cheap.
+   * `auto` remembers a row's last height once it has been on screen, and 7rem stands in for those
+   * that haven't. Skipping implies paint containment, which would cut off the paper's shadow
+   * (up to 30px below it), so the clip margin leaves room for it.
+   */
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 7rem;
+  overflow-clip-margin: 3rem;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: 1fr;

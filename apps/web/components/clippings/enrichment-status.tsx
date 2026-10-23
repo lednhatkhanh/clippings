@@ -2,17 +2,16 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import useSWR from "swr";
 
 import { reEnrichClippingAction } from "@/app/(app)/actions.ts";
 import { useOnline } from "@/components/online-status.tsx";
 import type { ClippingStatus } from "@clippings/shared";
 import { Button, ProgressBar } from "@clippings/ui";
 
-import { fetchRow, POLL_EVERY_MS } from "./fetch-row.ts";
+import { usePendingPoll } from "./use-pending-poll.ts";
 
 /**
- * Stands in for the summary until the page has been read. A pending clipping polls, and the page
+ * Stands in for the summary until the page has been read. A pending clipping polls, backing off, and the page
  * re-renders once enrichment finishes; a failed one offers Retry.
  */
 export function EnrichmentStatus({
@@ -26,11 +25,9 @@ export function EnrichmentStatus({
   const [retrying, setRetrying] = useState(false);
   const online = useOnline();
 
-  useSWR(status === "pending" ? `/api/clippings/${clippingId}` : null, fetchRow, {
-    refreshInterval: POLL_EVERY_MS,
-    onSuccess: (row) => {
-      if (row.status !== "pending") router.refresh();
-    },
+  // The reader is looking at it, so it asks while pending; the waits grow (`poll-schedule.ts`).
+  usePendingPoll(clippingId, status === "pending", (row) => {
+    if (row.status !== "pending") router.refresh();
   });
 
   async function retry() {

@@ -21,6 +21,7 @@ import {
 import { normalizeTagName, tagNameKey, type Tag, type TagColor } from "@clippings/shared";
 
 import { cn } from "../cn.ts";
+import { useLinkRender } from "./link-render.tsx";
 
 const DOTS: Record<Exclude<TagColor, "none">, string> = {
   red: "bg-tag-red-dot",
@@ -82,7 +83,7 @@ const CHIP =
 /** A tag as a link, usually to the list filtered by it. */
 function TagChip({ tag, href }: { tag: Pick<Tag, "name" | "color">; href: string }) {
   return (
-    <Link href={href} className={cn(CHIP, CHIP_COLORS[tag.color])}>
+    <Link href={href} render={useLinkRender()} className={cn(CHIP, CHIP_COLORS[tag.color])}>
       <TagDot color={tag.color} />
       <span className="truncate">{tag.name}</span>
     </Link>

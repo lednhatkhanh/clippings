@@ -413,6 +413,25 @@ export const clippings = pgTable(
       .where(
         sql`${table.source} = 'import' and ${table.status} = 'pending' and ${table.deletedAt} is null`,
       ),
+    // The daily sweep's clippings waiting on enrichment since before its cutoff.
+    index("clippings_stuck_idx")
+      .on(table.statusChangedAt)
+      .where(sql`${table.status} in ('pending', 'failed') and ${table.deletedAt} is null`),
+    // The daily link check's order: never checked first, then the longest unchecked.
+    index("clippings_link_check_idx")
+      .on(table.linkCheckedAt.asc().nullsFirst(), table.id)
+      .where(sql`${table.status} = 'ready' and ${table.deletedAt} is null`),
+    // The daily embedding backfill, newest first. Rows leave the index once embedded.
+    index("clippings_unembedded_idx")
+      // NULLS FIRST, as Postgres sorts `order by created_at desc`, so the index serves the order.
+      .on(table.createdAt.desc().nullsFirst())
+      .where(
+        sql`${table.status} = 'ready' and ${table.embedding} is null and ${table.deletedAt} is null`,
+      ),
+    // The daily purge of clippings deleted a day ago.
+    index("clippings_deleted_idx")
+      .on(table.deletedAt)
+      .where(sql`${table.deletedAt} is not null`),
   ],
 );
 
