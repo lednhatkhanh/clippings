@@ -1,7 +1,13 @@
 import type { Route } from "next";
 
 /** The navigation's sections, in the order the rail lists them. */
-export const SECTION_HREFS = ["/", "/tags", "/settings"] as const satisfies readonly Route[];
+export const SECTION_HREFS = [
+  "/",
+  "/ask",
+  "/tags",
+  "/digest",
+  "/settings",
+] as const satisfies readonly Route[];
 
 /**
  * The transition type a link in the navigation adds. Between sections the new page drifts in the

@@ -1,0 +1,89 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "3eaba373-5d7a-4b2f-ab53-4be428520ea4",
+  "prevIds": ["a07b8ea5-5757-4031-b146-774a66d3c3e2"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "clippings", "link_checked_at"],
+      "writes": [
+        "s|col|public.clippings.link_checked_at",
+        "n|col|public.clippings.link_checked_at",
+        "e|col|public.clippings.link_checked_at"
+      ],
+      "reads": ["n|tbl|public.clippings", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "clippings", "link_failures"],
+      "writes": [
+        "s|col|public.clippings.link_failures",
+        "n|col|public.clippings.link_failures",
+        "e|col|public.clippings.link_failures"
+      ],
+      "reads": ["n|tbl|public.clippings", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "clippings", "link_dead_since"],
+      "writes": [
+        "s|col|public.clippings.link_dead_since",
+        "n|col|public.clippings.link_dead_since",
+        "e|col|public.clippings.link_dead_since"
+      ],
+      "reads": ["n|tbl|public.clippings", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clippings",
+        "name": "link_checked_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clippings",
+        "name": "link_failures",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "0",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clippings",
+        "name": "link_dead_since",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

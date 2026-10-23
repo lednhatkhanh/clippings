@@ -15,3 +15,6 @@ next-env.d.ts
 
 .claude/settings.local.json
 .drizzle
+
+# The skills CLI installs here and links into .claude/skills; the repo vendors the copies in .claude/skills.
+.agents/

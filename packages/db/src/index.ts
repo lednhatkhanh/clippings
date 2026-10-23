@@ -20,6 +20,9 @@ export {
 } from "./schema.ts";
 export type {
   Clock,
+  DigestClipping,
+  Digester,
+  DigesterInput,
   Embedder,
   EmbeddingPurpose,
   FetchedPage,
@@ -28,6 +31,7 @@ export type {
   PageSummary,
   Summarizer,
   SummarizerInput,
+  WeeklyDigest,
 } from "./clippings/ports.ts";
 export {
   createClippingsService,
@@ -37,11 +41,14 @@ export {
   InvalidTagColorError,
   InvalidTagsError,
   InvalidUrlError,
+  MAX_BULK_CLIPPINGS,
   NoteTooLongError,
   systemClock,
   TagNameTakenError,
   TitleTooLongError,
+  TooManyClippingsError,
   type ClippingsExport,
+  type ClippingText,
   type ClippingsPage,
   type ClippingsService,
   type EnrichmentOutcome,
@@ -50,12 +57,24 @@ export {
   type ImportItem,
   type ImportOptions,
   type ListClippingsInput,
+  type ListSavedClippingsInput,
+  type SavedClippingsPage,
+  type TagClippingsInput,
+  type TagClippingsResult,
   type SaveClippingInput,
   type SaveClippingResult,
   type SearchClippingsInput,
   type SearchResults,
   type UpdateClippingInput,
 } from "./clippings/service.ts";
+export {
+  createDigestService,
+  lastFinishedWeek,
+  type DigestClippingRef,
+  type DigestWeek,
+  type DigestService,
+  type WeeklyDigestView,
+} from "./digest/service.ts";
 export {
   createSettingsService,
   InvalidSettingsError,

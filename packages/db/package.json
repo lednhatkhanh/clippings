@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@clippings/shared": "workspace:*",
+    "@date-fns/utc": "catalog:",
     "date-fns": "catalog:",
     "drizzle-orm": "catalog:",
     "pg": "catalog:"

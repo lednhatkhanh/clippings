@@ -3,15 +3,19 @@ import pg from "pg";
 
 import type {
   Clock,
+  Digester,
+  DigesterInput,
   Embedder,
   EmbeddingPurpose,
   JobPublisher,
   PageFetcher,
   PageSummary,
   Summarizer,
+  WeeklyDigest,
 } from "../clippings/ports.ts";
 import { createClippingsService } from "../clippings/service.ts";
 import { createConnectionsService } from "../connections/service.ts";
+import { createDigestService } from "../digest/service.ts";
 import { migrate } from "../migrate.ts";
 import { createPool } from "../pool.ts";
 import { EMBEDDING_DIMENSIONS } from "../schema.ts";
@@ -51,12 +55,23 @@ export async function createServiceFixture() {
     string,
     { page: { title: string | null; text: string }; summary: PageSummary } | { error: Error }
   >();
+  /** What a link check finds at each URL: "alive" unless set otherwise. */
+  const links = new Map<string, "alive" | "dead" | "unknown">();
+  /** The URLs `checkLink` was asked about, in order. */
+  const checkedLinks: string[] = [];
+  /** Runs while a check of the URL is in flight, before it answers: what happens meanwhile. */
+  const duringLinkCheck = new Map<string, () => Promise<void>>();
   const fetcher: PageFetcher = {
     fetchPage: async (url) => {
       const entry = web.get(url);
       if (!entry) throw new Error(`Nothing at ${url}`);
       if ("error" in entry) throw entry.error;
       return entry.page;
+    },
+    checkLink: async (url) => {
+      checkedLinks.push(url);
+      await duringLinkCheck.get(url)?.();
+      return links.get(url) ?? "alive";
     },
   };
   /** The `userTags` each summarize call got, in order: undefined when suggestions were off. */
@@ -82,15 +97,59 @@ export async function createServiceFixture() {
     },
   };
 
+  /** What the digester was asked, in order. */
+  const digested: DigesterInput[] = [];
+  /** Clippings that make the digester fail when they are in the week it reads. */
+  const digesterFailures = new Set<string>();
+  const digester: Digester = {
+    digest: async (input) => {
+      digested.push(input);
+      if (input.clippings.some(({ id }) => digesterFailures.has(id))) {
+        throw new Error("the digester is down");
+      }
+      const result: WeeklyDigest = {
+        groups: [
+          {
+            title: "The week",
+            summary: `${input.clippings.length} clippings.`,
+            clippingIds: input.clippings.map(({ id }) => id),
+          },
+        ],
+        resurfaced: input.related[0]
+          ? [{ clippingId: input.related[0].id, why: "It fits this week." }]
+          : [],
+      };
+      return result;
+    },
+  };
+  const service = createClippingsService({ pool, jobs, clock, fetcher, summarizer, embedder });
+
   return {
     /** The throwaway database's URL, for code that opens its own pool (Better Auth in web tests). */
     databaseUrl: database.url,
-    service: createClippingsService({ pool, jobs, clock, fetcher, summarizer, embedder }),
+    service,
+    /** The clock the services read, for a service the test builds itself. */
+    clock,
+    digests: createDigestService({ pool, clock, digester, clippings: service }),
+    /** Every `digest` call the fake digester got, in order. */
+    digested,
+    /** Makes the digester fail for the user who has this clipping in the week. */
+    failDigestsWith: (clippingId: string) => {
+      digesterFailures.add(clippingId);
+    },
+    /** Makes the digester work again for every user. */
+    healDigester: () => digesterFailures.clear(),
     settings: createSettingsService({ pool, clock }),
     connections: createConnectionsService({ pool, clock }),
     /** The fixture's pool, for tests that set up rows no service writes (Better Auth's). */
     pool,
     web,
+    /** What a link check finds at each URL; a URL not in it is alive. */
+    links,
+    /** Every URL a link check was run on, in order. */
+    checkedLinks,
+    /** Something to do while a check of a URL is in flight, before it answers. */
+    duringLinkCheck,
     enrichmentRequests,
     /** Every `requestEnrichments` call: the ids in order and the window they were spread over. */
     batchedEnrichmentRequests,

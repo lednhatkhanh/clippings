@@ -84,8 +84,10 @@ TEST_DATABASE_URL=postgres://postgres:postgres@localhost:55432/postgres pnpm tes
 
 ## Connecting Claude
 
-The MCP server is at `<BETTER_AUTH_URL>/mcp`. It has three tools: `save_clipping`,
-`search_clippings` and `list_recent`.
+The MCP server is at `<BETTER_AUTH_URL>/mcp`. Every client gets
+`save_clipping`, `search_clippings`, `list_recent`, `list_clippings` and `related_clippings`; one
+that asks for the write scope also gets `get_clipping`, `update_clipping`, `tag_clippings`,
+`list_tags`, `rename_tag`, `merge_tag`, `delete_clipping` and `restore_clipping`.
 
 - **claude.ai**: Settings → Connectors → Add custom connector, with that URL.
 - **Claude Code**: `claude mcp add --transport http clippings <BETTER_AUTH_URL>/mcp`, then `/mcp`
@@ -94,6 +96,19 @@ The MCP server is at `<BETTER_AUTH_URL>/mcp`. It has three tools: `save_clipping
 Either one opens a browser window: sign in with an allowlisted Google account, then Allow.
 Clippings is the OAuth authorization server (Better Auth's MCP plugin), so there are no keys to
 copy.
+
+### The Clippings plugin
+
+`plugins/clippings` bundles that connector (pointed at the production `/mcp`) with a skill that
+teaches Claude to search before saving, reuse your tags, cite links, and run a weekly review and a
+tag tidy-up. This repo is also the plugin marketplace.
+
+- **Claude Code**: run `/plugin marketplace add lednhatkhanh/clippings`, then
+  `/plugin install clippings@clippings`, then `/mcp` to sign in.
+- **claude.ai and Cowork**: Customize → Plugins, add the GitHub repository
+  `lednhatkhanh/clippings` as a marketplace, install `clippings`, then connect Clippings from the
+  plugin's Connectors tab. A plugin installed this way syncs to Claude Code at the next session
+  start.
 
 ## The browser extension
 
