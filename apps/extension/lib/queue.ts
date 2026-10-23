@@ -1,11 +1,16 @@
 import { browser } from "wxt/browser";
 
-import { parseWebUrl } from "@clippings/shared";
+import { parseWebUrl, type ExtensionPage } from "@clippings/shared";
 
-/** A save the user made while offline: the page, and the selection to add to its note, if any. */
+/**
+ * A save the user made while offline: the page, the selection to add to its note, if any, and
+ * the page's text as the browser showed it then, which the retry sends (saves queued before
+ * this existed have none).
+ */
 export interface PendingSave {
   url: string;
   quote?: string;
+  page?: ExtensionPage;
 }
 
 /** The tab a save was made in and the page it showed, so the tab can show it sent. */
@@ -40,7 +45,8 @@ const STORAGE_KEY = "offlineSaves";
 
 /**
  * Two saves are the same when they are of the same page, as the server tells pages apart, with
- * the same selection. The server finds an already-saved page instead of saving it again, so a
+ * the same selection (the page's text, which only goes along, doesn't tell saves apart). The
+ * server finds an already-saved page instead of saving it again, so a
  * save that went out but whose answer was lost does no harm either.
  */
 const sameSave = (a: PendingSave, b: PendingSave) =>
@@ -96,13 +102,26 @@ function change(edit: (saves: QueuedSave[]) => QueuedSave[]): Promise<QueuedSave
 /** The saves waiting to be sent, oldest first. */
 export const queuedSaves = read;
 
-/** Keeps a save to send when the browser is back online, unless the same save already waits. */
+/**
+ * Keeps a save to send when the browser is back online, unless the same save already waits. The
+ * page's text makes entries large; when storage has no room for it, the save is kept without it
+ * (the server then fetches the page itself) rather than lost.
+ */
 export async function enqueue(save: PendingSave & SavedFrom): Promise<void> {
-  await change((saves) =>
-    saves.some((queued) => sameSave(queued, save))
-      ? saves
-      : [...saves, { ...save, id: crypto.randomUUID(), failures: 0 }],
-  );
+  const add = (entry: PendingSave & SavedFrom) =>
+    change((saves) =>
+      saves.some((queued) => sameSave(queued, entry))
+        ? saves
+        : [...saves, { ...entry, id: crypto.randomUUID(), failures: 0 }],
+    );
+  try {
+    await add(save);
+  } catch (error) {
+    if (!save.page) throw error;
+    console.error("Couldn't keep the page's text with a queued save", error);
+    const { page: _page, ...withoutPage } = save;
+    await add(withoutPage);
+  }
 }
 
 /** A run through the queue in flight: a second call while one runs waits for it instead. */

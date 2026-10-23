@@ -18,7 +18,7 @@ export default defineConfig({
     key: MANIFEST_KEY,
     // activeTab: the current tab's address when the toolbar button opens the popup, without
     // access to every tab. identity: the sign-in window. storage: the sign-in, kept on this device,
-    // and the palette, synced. scripting: the page's selection, under that activeTab grant.
+    // and the palette, synced. scripting: the page's selection and text, under that activeTab grant.
     // contextMenus: the save entries. alarms: retrying the saves made offline.
     permissions: ["activeTab", "identity", "storage", "scripting", "contextMenus", "alarms"],
     // tabs: each tab's address, asked for only when the user turns on "Show when a page is

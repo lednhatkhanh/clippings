@@ -6,6 +6,7 @@ import {
   extensionSettingsSchema,
   extensionTagsResponseSchema,
   type ExtensionApiError,
+  type ExtensionPage,
   type ExtensionUpdateRequest,
   type PaletteName,
   type Tag,
@@ -55,11 +56,15 @@ async function errorOf(response: Response): Promise<ExtensionApiError | undefine
   }
 }
 
-/** Saves the page, or finds it when it is already saved. */
-export async function saveClipping(url: string): Promise<SaveResult> {
+/**
+ * Saves the page, or finds it when it is already saved. `page` is what the user's browser shows
+ * of it, for the server to read when it can't fetch the page itself.
+ */
+export async function saveClipping(url: string, page?: ExtensionPage): Promise<SaveResult> {
   let response: Response | "signed_out";
   try {
-    response = await call("/clippings", "POST", { url });
+    // An absent `page` is left out of the JSON.
+    response = await call("/clippings", "POST", { url, page });
   } catch (error) {
     console.error("Couldn't reach Clippings", error);
     return { ok: false, reason: navigator.onLine ? "failed" : "offline" };

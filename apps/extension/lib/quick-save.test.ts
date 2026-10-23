@@ -67,6 +67,12 @@ let online = true;
 /** What each tab shows now, as `tabs.get` reads it. */
 const tabUrls = new Map<number, string>();
 
+/** The page in the tab, as the script the extension injects reads it. */
+const executeScript = vi.fn();
+const PAGE_TEXT = { title: "Essay", text: "Words" };
+const readsPage = (url = PAGE) =>
+  executeScript.mockResolvedValue([{ result: { url, title: "Essay", text: "Words" } }]);
+
 beforeEach(() => {
   tabUrls.clear();
   tabUrls.set(TAB, PAGE);
@@ -78,6 +84,9 @@ beforeEach(() => {
   vi.mocked(saveClipping).mockReset();
   vi.mocked(saveNote).mockReset();
   vi.mocked(lookupClipping).mockReset();
+  executeScript.mockReset();
+  readsPage();
+  Object.assign(fakeBrowser, { scripting: { executeScript } });
   setIcon.mockClear();
   Object.assign(fakeBrowser.action, { setIcon });
   online = true;
@@ -139,7 +148,7 @@ describe("the context menu", () => {
 
     await quickSave({ url: PAGE, quote: "A line" }, { tabId: TAB, pageUrl: PAGE });
 
-    expect(saveClipping).toHaveBeenCalledWith(PAGE);
+    expect(saveClipping).toHaveBeenCalledWith(PAGE, PAGE_TEXT);
     expect(saveNote).toHaveBeenCalledWith("c1", "Read later\n\n> A line");
     expect(iconOf(TAB)).toBe("saved-icon");
   });
@@ -149,8 +158,39 @@ describe("the context menu", () => {
 
     await quickSave({ url: "https://example.org/linked" }, { tabId: TAB, pageUrl: PAGE });
 
-    expect(saveClipping).toHaveBeenCalledWith("https://example.org/linked");
+    // The tab shows another page than the link: its text isn't read, let alone sent.
+    expect(saveClipping).toHaveBeenCalledWith("https://example.org/linked", undefined);
+    expect(executeScript).not.toHaveBeenCalled();
     expect(iconOf(TAB)).toBeUndefined();
+    expect(await badgeOf(TAB)).toBe("✓");
+  });
+});
+
+describe("sending the page's text", () => {
+  it("sends the text of the page the menu saved", async () => {
+    vi.mocked(saveClipping).mockResolvedValue(saved());
+
+    await quickSave({ url: PAGE }, { tabId: TAB, pageUrl: PAGE });
+
+    expect(saveClipping).toHaveBeenCalledExactlyOnceWith(PAGE, PAGE_TEXT);
+  });
+
+  it("saves without it when the tab has navigated since the click", async () => {
+    vi.mocked(saveClipping).mockResolvedValue(saved());
+    readsPage("https://example.com/next");
+
+    await quickSave({ url: PAGE }, { tabId: TAB, pageUrl: PAGE });
+
+    expect(saveClipping).toHaveBeenCalledExactlyOnceWith(PAGE, undefined);
+  });
+
+  it("saves without it when the tab can't be scripted", async () => {
+    vi.mocked(saveClipping).mockResolvedValue(saved());
+    executeScript.mockRejectedValue(new Error("Cannot access a chrome:// URL"));
+
+    await quickSave({ url: PAGE }, { tabId: TAB, pageUrl: PAGE });
+
+    expect(saveClipping).toHaveBeenCalledExactlyOnceWith(PAGE, undefined);
     expect(await badgeOf(TAB)).toBe("✓");
   });
 });
@@ -240,6 +280,37 @@ describe("saving offline", () => {
     expect(await queuedSaves()).toEqual([]);
     expect(await badgeOf(TAB)).toBe("✓");
     expect(iconOf(TAB)).toBe("saved-icon");
+  });
+
+  it("keeps the page's text of a save made offline, and sends it with the retry", async () => {
+    online = false;
+    vi.mocked(saveClipping).mockResolvedValue({ ok: false, reason: "offline" });
+    await quickSave({ url: PAGE }, { tabId: TAB, pageUrl: PAGE });
+    await saveFromPopup(`${PAGE}?other`, PAGE_TEXT);
+    expect(await queuedSaves()).toMatchObject([
+      { url: PAGE, page: PAGE_TEXT },
+      { url: `${PAGE}?other`, page: PAGE_TEXT },
+    ]);
+
+    online = true;
+    vi.mocked(saveClipping).mockClear().mockResolvedValue(saved());
+    await sendOfflineSaves();
+
+    expect(saveClipping).toHaveBeenNthCalledWith(1, PAGE, PAGE_TEXT);
+    expect(saveClipping).toHaveBeenNthCalledWith(2, `${PAGE}?other`, PAGE_TEXT);
+    expect(await queuedSaves()).toEqual([]);
+  });
+
+  it("still sends a save queued before pages were kept, without one", async () => {
+    await browser.storage.local.set({
+      offlineSaves: [{ id: "old", url: PAGE, failures: 0, tabId: TAB, pageUrl: PAGE }],
+    });
+    vi.mocked(saveClipping).mockResolvedValue(saved());
+
+    await sendOfflineSaves();
+
+    expect(saveClipping).toHaveBeenCalledExactlyOnceWith(PAGE, undefined);
+    expect(await queuedSaves()).toEqual([]);
   });
 
   it("keeps a selection made offline, and adds it to the note once", async () => {

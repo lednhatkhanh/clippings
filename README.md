@@ -112,7 +112,11 @@ tag tidy-up. This repo is also the plugin marketplace.
 
 ## The browser extension
 
-The Chrome extension saves the page you're on from its toolbar popup, with a note. Build it for
+The Chrome extension saves the page you're on from its toolbar popup, with a note. It sends the
+page's title and text as your browser shows it, so enrichment reads that instead of fetching the
+page, and a site that turns servers away (a bot wall) still gets read. That text is stored with
+the clipping and goes to the summarizer like a fetched page, including what you see on a page
+you're signed in to; "Save link" sends only the address. Build it for
 your Clippings, then load `apps/extension/.output/chrome-mv3` as an unpacked extension
 (`chrome://extensions`, Developer mode, Load unpacked):
 

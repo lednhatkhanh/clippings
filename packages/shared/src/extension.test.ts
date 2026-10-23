@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { MAX_NOTE_LENGTH, MAX_TITLE_LENGTH } from "./clipping.ts";
-import { extensionUpdateRequestSchema, isSaveablePage } from "./extension.ts";
+import { MAX_NOTE_LENGTH, MAX_PAGE_TEXT, MAX_TITLE_LENGTH } from "./clipping.ts";
+import {
+  extensionPageSchema,
+  extensionSaveRequestSchema,
+  extensionUpdateRequestSchema,
+  isSaveablePage,
+} from "./extension.ts";
 import { MAX_TAG_LENGTH, MAX_TAGS_PER_CLIPPING } from "./tag.ts";
 
 describe("isSaveablePage", () => {
@@ -31,6 +36,58 @@ describe("isSaveablePage", () => {
     "https://user:secret@example.com/",
   ])("can't save %s", (address) => {
     expect(isSaveablePage(address)).toBe(false);
+  });
+});
+
+describe("extensionPageSchema", () => {
+  it("drops NUL, trims, and cuts the text and title to their limits", () => {
+    const page = extensionPageSchema.parse({
+      title: `  A\u0000 title ${"x".repeat(MAX_TITLE_LENGTH)}`,
+      text: `\n ab\u0000c ${"y".repeat(MAX_PAGE_TEXT)} `,
+    });
+
+    expect(page.title).toBe(`A title ${"x".repeat(MAX_TITLE_LENGTH)}`.slice(0, MAX_TITLE_LENGTH));
+    expect(page.text).toBe(`abc ${"y".repeat(MAX_PAGE_TEXT)}`.slice(0, MAX_PAGE_TEXT));
+  });
+
+  it.each([
+    ["a null title", null],
+    ["a blank title", " \u0000 "],
+  ])("makes %s null", (_name, title) => {
+    expect(extensionPageSchema.parse({ title, text: "Some text" }).title).toBeNull();
+  });
+
+  it.each([
+    ["blank", " \n\u0000 "],
+    ["empty", ""],
+    ["far too long", "x".repeat(MAX_PAGE_TEXT * 5 + 1)],
+  ])("refuses text that is %s", (_name, text) => {
+    expect(extensionPageSchema.safeParse({ title: null, text }).success).toBe(false);
+  });
+});
+
+describe("extensionSaveRequestSchema", () => {
+  const url = "https://example.com/essay";
+
+  it("keeps a good page", () => {
+    const page = { title: "Essay", text: "The text." };
+    expect(extensionSaveRequestSchema.parse({ url, page })).toEqual({ url, page });
+  });
+
+  it.each([
+    ["is left out", undefined],
+    ["has blank text", { title: "Essay", text: "  " }],
+    ["has far too long text", { title: "Essay", text: "x".repeat(MAX_PAGE_TEXT * 5 + 1) }],
+    ["is not an object", "text"],
+    ["has no title", { text: "The text." }],
+  ])("saves the URL alone when the page %s", (_name, page) => {
+    expect(extensionSaveRequestSchema.parse({ url, page })).toEqual({ url });
+  });
+
+  it("still refuses a missing URL", () => {
+    expect(extensionSaveRequestSchema.safeParse({ page: { title: null, text: "x" } }).success).toBe(
+      false,
+    );
   });
 });
 
