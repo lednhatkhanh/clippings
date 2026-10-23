@@ -56,6 +56,45 @@ export function reduceAnswer(state: AnswerState, event: AskEvent): AnswerState {
   }
 }
 
+/** The `href` a citation marker has in the answer's Markdown, followed by its number. */
+const CITE_HREF = "#cite-";
+
+/** A line that opens or closes a fenced code block. */
+const FENCE = /(^|\n)[ \t]*(```|~~~)[^\n]*$/;
+
+/**
+ * The answer as Markdown, each citation marker a link to `#cite-<number>` for the renderer to show
+ * as a marker (see `citeNumber`). A marker goes before the whitespace that ends the text it
+ * follows, so one that closes a list item or paragraph stays on its line. Two places it can't
+ * simply follow: a `!` before it would make it an image, so that is escaped, and on a fence line it
+ * would become the fence's info string, so it starts a line of its own.
+ */
+export function answerMarkdown(parts: readonly AnswerPart[]): string {
+  let markdown = "";
+  for (const part of parts) {
+    if (part.type === "text") {
+      markdown += part.text;
+      continue;
+    }
+    const marker = `[${part.number}](${CITE_HREF}${part.number})`;
+    let body = markdown.trimEnd();
+    const after = markdown.slice(body.length);
+    if (FENCE.test(body)) {
+      markdown = `${body}\n\n${marker}${after}`;
+      continue;
+    }
+    if (body.endsWith("!") && !body.endsWith("\\!")) body = `${body.slice(0, -1)}\\!`;
+    markdown = `${body}${marker}${after}`;
+  }
+  return markdown;
+}
+
+/** The source number a link in the answer stands for, or null when it is an ordinary link. */
+export function citeNumber(href: string | undefined): number | null {
+  const match = href?.match(/^#cite-(\d+)$/);
+  return match ? Number(match[1]) : null;
+}
+
 /** The answer when the stream closes: one still asking was cut off. */
 export function endAnswer(state: AnswerState): AnswerState {
   return state.status === "asking" ? { ...state, status: "error", error: CUT_OFF_MESSAGE } : state;

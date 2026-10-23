@@ -13,9 +13,10 @@ export const ASK_CUT_OFF = "The answer was cut off.";
 /**
  * The answer stream's events for the model's own: each text delta as it comes, and each citation
  * of one of `clippingsByLink`'s clippings. A citation of any other source, or of anything but a
- * search result, is dropped: the answer may link only to this request's hits. Ends with `done`, or
- * with `error`: the model declined, said nothing, or stopped at the token limit (the text and
- * citations before that stand).
+ * search result, is dropped: the answer may link only to this request's hits. The model sends a
+ * cited block's citations before its text, so they are held until the block ends and follow the
+ * text they support. Ends with `done`, or with `error`: the model declined, said nothing, or
+ * stopped at the token limit (the text and citations before that stand).
  */
 export async function* answerEvents(
   modelEvents: AsyncIterable<Anthropic.RawMessageStreamEvent>,
@@ -24,33 +25,47 @@ export async function* answerEvents(
   let wrote = false;
   let refused = false;
   let cutOff = false;
-  for await (const event of modelEvents) {
-    if (event.type === "message_delta") {
-      refused ||= event.delta.stop_reason === "refusal";
-      cutOff ||= event.delta.stop_reason === "max_tokens";
-      continue;
-    }
-    if (event.type !== "content_block_delta") continue;
+  let held: AskEvent[] = [];
+  try {
+    for await (const event of modelEvents) {
+      if (event.type === "message_delta") {
+        refused ||= event.delta.stop_reason === "refusal";
+        cutOff ||= event.delta.stop_reason === "max_tokens";
+        continue;
+      }
+      if (event.type === "content_block_stop") {
+        yield* held;
+        held = [];
+        continue;
+      }
+      if (event.type !== "content_block_delta") continue;
 
-    const { delta } = event;
-    if (delta.type === "text_delta") {
-      if (!delta.text) continue;
-      wrote = true;
-      yield { type: "text", text: delta.text };
-    } else if (delta.type === "citations_delta") {
-      const { citation } = delta;
-      if (citation.type !== "search_result_location") continue;
-      const cited = clippingsByLink.get(citation.source);
-      if (cited) {
-        yield {
-          type: "citation",
-          clippingId: cited.id,
-          title: cited.title,
-          citedText: citation.cited_text,
-        };
+      const { delta } = event;
+      if (delta.type === "text_delta") {
+        if (!delta.text) continue;
+        wrote = true;
+        yield { type: "text", text: delta.text };
+      } else if (delta.type === "citations_delta") {
+        const { citation } = delta;
+        if (citation.type !== "search_result_location") continue;
+        const cited = clippingsByLink.get(citation.source);
+        if (cited) {
+          held.push({
+            type: "citation",
+            clippingId: cited.id,
+            title: cited.title,
+            citedText: citation.cited_text,
+          });
+        }
       }
     }
+  } catch (error) {
+    // The text these cite has already gone out.
+    yield* held;
+    throw error;
   }
+  // A stream cut short ends without closing its last block.
+  yield* held;
   if (refused || !wrote) yield { type: "error", message: ASK_UNANSWERED };
   else if (cutOff) yield { type: "error", message: ASK_CUT_OFF };
   else yield { type: "done" };
