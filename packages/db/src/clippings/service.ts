@@ -43,6 +43,7 @@ import {
   SEARCH_RESULT_LIMIT,
   type Clipping,
   type ClippingSource,
+  type ExtensionPage,
   type SearchHit,
   type SearchSort,
   type Tag,
@@ -64,6 +65,7 @@ import type {
   Clock,
   Embedder,
   EmbeddingPurpose,
+  FetchedPage,
   JobPublisher,
   PageFetcher,
   PageSummary,
@@ -79,6 +81,14 @@ export interface SaveClippingInput {
   tags?: readonly string[];
   source: ClippingSource;
   clientId?: string;
+  /**
+   * The page as the user's browser shows it, which the extension sends with a save. Enrichment
+   * reads it instead of fetching the page, so a site that turns servers away (a bot wall) still
+   * gets read. Kept only when the save starts a clipping (new, or a deleted one started over) or
+   * the existing one is still waiting for a reading (pending or failed); a ready clipping is
+   * left as it is.
+   */
+  page?: ExtensionPage;
 }
 
 export type SaveClippingResult = { status: "created" | "existing"; clipping: Clipping };
@@ -246,6 +256,21 @@ export type EnrichmentOutcome =
 const { searchTsv, embedding, ...clippingColumns } = getColumns(clippings);
 
 type ClippingRow = Omit<typeof clippings.$inferSelect, "searchTsv" | "embedding">;
+
+/**
+ * A clipping's page text as stored: who read it, with the browser's title when it was the browser,
+ * when it was read (at), and when a reading used it (null: none has yet).
+ */
+interface PageTextWrite {
+  text: string;
+  origin: (typeof clippingTexts.$inferInsert)["origin"];
+  title: string | null;
+  at: Date;
+  readAt: Date | null;
+}
+
+/** Text a reading has used: any but a browser text still waiting for its first reading. */
+const readPageText = or(ne(clippingTexts.origin, "browser"), isNotNull(clippingTexts.readAt));
 
 /** Not deleted: every read and edit the user makes sees only these. */
 const live = isNull(clippings.deletedAt);
@@ -845,6 +870,7 @@ export function createClippingsService({
         await tx
           .delete(clippingTexts)
           .where(and(eq(clippingTexts.clippingId, row.id), eq(clippingTexts.userId, userId)));
+        if (input.page) await keepBrowserPage(tx, userId, row.id, input.page, now);
       }
       return row;
     });
@@ -862,7 +888,65 @@ export function createClippingsService({
       .select(clippingColumns)
       .from(clippings)
       .where(and(eq(clippings.userId, userId), eq(clippings.urlNormalized, normalized)));
-    return { status: "existing", clipping: await oneWithTags(userId, existing!) };
+    if (!input.page || existing!.status === "ready") {
+      return { status: "existing", clipping: await oneWithTags(userId, existing!) };
+    }
+    return {
+      status: "existing",
+      clipping: await oneWithTags(
+        userId,
+        await keepBrowserPageOfExisting(userId, existing!, input.page, now),
+      ),
+    };
+  }
+
+  /**
+   * Keeps the page the browser sent for a clipping that is already saved and still waiting for a
+   * reading. A pending one keeps its place: its job, in flight or retrying, reads the browser text
+   * when it gets to it. A failed one goes back to pending and its job is requested, as a re-read
+   * does. Returns the clipping as it now stands.
+   *
+   * The row is locked first, so a reading that finishes meanwhile is not overwritten: when the
+   * clipping is no longer pending or failed, the page is dropped and the clipping returned as it is.
+   * Unlike a re-read, a failed request for the job is logged and swallowed, as for a new save: the
+   * browser text is stored and the save stands, and the clipping stays pending for the daily sweep
+   * to request again, instead of the user losing the page they just sent.
+   */
+  async function keepBrowserPageOfExisting(
+    userId: string,
+    existing: ClippingRow,
+    page: ExtensionPage,
+    now: Date,
+  ): Promise<ClippingRow> {
+    const { current, requested } = await db.transaction(async (tx) => {
+      const [locked] = await tx
+        .select(clippingColumns)
+        .from(clippings)
+        .where(
+          and(
+            eq(clippings.id, existing.id),
+            eq(clippings.userId, userId),
+            inArray(clippings.status, ["pending", "failed"]),
+            live,
+          ),
+        )
+        .for("update");
+      if (!locked) return { current: existing, requested: false };
+      await keepBrowserPage(tx, userId, locked.id, page, now);
+      if (locked.status === "pending") return { current: locked, requested: false };
+      const [restarted] = await tx
+        .update(clippings)
+        .set(statusChange("pending", now))
+        .where(and(eq(clippings.id, locked.id), eq(clippings.userId, userId)))
+        .returning(clippingColumns);
+      return { current: restarted ?? locked, requested: restarted !== undefined };
+    });
+    if (requested) {
+      await jobs.requestEnrichment(current.id).catch((error: unknown) => {
+        console.error(`Couldn't request enrichment of clipping ${current.id}`, error);
+      });
+    }
+    return current;
   }
 
   async function listClippings(
@@ -1112,7 +1196,9 @@ export function createClippingsService({
   /**
    * The page text the last successful reading of the user's clipping saved, with the time it was
    * read and the clipping's url and title as shown, or null when the user has no such live
-   * clipping or it has no saved text.
+   * clipping or no reading has saved text for it. Text the browser sent with a save that no reading
+   * has used yet is not returned: its callers (the dead-link notice, Ask, MCP `get_page_text`) show
+   * what the clipping was read from, and a clipping still pending or failed has no reading to show.
    */
   async function getClippingText(userId: string, clippingId: string): Promise<ClippingText | null> {
     return (await getClippingTexts(userId, [clippingId])).get(clippingId) ?? null;
@@ -1120,7 +1206,7 @@ export function createClippingsService({
 
   /**
    * `getClippingText` for several clippings in one query: the ones that have text, by id. An id
-   * that is not the user's, not live, without saved text or not a UUID is left out.
+   * that is not the user's, not live, without read text or not a UUID is left out.
    */
   async function getClippingTexts(
     userId: string,
@@ -1142,7 +1228,14 @@ export function createClippingsService({
         clippings,
         and(eq(clippings.id, clippingTexts.clippingId), eq(clippings.userId, clippingTexts.userId)),
       )
-      .where(and(inArray(clippingTexts.clippingId, ids), eq(clippingTexts.userId, userId), live));
+      .where(
+        and(
+          inArray(clippingTexts.clippingId, ids),
+          eq(clippingTexts.userId, userId),
+          readPageText,
+          live,
+        ),
+      );
     for (const row of rows) {
       texts.set(row.id, { ...row, fetchedAt: formatIsoUtc(row.fetchedAt) });
     }
@@ -1597,6 +1690,42 @@ export function createClippingsService({
   }
 
   /**
+   * Stores the page the browser sent as the clipping's text (origin "browser", with the title the
+   * browser gave), replacing any text it had.
+   */
+  async function keepBrowserPage(
+    tx: Transaction,
+    userId: string,
+    clippingId: string,
+    page: ExtensionPage,
+    at: Date,
+  ): Promise<void> {
+    await savePageText(tx, userId, clippingId, {
+      text: page.text,
+      origin: "browser",
+      title: page.title,
+      at,
+      readAt: null,
+    });
+  }
+
+  async function savePageText(
+    tx: Transaction,
+    userId: string,
+    clippingId: string,
+    { text, origin, title, at, readAt }: PageTextWrite,
+  ): Promise<void> {
+    await tx
+      .insert(clippingTexts)
+      .values({ clippingId, userId, text, origin, title, fetchedAt: at, readAt })
+      .onConflictDoUpdate({
+        target: clippingTexts.clippingId,
+        set: { text, origin, title, fetchedAt: at, readAt },
+        setWhere: eq(clippingTexts.userId, userId),
+      });
+  }
+
+  /**
    * Keeps the page text of a clipping the reading just made ready: replaces the saved one, or
    * removes it when the page had none (a stale text must not outlive a re-read).
    */
@@ -1604,19 +1733,15 @@ export function createClippingsService({
     tx: Transaction,
     userId: string,
     clippingId: string,
-    text: string,
-    at: Date,
+    write: PageTextWrite,
   ): Promise<void> {
-    if (text === "") {
+    if (write.text === "") {
       await tx
         .delete(clippingTexts)
         .where(and(eq(clippingTexts.clippingId, clippingId), eq(clippingTexts.userId, userId)));
       return;
     }
-    await tx
-      .insert(clippingTexts)
-      .values({ clippingId, userId, text, fetchedAt: at })
-      .onConflictDoUpdate({ target: clippingTexts.clippingId, set: { text, fetchedAt: at } });
+    await savePageText(tx, userId, clippingId, write);
   }
 
   /**
@@ -1624,6 +1749,14 @@ export function createClippingsService({
    * only a pending clipping is touched, so a redelivered job does nothing, and the user's title,
    * note and tags are never written. For a user with tag suggestions on, it also stores the tags
    * it suggests (see `replaceSuggestions`), in the transaction that makes the clipping ready.
+   *
+   * A clipping saved from the extension with its page has that text (origin "browser"). While no
+   * reading has used it (`read_at` is null) it is the text for this reading and the page is not
+   * fetched, whatever happened to the clipping meanwhile (a sweep restarting it, a retried job).
+   * Once a reading has used it, a re-read fetches the page first, and reads the stored text instead
+   * when the fetch fails or finds no text (not a PDF), since a site that turns servers away is why
+   * it was kept. Only a clipping with no usable text fails. The link verdict is reset only by a
+   * reading that fetched the page: one from the browser's text says nothing about the link.
    */
   async function enrichClipping(
     clippingId: string,
@@ -1644,11 +1777,44 @@ export function createClippingsService({
     const suggesting = settings?.on === true;
     const userTags = suggesting ? await mostUsedTagNames(row.userId) : undefined;
 
+    // The text the user's browser sent with a save, if that is what the clipping has.
+    const [stored] = await db
+      .select({
+        text: clippingTexts.text,
+        title: clippingTexts.title,
+        origin: clippingTexts.origin,
+        fetchedAt: clippingTexts.fetchedAt,
+        readAt: clippingTexts.readAt,
+      })
+      .from(clippingTexts)
+      .where(and(eq(clippingTexts.clippingId, clippingId), eq(clippingTexts.userId, row.userId)));
+    const browser = stored?.origin === "browser" && stored.text !== "" ? stored : undefined;
+
     let read: PageSummary;
     let pageText = "";
+    let readFromBrowser = false;
     let meaning: number[] | null = null;
     try {
-      const page = await fetcher.fetchPage(row.url);
+      let page: FetchedPage;
+      if (browser && browser.readAt === null) {
+        page = { title: browser.title, text: browser.text };
+        readFromBrowser = true;
+      } else if (browser) {
+        // A site that turns servers away, or one that answers with an empty page, still has the
+        // text the browser once gave.
+        const fetched = await fetcher.fetchPage(row.url).catch((error: unknown) => {
+          console.error(`Couldn't fetch clipping ${clippingId}; reading its browser text`, error);
+          return undefined;
+        });
+        if (fetched && (fetched.text !== "" || fetched.document)) {
+          page = fetched;
+        } else {
+          page = { title: browser.title, text: browser.text };
+          readFromBrowser = true;
+        }
+      } else {
+        page = await fetcher.fetchPage(row.url);
+      }
       pageText = page.text;
       read = await summarizer.summarize({
         url: row.url,
@@ -1690,15 +1856,30 @@ export function createClippingsService({
           summary: read.summary,
           excerpt: read.excerpt,
           embedding: meaning,
-          // The fetch just got a 2xx: the link is alive as of now.
-          linkCheckedAt: now,
-          linkFailures: 0,
-          linkDeadSince: null,
+          // A fetch just got a 2xx: the link is alive as of now. The browser's text says nothing.
+          ...(readFromBrowser ? {} : { linkCheckedAt: now, linkFailures: 0, linkDeadSince: null }),
           ...statusChange("ready", now),
         })
         .where(and(eq(clippings.id, clippingId), eq(clippings.status, "pending")))
         .returning({ id: clippings.id });
-      if (ready) await replacePageText(tx, row.userId, clippingId, pageText, now);
+      if (ready) {
+        // The browser's text keeps its origin, title and time, however the reading came to use it;
+        // the reading marks it read.
+        await replacePageText(
+          tx,
+          row.userId,
+          clippingId,
+          browser && readFromBrowser
+            ? {
+                text: pageText,
+                origin: "browser",
+                title: browser.title,
+                at: browser.fetchedAt,
+                readAt: now,
+              }
+            : { text: pageText, origin: "fetch", title: null, at: now, readAt: now },
+        );
+      }
       if (ready && suggesting) {
         await replaceSuggestions(
           tx,

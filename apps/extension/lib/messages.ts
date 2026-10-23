@@ -1,6 +1,7 @@
 import { browser } from "wxt/browser";
 
 import type {
+  ExtensionPage,
   ExtensionSaveResponse,
   ExtensionSignInError,
   PaletteName,
@@ -15,7 +16,7 @@ export type PopupRequest =
   | { type: "status" }
   | { type: "signIn" }
   | { type: "signOut" }
-  | { type: "save"; url: string }
+  | { type: "save"; url: string; page?: ExtensionPage }
   | { type: "tags" }
   | { type: "setTags"; clippingId: string; tags: string[] }
   | { type: "refreshPalette" };

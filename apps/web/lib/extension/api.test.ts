@@ -27,6 +27,7 @@ import {
 } from "@clippings/db/testing";
 import {
   CLIPPINGS_EXTENSION_ID,
+  MAX_PAGE_TEXT,
   MAX_TITLE_LENGTH,
   type ExtensionSaveResponse,
 } from "@clippings/shared";
@@ -120,7 +121,12 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
     );
   }
 
-  function save(api: ReturnType<typeof app>["api"], url: string, accessToken?: string) {
+  function save(
+    api: ReturnType<typeof app>["api"],
+    url: string,
+    accessToken?: string,
+    page?: unknown,
+  ) {
     return api.save(
       new Request(`${apiResource}/clippings`, {
         method: "POST",
@@ -129,7 +135,7 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
           origin: EXTENSION_ORIGIN,
           ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
         },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify(page === undefined ? { url } : { url, page }),
       }),
     );
   }
@@ -270,6 +276,39 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
         createdAt: created.clipping.createdAt,
       },
     });
+  });
+
+  it("keeps the page's text the extension sent, and saves the URL alone when the page is blank or too long", async () => {
+    const setup = app(ALLOWED);
+    const tokens = await connect(setup, await signIn("ada", ALLOWED));
+    const url = "https://example.com/walled";
+    fixture.web.set(url, {
+      page: { title: "Fetched", text: "Fetched text" },
+      summary: { title: "Walled", summary: "A walled page.", excerpt: "Walled" },
+    });
+
+    for (const [name, text] of [
+      ["blank", "   "],
+      ["long", "x".repeat(MAX_PAGE_TEXT * 5 + 1)],
+    ] as const) {
+      const unusable = await save(setup.api, `${url}/${name}`, tokens.access_token, {
+        title: "Walled",
+        text,
+      });
+      expect(unusable.status).toBe(201);
+    }
+
+    const saved = await save(setup.api, url, tokens.access_token, {
+      title: "Walled",
+      text: "What the browser showed",
+    });
+    expect(saved.status).toBe(201);
+    const { clipping } = (await saved.json()) as ExtensionSaveResponse;
+
+    expect(await fixture.service.enrichClipping(clipping.id)).toBe("ready");
+    expect((await fixture.service.getClippingText("ada", clipping.id))?.text).toBe(
+      "What the browser showed",
+    );
   });
 
   it("renames a clipping, goes back to the page's title, and refuses a title that is too long", async () => {

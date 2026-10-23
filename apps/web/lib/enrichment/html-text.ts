@@ -1,7 +1,5 @@
 import type { FetchedPage } from "@clippings/db";
-
-/** Most text of a page that goes on to the summarizer, in characters. */
-export const MAX_PAGE_TEXT = 20_000;
+import { MAX_PAGE_TEXT } from "@clippings/shared";
 
 const NAMED_ENTITIES: Record<string, string> = {
   amp: "&",

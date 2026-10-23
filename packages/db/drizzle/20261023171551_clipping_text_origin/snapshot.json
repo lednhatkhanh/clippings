@@ -1,0 +1,110 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "b39d6ab9-2c42-4fde-968b-af2efc66bb1a",
+  "prevIds": ["d31cfb71-bfb9-41ed-9401-56e762c9b5f1"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "clipping_texts", "origin"],
+      "writes": [
+        "s|col|public.clipping_texts.origin",
+        "n|col|public.clipping_texts.origin",
+        "e|col|public.clipping_texts.origin"
+      ],
+      "reads": ["n|tbl|public.clipping_texts", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "clipping_texts", "title"],
+      "writes": [
+        "s|col|public.clipping_texts.title",
+        "n|col|public.clipping_texts.title",
+        "e|col|public.clipping_texts.title"
+      ],
+      "reads": ["n|tbl|public.clipping_texts", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "clipping_texts", "read_at"],
+      "writes": [
+        "s|col|public.clipping_texts.read_at",
+        "n|col|public.clipping_texts.read_at",
+        "e|col|public.clipping_texts.read_at"
+      ],
+      "reads": ["n|tbl|public.clipping_texts", "n|sch|public"]
+    },
+    {
+      "statementType": "add_check",
+      "statementTarget": ["table", "public", "clipping_texts"],
+      "writes": [
+        "s|ck|public.clipping_texts.clipping_texts_origin_check",
+        "n|ck|public.clipping_texts.clipping_texts_origin_check",
+        "e|ck|public.clipping_texts.clipping_texts_origin_check",
+        "n|con|public.clipping_texts.clipping_texts_origin_check"
+      ],
+      "reads": ["n|tbl|public.clipping_texts", "n|sch|public", "n|col|public.clipping_texts.origin"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clipping_texts",
+        "name": "origin",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'fetch'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clipping_texts",
+        "name": "title",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clipping_texts",
+        "name": "read_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clipping_texts",
+        "name": "clipping_texts_origin_check",
+        "value": "\"origin\" in ('fetch', 'browser')",
+        "entityType": "checks"
+      }
+    }
+  ]
+}

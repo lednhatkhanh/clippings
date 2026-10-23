@@ -7,6 +7,7 @@ import type {
   DigesterInput,
   Embedder,
   EmbeddingPurpose,
+  FetchedPage,
   JobPublisher,
   PageFetcher,
   PageSummary,
@@ -48,10 +49,14 @@ export async function createServiceFixture() {
     },
   };
 
-  /** What reading each URL yields: a page and what the summarizer makes of it, or a failure. */
+  /**
+   * What reading each URL yields: a page and what the summarizer makes of it, or a failure. A
+   * failure may carry the `summary` the summarizer makes of a page the fetcher can't reach, for
+   * a clipping saved with the browser's own text.
+   */
   const web = new Map<
     string,
-    { page: { title: string | null; text: string }; summary: PageSummary } | { error: Error }
+    { page: FetchedPage; summary: PageSummary } | { error: Error; summary?: PageSummary }
   >();
   /** What a link check finds at each URL: "alive" unless set otherwise. */
   const links = new Map<string, "alive" | "dead" | "unknown">();
@@ -59,8 +64,11 @@ export async function createServiceFixture() {
   const checkedLinks: string[] = [];
   /** Runs while a check of the URL is in flight, before it answers: what happens meanwhile. */
   const duringLinkCheck = new Map<string, () => Promise<void>>();
+  /** The URLs `fetchPage` was asked for, in order. */
+  const fetchedPages: string[] = [];
   const fetcher: PageFetcher = {
     fetchPage: async (url) => {
+      fetchedPages.push(url);
       const entry = web.get(url);
       if (!entry) throw new Error(`Nothing at ${url}`);
       if ("error" in entry) throw entry.error;
@@ -74,11 +82,14 @@ export async function createServiceFixture() {
   };
   /** The `userTags` each summarize call got, in order: undefined when suggestions were off. */
   const summarizedWithTags: (readonly string[] | undefined)[] = [];
+  /** The page (URL, title and text) each summarize call got, in order. */
+  const summarizedPages: { url: string; title: string | null; text: string }[] = [];
   const summarizer: Summarizer = {
-    summarize: async ({ url, userTags }) => {
+    summarize: async ({ url, title, text, userTags }) => {
       summarizedWithTags.push(userTags);
+      summarizedPages.push({ url, title, text });
       const entry = web.get(url);
-      if (!entry || "error" in entry) throw new Error(`Nothing to summarize at ${url}`);
+      if (!entry?.summary) throw new Error(`Nothing to summarize at ${url}`);
       return entry.summary;
     },
   };
@@ -149,6 +160,10 @@ export async function createServiceFixture() {
     /** Something to do while a check of a URL is in flight, before it answers. */
     duringLinkCheck,
     enrichmentRequests,
+    /** Every URL the fetcher was asked to read, in order. */
+    fetchedPages,
+    /** The page each summarize call got, in order. */
+    summarizedPages,
     /** Every `requestEnrichments` call: the ids in order and the window they were spread over. */
     batchedEnrichmentRequests,
     /**

@@ -5,7 +5,8 @@ import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 
 import { APP_ICONS, iconSvg } from "@/lib/pwa/app-icon.ts";
-import { renderIconPng } from "@/lib/pwa/render-app-icon.ts";
+import { LAUNCH_SCREENS } from "@/lib/pwa/launch-screen.ts";
+import { renderIconPng, renderLaunchScreenPng } from "@/lib/pwa/render-app-icon.ts";
 import tokens from "@clippings/ui/tokens.json";
 
 import manifest from "./manifest.ts";
@@ -50,6 +51,18 @@ describe("manifest", () => {
       expect(largest).toBeLessThanOrEqual(2);
     },
   );
+
+  it.each(LAUNCH_SCREENS)("keeps the launch screen $path current", async (screen) => {
+    // A changed mark, ground or device list shows up here until `build:app-icons` runs again.
+    const committed = await pixels(join(webRoot, screen.path));
+    const fresh = await pixels(await renderLaunchScreenPng(screen));
+    expect([committed.info.width, committed.info.height]).toEqual([screen.width, screen.height]);
+    let largest = 0;
+    for (let i = 0; i < fresh.data.length; i++) {
+      largest = Math.max(largest, Math.abs((committed.data[i] ?? 0) - (fresh.data[i] ?? 0)));
+    }
+    expect(largest).toBeLessThanOrEqual(2);
+  });
 
   it("serves the small mark as the SVG favicon", () => {
     expect(readFileSync(join(webRoot, "app", "icon.svg"), "utf8")).toBe(iconSvg("rounded-small"));

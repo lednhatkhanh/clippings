@@ -199,6 +199,7 @@ export function createExtensionApi({
     /**
      * Saves the page with source `extension`, or finds it when the user has saved it already: the
      * popup shows "Saved" for a new clipping and "Saved on <date>" with its note for an old one.
+     * The page's text, when the extension could read the tab, is what enrichment reads.
      */
     async save(request: Request): Promise<Response> {
       const caller = await authenticate(request);
@@ -211,6 +212,7 @@ export function createExtensionApi({
           url: body.url,
           source: "extension",
           clientId: caller.clientId,
+          ...(body.page ? { page: body.page } : {}),
         });
         const answer: ExtensionSaveResponse = {
           status: saved.status,

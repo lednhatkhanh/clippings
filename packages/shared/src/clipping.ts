@@ -14,6 +14,9 @@ export const MAX_NOTE_LENGTH = 10_000;
 /** Longest title the user can give a clipping, in characters: as long as enrichment writes. */
 export const MAX_TITLE_LENGTH = 300;
 
+/** Most of a page's readable text enrichment reads and keeps, in characters. */
+export const MAX_PAGE_TEXT = 20_000;
+
 /** A clipping as every delivery surface sees it. JSON-safe, so it crosses the server/client line. */
 export interface Clipping {
   id: string;

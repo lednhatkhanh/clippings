@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { NextLinks } from "@/components/next-links.tsx";
 import { ServiceWorker } from "@/components/service-worker.tsx";
 import { APP_DESCRIPTION, APP_NAME } from "@/lib/pwa/app-identity.ts";
+import { FIRST_PAINT_STYLE, LAUNCH_SCREENS } from "@/lib/pwa/launch-screen.ts";
 import { DEFAULT_PALETTE } from "@clippings/shared";
 import { NO_FLASH_SCRIPT } from "@clippings/ui";
 import tokens from "@clippings/ui/tokens.json";
@@ -15,7 +16,15 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: APP_NAME,
   description: APP_DESCRIPTION,
-  appleWebApp: { capable: true, title: APP_NAME, statusBarStyle: "default" },
+  appleWebApp: {
+    capable: true,
+    title: APP_NAME,
+    statusBarStyle: "default",
+    startupImage: LAUNCH_SCREENS.map(({ url, media }) => ({ url, media })),
+  },
+  // Next.js writes `capable` as the standard `mobile-web-app-capable`; iOS reads launch screens
+  // only for a web app that declares the Apple name.
+  other: { "apple-mobile-web-app-capable": "yes" },
 };
 
 const defaults = tokens.palettes[DEFAULT_PALETTE].schemes.standard;
@@ -39,6 +48,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       suppressHydrationWarning
     >
       <head>
+        <style dangerouslySetInnerHTML={{ __html: FIRST_PAINT_STYLE }} />
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH_SCRIPT }} />
       </head>
       <body>

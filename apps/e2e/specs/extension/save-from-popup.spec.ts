@@ -133,6 +133,16 @@ test.describe("the extension", () => {
       });
       await expect(row).toBeVisible();
     });
+
+    // The server won't fetch the app's own (loopback) origin, so only the text the extension read
+    // from the tab can make it ready: the fake model titles what it read "Read: <page title>".
+    await test.step("enrichment reads the page as the browser showed it", async () => {
+      const row = page.getByRole("grid", { name: "Your clippings" }).getByRole("row", {
+        name: /Read: An article worth keeping/,
+      });
+      await expect(row).toBeVisible({ timeout: 20_000 });
+      await expect(row.getByText("Couldn't read this page.")).toBeHidden();
+    });
   });
 
   test.describe("when the user denies the connection", () => {
