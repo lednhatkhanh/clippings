@@ -96,6 +96,12 @@ export function createAuth({
     user: {
       validateUserInfo: createUserValidator({ allowedEmails }),
     },
+    // A signed copy of the session in a cookie for five minutes, so requests skip the session
+    // query while it is fresh. Server Components can't set cookies, so the copy is renewed by an
+    // action or route handler (a save, a poll). Signing out clears it; a session deleted any other way
+    // stays usable until the copy expires. (OAuth tokens for `/mcp` and the extension are not
+    // sessions: revoking a connection still takes effect at once.)
+    session: { cookieCache: { enabled: true, maxAge: 5 * 60 } },
     onAPIError: { errorURL: "/sign-in" },
     // Deliberately left at Better Auth's defaults, for a Google-only, allowlisted app:
     // - trustedOrigins: `BETTER_AUTH_URL` is trusted; previews don't sign in (spec, "Hosting").
