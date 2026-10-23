@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { browser } from "wxt/browser";
 import { fakeBrowser } from "wxt/testing/fake-browser";
 
@@ -19,6 +19,10 @@ describe("the offline queue", () => {
     fakeBrowser.reset();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("keeps one save per page and selection, however the address is written", async () => {
     await enqueue({ url: "https://example.com/a?utm_source=feed" });
     await enqueue({ url: "https://EXAMPLE.com/a/#top" });
@@ -33,6 +37,40 @@ describe("the offline queue", () => {
       { url: "https://example.com/b", quote: undefined },
     ]);
     expect(new Set(saves.map((save) => save.id)).size).toBe(3);
+  });
+
+  it("keeps a save's page text, and the same save once whatever the text", async () => {
+    const page = { title: "A", text: "Words" };
+    await enqueue({ url: "https://example.com/a", page });
+    await enqueue({ url: "https://example.com/a", page: { title: "A", text: "Other words" } });
+    await enqueue({ url: "https://example.com/b" });
+
+    expect(await queuedSaves()).toMatchObject([
+      { url: "https://example.com/a", page },
+      { url: "https://example.com/b" },
+    ]);
+    expect((await queuedSaves())[1]).not.toHaveProperty("page");
+  });
+
+  it("keeps a save without its page text when storage has no room for it", async () => {
+    const set = vi.spyOn(browser.storage.local, "set");
+    set.mockRejectedValueOnce(new Error("QUOTA_BYTES quota exceeded"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await enqueue({ url: "https://example.com/a", page: { title: "A", text: "Words" } });
+
+    const [save] = await queuedSaves();
+    expect(save).toMatchObject({ url: "https://example.com/a", failures: 0 });
+    expect(save).not.toHaveProperty("page");
+  });
+
+  it("fails when even a save without its page text doesn't fit", async () => {
+    vi.spyOn(browser.storage.local, "set").mockRejectedValue(
+      new Error("QUOTA_BYTES quota exceeded"),
+    );
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(enqueue({ url: "https://example.com/a" })).rejects.toThrow("quota");
   });
 
   it("keeps the queue in extension storage, so it outlives the service worker", async () => {

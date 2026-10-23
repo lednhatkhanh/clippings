@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { MAX_PAGE_TEXT, extractPage } from "./html-text.ts";
+import { MAX_PAGE_TEXT } from "@clippings/shared";
+
+import { extractPage } from "./html-text.ts";
 
 describe("extractPage", () => {
   it("takes the title and the readable text, leaving out scripts, styles and navigation chrome", () => {

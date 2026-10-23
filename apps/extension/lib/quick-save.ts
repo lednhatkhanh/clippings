@@ -1,10 +1,16 @@
 import { browser } from "wxt/browser";
 
-import { isSaveablePage, MAX_NOTE_LENGTH, parseWebUrl } from "@clippings/shared";
+import {
+  isSaveablePage,
+  MAX_NOTE_LENGTH,
+  parseWebUrl,
+  type ExtensionPage,
+} from "@clippings/shared";
 
 import { lookupClipping, saveClipping, saveNote } from "./api.ts";
 import { isSignedIn } from "./auth.ts";
 import type { SaveResult } from "./messages.ts";
+import { readPage } from "./page.ts";
 import { enqueue, pauseRetrying, sendQueued, type PendingSave, type SendOutcome } from "./queue.ts";
 import { quoteSelection } from "./quote.ts";
 import { showsSavedPages } from "./settings.ts";
@@ -40,9 +46,9 @@ export function noteWithQuote(note: string, selection: string): string {
  */
 export type QuickSaveResult = SaveResult | { ok: false; reason: "note_failed" };
 
-/** Saves the page, then adds the selection to its note when there is one. */
+/** Saves the page with its text, then adds the selection to its note when there is one. */
 export async function sendSave(save: PendingSave): Promise<QuickSaveResult> {
-  const result = await saveClipping(save.url);
+  const result = await saveClipping(save.url, save.page);
   if (!result.ok || !save.quote) return result;
 
   const { clipping } = result.saved;
@@ -97,7 +103,14 @@ export async function quickSave(
     await feedback((id) => showError(id, CANT_SAVE));
     return;
   }
-  const result = await sendSave(save);
+  // Only a save of the page the tab shows carries its text: a link points elsewhere. `readPage`
+  // checks the tab still shows the page. The menu click and the shortcut grant `activeTab`.
+  const page =
+    tabId !== undefined && tabId >= 0 && isPageOf(save.url, pageUrl)
+      ? await readPage(tabId, save.url)
+      : undefined;
+  const pending = page ? { ...save, page } : save;
+  const result = await sendSave(pending);
   if (result.ok) {
     void sendOfflineSaves();
     await feedback(async (id) => {
@@ -108,7 +121,7 @@ export async function quickSave(
   }
   switch (result.reason) {
     case "offline":
-      await enqueue({ ...save, tabId, pageUrl });
+      await enqueue({ ...pending, tabId, pageUrl });
       await feedback(showQueued);
       return;
     case "signed_out":
@@ -128,11 +141,11 @@ export async function quickSave(
 }
 
 /**
- * The popup's save. When the page is saved, the tab's icon fills; when the browser is offline,
- * the save waits in the queue like any other.
+ * The popup's save, with the page's text the popup read. When the page is saved, the tab's icon
+ * fills; when the browser is offline, the save waits in the queue like any other.
  */
-export async function saveFromPopup(url: string): Promise<SaveResult> {
-  const result = await saveClipping(url);
+export async function saveFromPopup(url: string, page?: ExtensionPage): Promise<SaveResult> {
+  const result = await saveClipping(url, page);
   // A save that got through says the browser is online: send what waited.
   if (result.ok) void sendOfflineSaves();
   if (result.ok || result.reason === "offline") {
@@ -141,7 +154,7 @@ export async function saveFromPopup(url: string): Promise<SaveResult> {
     const tabId = tab?.id !== undefined && isPageOf(url, tab.url) ? tab.id : undefined;
     if (result.ok && tabId !== undefined) await showSaved(tabId);
     if (!result.ok) {
-      await enqueue({ url, tabId, pageUrl: url });
+      await enqueue({ url, page, tabId, pageUrl: url });
       if (tabId !== undefined) await showQueued(tabId);
     }
   }
@@ -177,7 +190,7 @@ export async function sendOfflineSaves(): Promise<void> {
     return;
   }
   await sendQueued(async (save) => {
-    const result = await sendSave({ url: save.url, quote: save.quote });
+    const result = await sendSave({ url: save.url, quote: save.quote, page: save.page });
     if (result.ok && save.tabId !== undefined) {
       const tabId = save.tabId;
       try {

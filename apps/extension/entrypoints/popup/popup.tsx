@@ -13,6 +13,7 @@ import {
   type SignInProblem,
   type TagsReply,
 } from "@/lib/messages.ts";
+import { readPage } from "@/lib/page.ts";
 import { quoteSelection, readSelection } from "@/lib/quote.ts";
 import {
   formatAbsoluteDate,
@@ -49,11 +50,14 @@ async function open(): Promise<View> {
   // The palette may have changed in Clippings since the last open: the page follows the stored
   // one, so a newer palette crossfades in.
   void ask({ type: "refreshPalette" });
-  // What's selected on the page, read alongside the save: it becomes the note of a new clipping.
-  const [result, selection] = await Promise.all([
-    ask({ type: "save", url }),
-    tab.id === undefined ? "" : readSelection(tab.id),
-  ]);
+  // The page's text goes with the save, for the server to read when a bot wall turns it away;
+  // `readPage` checks the tab still shows `url`, and gives up after a second so the save isn't
+  // held back. What's selected is read alongside it: it becomes the note of a new clipping.
+  const [page, selection] =
+    tab.id === undefined
+      ? [undefined, ""]
+      : await Promise.all([readPage(tab.id, url), readSelection(tab.id)]);
+  const result = await ask({ type: "save", url, page });
   if (result.ok) {
     const fresh = result.saved.status === "created" && !result.saved.clipping.note;
     return { kind: "saved", saved: result.saved, quote: fresh ? quoteSelection(selection) : "" };

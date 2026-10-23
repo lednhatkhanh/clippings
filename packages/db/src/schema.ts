@@ -485,10 +485,18 @@ export const clippingTags = pgTable(
   ],
 );
 
+/** Who read a clipping's page text: the server fetching the URL, or the user's browser. */
+export const PAGE_TEXT_ORIGINS = ["fetch", "browser"] as const;
+
 /**
  * The readable text of a clipping's page, as the last enrichment read it (cut to what the
  * summarizer takes). One row per clipping, replaced on every re-read and absent when the page had
  * no text. The foreign key includes the user id, as in `clipping_tags`.
+ *
+ * `origin` says who read the page. A "browser" text came with a save from the extension, as the
+ * user's browser showed the page, with the title the browser gave: enrichment reads it instead of
+ * fetching, so a site that turns servers away (a bot wall) still gets read. A "fetch" text is what
+ * the server fetched, and has no title here (the clipping's own title holds it).
  */
 export const clippingTexts = pgTable(
   "clipping_texts",
@@ -496,8 +504,15 @@ export const clippingTexts = pgTable(
     clippingId: uuid("clipping_id").primaryKey(),
     userId: text("user_id").notNull(),
     text: text("text").notNull(),
+    origin: text("origin", { enum: PAGE_TEXT_ORIGINS }).notNull().default("fetch"),
+    // The page title the browser gave; null for a fetched text.
+    title: text("title"),
     // No default: the service stamps it from its clock.
     fetchedAt: timestamptz("fetched_at").notNull(),
+    // When a reading used the text. Null on a "browser" text means no reading has yet: it is for
+    // the next one, which uses it without fetching. A "fetch" text is written by its reading (a
+    // null there is a row from before this column, and counts as read).
+    readAt: timestamptz("read_at"),
   },
   (table) => [
     foreignKey({
@@ -505,6 +520,7 @@ export const clippingTexts = pgTable(
       columns: [table.clippingId, table.userId],
       foreignColumns: [clippings.id, clippings.userId],
     }).onDelete("cascade"),
+    check("clipping_texts_origin_check", sql`${table.origin} in (${inList(PAGE_TEXT_ORIGINS)})`),
   ],
 );
 

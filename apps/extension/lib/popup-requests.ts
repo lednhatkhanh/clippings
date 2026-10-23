@@ -49,7 +49,7 @@ async function answer(request: PopupRequest): Promise<PopupResponses[PopupReques
       await clearQueue();
       return { signedIn: false };
     case "save":
-      return saveFromPopup(request.url);
+      return saveFromPopup(request.url, request.page);
     case "tags":
       return { tags: await listTags() };
     case "setTags":

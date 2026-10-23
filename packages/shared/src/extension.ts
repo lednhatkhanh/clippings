@@ -1,7 +1,7 @@
 import * as z from "zod";
 
 import { PALETTE_NAMES } from "./appearance.ts";
-import { MAX_NOTE_LENGTH, MAX_TITLE_LENGTH } from "./clipping.ts";
+import { MAX_NOTE_LENGTH, MAX_PAGE_TEXT, MAX_TITLE_LENGTH } from "./clipping.ts";
 import { MAX_TAG_LENGTH, MAX_TAGS_PER_CLIPPING, TAG_COLORS } from "./tag.ts";
 import { parseWebUrl } from "./url.ts";
 
@@ -17,9 +17,40 @@ export const CLIPPINGS_EXTENSION_ID = "niennihgpnpplljbiaddgeoliojiffdc";
 /** Longest URL the extension sends: well past any real page address, short of abuse. */
 const MAX_URL_LENGTH = 8_192;
 
-/** `POST /api/extension/clippings`: save the page, or find it when it is already saved. */
+/** Drops NUL (Postgres text refuses it), trims and cuts to `max` characters. */
+function tidy(max: number) {
+  return (value: string) => value.replaceAll("\u0000", "").trim().slice(0, max);
+}
+
+const tidyTitle = tidy(MAX_TITLE_LENGTH);
+
+/** Longest text taken before it is cleaned: room for the whitespace a page's text is trimmed of. */
+const MAX_RAW_PAGE_TEXT = MAX_PAGE_TEXT * 5;
+
+/**
+ * The page as the user's browser shows it: its title and readable text. Enrichment reads this
+ * instead of fetching the page, so a site that turns servers away (a bot wall) still gets read.
+ * Both are cleaned rather than refused: NUL dropped, trimmed, cut to length. A text left empty (or
+ * sent past five times the limit) is refused, and a title left empty is null.
+ */
+export const extensionPageSchema = z.object({
+  title: z
+    .string()
+    .nullable()
+    .transform((title) => (title === null ? null : tidyTitle(title) || null)),
+  text: z.string().max(MAX_RAW_PAGE_TEXT).transform(tidy(MAX_PAGE_TEXT)).pipe(z.string().min(1)),
+});
+export type ExtensionPage = z.infer<typeof extensionPageSchema>;
+
+/**
+ * `POST /api/extension/clippings`: save the page, or find it when it is already saved. `page` is
+ * left out when the extension couldn't read the tab (a link saved from the menu, the PDF viewer).
+ * A `page` that is malformed or has no text is dropped, not refused: the save of the URL always
+ * goes through. The body is parsed after it is read, so the cap on its size is the route's.
+ */
 export const extensionSaveRequestSchema = z.object({
   url: z.string().min(1).max(MAX_URL_LENGTH),
+  page: extensionPageSchema.optional().catch(undefined),
 });
 export type ExtensionSaveRequest = z.infer<typeof extensionSaveRequestSchema>;
 

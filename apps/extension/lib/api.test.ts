@@ -89,6 +89,17 @@ describe("saving a page", () => {
     });
   });
 
+  it("sends the page's text with the address", async () => {
+    serve(() => json({ status: "created", clipping: clipping() }, 201));
+
+    await saveClipping("https://example.com/essay", { title: "Essay", text: "Words" });
+
+    expect(JSON.parse(vi.mocked(fetch).mock.lastCall?.[1]?.body as string)).toEqual({
+      url: "https://example.com/essay",
+      page: { title: "Essay", text: "Words" },
+    });
+  });
+
   it("refreshes the token the API refused and tries again, once", async () => {
     const seen = serve((token) =>
       token === "access-new"
