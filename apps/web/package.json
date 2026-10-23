@@ -34,6 +34,7 @@
     "react": "catalog:",
     "react-aria-components": "catalog:",
     "react-dom": "catalog:",
+    "streamdown": "catalog:",
     "swr": "catalog:",
     "zod": "catalog:"
   },

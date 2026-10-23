@@ -2,13 +2,14 @@
 
 import { MessageCircleQuestion, Send } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from "react";
 
 import { useOnline } from "@/components/online-status.tsx";
 import { askRequestSchema, MAX_QUESTION_LENGTH } from "@clippings/shared";
 import { Button, TextField } from "@clippings/ui";
 
 import {
+  answerMarkdown,
   ASKING_ANSWER,
   endAnswer,
   IDLE_ANSWER,
@@ -19,6 +20,11 @@ import {
 
 const FAILED_MESSAGE = "Couldn't get an answer. Try again.";
 
+// The Markdown renderer is the page's heaviest part: its own chunk, fetched once the form is up
+// (below), so it is there by the time an answer streams in without delaying the page.
+const loadAnswerMarkdown = () => import("./answer-markdown.tsx");
+const AnswerMarkdown = lazy(async () => ({ default: (await loadAnswerMarkdown()).AnswerMarkdown }));
+
 /** The question field and the answer under it, streamed in as the model writes it. */
 export function AskForm() {
   const online = useOnline();
@@ -28,6 +34,9 @@ export function AskForm() {
   const inFlight = useRef<AbortController | null>(null);
 
   useEffect(() => () => inFlight.current?.abort(), []);
+  useEffect(() => {
+    void loadAnswerMarkdown();
+  }, []);
 
   const asking = answer.status === "asking";
   const canAsk = askRequestSchema.safeParse({ question }).success && online;
@@ -121,24 +130,23 @@ function AskEmptyState() {
   );
 }
 
+function AnswerText({ answer }: { answer: AnswerState }) {
+  const markdown = answerMarkdown(answer.parts);
+  return (
+    // Until the renderer's chunk is in, the Markdown as plain text.
+    <Suspense fallback={<p className="typescale-reading whitespace-pre-wrap">{markdown}</p>}>
+      <AnswerMarkdown markdown={markdown} streaming={answer.status === "asking"} />
+    </Suspense>
+  );
+}
+
 function Answer({ answer }: { answer: AnswerState }) {
   return (
     <div className="flex flex-col gap-4 rounded-xl paper p-5 medium:p-6">
       {answer.parts.length === 0 && answer.status === "asking" ? (
         <p className="typescale-body-md text-ink-muted">Searching your clippings…</p>
       ) : (
-        <p className="typescale-reading whitespace-pre-wrap">
-          {answer.parts.map((part, index) =>
-            part.type === "text" ? (
-              <span key={index}>{part.text}</span>
-            ) : (
-              <sup key={index} className="mx-0.5 typescale-label-sm text-ink-muted">
-                <span className="sr-only">Source </span>
-                {part.number}
-              </sup>
-            ),
-          )}
-        </p>
+        <AnswerText answer={answer} />
       )}
       {answer.status === "error" ? (
         <p role="alert" className="typescale-body-md text-danger">
