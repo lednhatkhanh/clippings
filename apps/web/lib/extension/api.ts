@@ -141,16 +141,13 @@ export function createExtensionApi({
         "www-authenticate": 'Bearer error="invalid_token"',
       });
     }
-    // Access tokens are JWTs nothing stores: one issued before the user revoked the extension in
-    // Settings is refused here, as at `/mcp`. Every other call is recorded as its last use. The
-    // two reads don't depend on each other, so they run together; the allowlist is judged first.
-    const issuedAt = typeof claims.iat === "number" ? fromUnixTime(claims.iat) : undefined;
-    const [user, recorded] = await Promise.all([
-      context.internalAdapter.findUserById(claims.sub),
-      issuedAt ? connections.recordUse(claims.sub, clientId, issuedAt) : false,
-    ]);
+    const user = await context.internalAdapter.findUserById(claims.sub);
     if (!isAllowlisted(allowlist, user?.email)) return refuse(request, 403, "not_allowlisted");
-    if (!recorded) {
+
+    // Access tokens are JWTs nothing stores: one issued before the user revoked the extension in
+    // Settings is refused here, as at `/mcp`. Every other call is recorded as its last use.
+    const issuedAt = typeof claims.iat === "number" ? fromUnixTime(claims.iat) : undefined;
+    if (!issuedAt || !(await connections.recordUse(claims.sub, clientId, issuedAt))) {
       return refuse(request, 401, "invalid_token", {
         "www-authenticate": 'Bearer error="invalid_token"',
       });
