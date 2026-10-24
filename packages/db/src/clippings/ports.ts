@@ -77,7 +77,10 @@ export type EmbeddingPurpose = "document" | "query";
 
 /** Turns text into a vector of `EMBEDDING_DIMENSIONS` (schema.ts) numbers, close for texts close in meaning. */
 export interface Embedder {
-  embed: (text: string, purpose: EmbeddingPurpose) => Promise<number[]>;
+  /** `signal` cancels the call, as when the reader has typed past a search. */
+  embed: (text: string, purpose: EmbeddingPurpose, signal?: AbortSignal) => Promise<number[]>;
+  /** One vector per text, in order. For a backlog: one call instead of one per text. */
+  embedMany: (texts: readonly string[], purpose: EmbeddingPurpose) => Promise<number[][]>;
 }
 
 /** A clipping as the digester reads it. */

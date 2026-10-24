@@ -40,7 +40,6 @@ export async function handleSweepRequest(
     return new Response("Unauthorized", { status: 401 });
   }
   const requested = await service.sweepStuck();
-  const embedded = await service.embedMissing();
   let imports: string[] = [];
   let importsFailed = false;
   try {
@@ -50,6 +49,8 @@ export async function handleSweepRequest(
     console.error("Couldn't request the import backlog", error);
   }
   const purged = await service.purgeDeleted();
+  // After the cheap jobs, so a slow embedding provider can't starve them of the route's time.
+  const embedded = await service.embedMissing();
   let links = { checked: 0, dead: 0 };
   let linksFailed = false;
   try {
