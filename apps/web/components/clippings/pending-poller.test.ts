@@ -89,9 +89,22 @@ describe("createPendingPoller", () => {
       watch(id);
     }
 
-    await advance(0);
+    await advance(100);
 
-    expect(requests).toEqual([{ at: 0, ids: ["a", "b", "c"] }]);
+    expect(requests).toEqual([{ at: 100, ids: ["a", "b", "c"] }]);
+  });
+
+  it("asks about rows that come on screen a few milliseconds apart in one request", async () => {
+    const { watch, advance, statuses, requests } = setup();
+    statuses.set("a", "pending");
+    statuses.set("b", "pending");
+    watch("a");
+    await advance(5);
+    watch("b");
+
+    await advance(100);
+
+    expect(requests.map(({ ids }) => ids)).toEqual([["a", "b"]]);
   });
 
   it("gives a row that has finished to its owner, read once, and asks no more about it", async () => {
@@ -100,7 +113,7 @@ describe("createPendingPoller", () => {
     statuses.set("b", "pending");
     watch("a");
     watch("b");
-    await advance(0);
+    await advance(100);
 
     statuses.set("a", "ready");
     await advance(2000);
@@ -117,7 +130,7 @@ describe("createPendingPoller", () => {
     statuses.set("a", "failed");
     watch("a");
 
-    await advance(0);
+    await advance(100);
 
     expect(delivered.map(({ id }) => id)).toEqual(["a"]);
   });
@@ -149,16 +162,17 @@ describe("createPendingPoller", () => {
     statuses.set("early", "pending");
     statuses.set("late", "pending");
     watch("early");
-    await advance(0);
+    await advance(100);
     await advance(1000);
     watch("late");
     await advance(1000);
 
-    // `early` is next due at 2 s (its first wait), `late` at once: a request of its own at 1 s.
+    // `early` is next due 2 s after its first read, `late` 100 ms after it is watched: a
+    // request of its own.
     expect(requests).toEqual([
-      { at: 0, ids: ["early"] },
-      { at: 1000, ids: ["late"] },
-      { at: 2000, ids: ["early"] },
+      { at: 100, ids: ["early"] },
+      { at: 1200, ids: ["late"] },
+      { at: 2100, ids: ["early"] },
     ]);
   });
 
@@ -170,7 +184,7 @@ describe("createPendingPoller", () => {
       watch(id);
     }
 
-    await advance(0);
+    await advance(100);
 
     expect(requests.map(({ ids: asked }) => asked.length)).toEqual([
       MAX_STATUS_IDS,
@@ -184,7 +198,7 @@ describe("createPendingPoller", () => {
     const { watch, advance, statuses, requests } = setup();
     statuses.set("a", "pending");
     const stop = watch("a");
-    await advance(0);
+    await advance(100);
 
     stop();
     await advance(600_000);
@@ -196,17 +210,18 @@ describe("createPendingPoller", () => {
     const { watch, advance, statuses, requests } = setup();
     statuses.set("a", "pending");
     const stop = watch("a");
-    await advance(2000);
+    await advance(2100);
     await advance(4000);
     stop();
     expect(requests).toHaveLength(3);
 
     watch("a");
-    await advance(0);
+    await advance(100);
     await advance(16_000);
 
-    // Back on screen it asks at once, then waits 16 s, the next in its doubling, not 2 s again.
-    expect(requests.slice(3).map(({ at }) => at)).toEqual([6000, 22_000]);
+    // Back on screen it asks after the first-read delay, then waits 16 s, the next in its
+    // doubling, not 2 s again.
+    expect(requests.slice(3).map(({ at }) => at)).toEqual([6200, 22_200]);
   });
 
   it("drops a row the server no longer has", async () => {
@@ -224,13 +239,13 @@ describe("createPendingPoller", () => {
     statuses.set("a", "pending");
     failStatusRequests(true);
     watch("a");
-    await advance(0);
+    await advance(100);
 
     failStatusRequests(false);
     statuses.set("a", "ready");
     await advance(2000);
 
-    expect(requests.map(({ at }) => at)).toEqual([0, 2000]);
+    expect(requests.map(({ at }) => at)).toEqual([100, 2100]);
     expect(delivered.map(({ id }) => id)).toEqual(["a"]);
   });
 
@@ -245,7 +260,7 @@ describe("createPendingPoller", () => {
 
     setCanPoll(true);
     poller.wake();
-    await advance(0);
+    await advance(100);
     expect(requests).toEqual([{ at: 60_000, ids: ["a"] }]);
   });
 });

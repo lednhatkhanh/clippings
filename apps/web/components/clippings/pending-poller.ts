@@ -5,6 +5,12 @@ import { pollDelay, pollMax } from "./poll-schedule.ts";
 
 /** Rows due within this long of a round join it, so rows that are nearly due share a request. */
 const BATCH_WINDOW_MS = 500;
+/**
+ * How long a newly watched row waits for its first read. Rows come on screen a task or two apart
+ * (each one's visibility is its own callback), so a read due at once would go out for the first
+ * row alone.
+ */
+const FIRST_READ_DELAY_MS = 100;
 
 export interface PendingPollerDeps {
   /** One status read for up to `MAX_STATUS_IDS` clippings; one that is gone is left out. */
@@ -116,10 +122,10 @@ export function createPendingPoller({
   return {
     /**
      * Watches a pending row until its status changes, it is gone, or the returned function is
-     * called. The first read is due at once, so rows that start watching together share it.
+     * called. The first read waits briefly, so rows that start watching together share it.
      */
     watch(id: string, source: ClippingSource, onRow: (row: ClippingRowData) => void) {
-      const entry: Watched = { source, onRow, dueAt: now() };
+      const entry: Watched = { source, onRow, dueAt: now() + FIRST_READ_DELAY_MS };
       watched.set(id, entry);
       schedule();
       return () => {
