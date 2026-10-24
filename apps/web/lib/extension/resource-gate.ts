@@ -1,6 +1,8 @@
 import type { BetterAuthPlugin } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 
+import { authorizationRequestSource } from "@/lib/auth/authorization-request.ts";
+
 import { isExtensionRedirectUri } from "./origins.ts";
 
 const REGISTER_PATH = "/oauth2/register";
@@ -22,7 +24,7 @@ const refuse = () =>
  * Keeps the extension API's resource to the extension. Registration is open (Claude Code
  * registers itself), so without this any client could register for the resource and ask for a
  * token good there. Only a client whose every redirect is a trusted extension's may register for
- * it, and only an authorization that returns to one may ask for it.
+ * it, and only an authorization that returns to one may ask for it (on GET or POST).
  */
 export function extensionResourceGate({
   resource,
@@ -49,9 +51,14 @@ export function extensionResourceGate({
         {
           matcher: (context) => context.path === AUTHORIZE_PATH,
           handler: createAuthMiddleware(async (ctx) => {
-            const query = (ctx.query ?? {}) as { resource?: unknown; redirect_uri?: unknown };
-            if (!values(query.resource).includes(resource)) return;
-            if (!returnsToExtension(values(query.redirect_uri))) throw refuse();
+            // The gate reads the parameters from the place the provider does.
+            const sent = authorizationRequestSource(ctx).sent ?? {};
+            const { resource: asked, redirect_uri: redirectUri } = sent as {
+              resource?: unknown;
+              redirect_uri?: unknown;
+            };
+            if (!values(asked).includes(resource)) return;
+            if (!returnsToExtension(values(redirectUri))) throw refuse();
           }),
         },
       ],

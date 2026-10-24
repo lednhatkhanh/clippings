@@ -32,7 +32,7 @@ type View =
   | { kind: "cant_save" }
   | { kind: "signed_out"; problem: SignInProblem | null }
   | { kind: "saved"; saved: ExtensionSaveResponse; quote: string }
-  | { kind: "error"; reason: "offline" | "failed" };
+  | { kind: "error"; reason: "offline" | "unreachable" | "failed" };
 
 /**
  * What the popup shows on open. A page Clippings can't save says so before anything is sent;
@@ -45,6 +45,7 @@ async function open(): Promise<View> {
   if (!url || !isSaveablePage(url)) return { kind: "cant_save" };
 
   const status = await ask({ type: "status" });
+  if (!status) return { kind: "error", reason: "failed" };
   if (!status.signedIn) return { kind: "signed_out", problem: status.signInProblem };
 
   // The palette may have changed in Clippings since the last open: the page follows the stored
@@ -58,6 +59,7 @@ async function open(): Promise<View> {
       ? [undefined, ""]
       : await Promise.all([readPage(tab.id, url), readSelection(tab.id)]);
   const result = await ask({ type: "save", url, page });
+  if (!result) return { kind: "error", reason: "failed" };
   if (result.ok) {
     const fresh = result.saved.status === "created" && !result.saved.clipping.note;
     return { kind: "saved", saved: result.saved, quote: fresh ? quoteSelection(selection) : "" };
@@ -70,6 +72,7 @@ async function open(): Promise<View> {
     case "invalid_url":
       return { kind: "cant_save" };
     case "offline":
+    case "unreachable":
     case "failed":
       return { kind: "error", reason: result.reason };
   }
@@ -100,9 +103,9 @@ function SignedOut({
   async function signIn() {
     setWaiting(true);
     // The sign-in window takes focus, which closes the popup; the next one picks up from here.
-    const { signedIn } = await ask({ type: "signIn" });
+    const answer = await ask({ type: "signIn" });
     setWaiting(false);
-    if (signedIn) onSignedIn();
+    if (answer?.signedIn) onSignedIn();
   }
 
   return (
@@ -287,8 +290,8 @@ function Saved({
   const { clipping } = saved;
 
   async function signOut() {
-    await ask({ type: "signOut" });
-    onSignedOut();
+    // No answer: the sign-out didn't happen, so the popup stays as it is.
+    if (await ask({ type: "signOut" })) onSignedOut();
   }
 
   return (
@@ -324,6 +327,12 @@ function Saved({
   );
 }
 
+const ERROR_MESSAGES = {
+  offline: "You're offline. Clippings will save this page when you're back online.",
+  unreachable: "Couldn't reach Clippings. It will save this page when it can.",
+  failed: "Couldn't save this page.",
+};
+
 function CurrentView({ view, reopen }: { view: Promise<View>; reopen: () => void }) {
   const current = use(view);
   switch (current.kind) {
@@ -341,9 +350,7 @@ function CurrentView({ view, reopen }: { view: Promise<View>; reopen: () => void
       return (
         <Panel actions={<Button onPress={reopen}>Try again</Button>}>
           <p role="alert" className="typescale-body-lg">
-            {current.reason === "offline"
-              ? "You're offline. Clippings will save this page when you're back online."
-              : "Couldn't save this page."}
+            {ERROR_MESSAGES[current.reason]}
           </p>
         </Panel>
       );

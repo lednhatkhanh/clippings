@@ -1,3 +1,5 @@
+import * as z from "zod";
+
 import type { Tag } from "./tag.ts";
 
 /** Where a clipping was saved from. */
@@ -16,6 +18,23 @@ export const MAX_TITLE_LENGTH = 300;
 
 /** Most of a page's readable text enrichment reads and keeps, in characters. */
 export const MAX_PAGE_TEXT = 20_000;
+
+/** Most clippings one status read (`GET /api/clippings/status`) asks about. */
+export const MAX_STATUS_IDS = 50;
+
+/**
+ * `GET /api/clippings/status?ids=a,b,c`: the ids of clippings whose status the list wants, comma
+ * separated. Refused when empty, over `MAX_STATUS_IDS`, or when any is not a UUID.
+ */
+export const clippingStatusIdsSchema = z
+  .string()
+  .transform((ids) => ids.split(","))
+  .pipe(z.array(z.uuid()).min(1).max(MAX_STATUS_IDS));
+
+/** The answer to a status read: each clipping the user has, with where it is in enrichment. */
+export interface ClippingStatuses {
+  statuses: { id: string; status: ClippingStatus }[];
+}
 
 /** A clipping as every delivery surface sees it. JSON-safe, so it crosses the server/client line. */
 export interface Clipping {

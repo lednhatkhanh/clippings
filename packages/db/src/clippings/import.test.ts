@@ -184,6 +184,33 @@ describe.skipIf(!TEST_DATABASE_URL)("importing bookmarks", () => {
     expect(revived?.tags.map((tag) => tag.name)).toEqual(["fresh"]);
   });
 
+  it("gives a deleted clipping that was being swept a fresh sweep count when it is imported again", async () => {
+    const ana = await fixture.createUser("ana");
+    fixture.web.set("https://example.com/a", { error: new Error("503") });
+    const { clipping } = await fixture.service.saveClipping(ana, {
+      url: "https://example.com/a",
+      source: "web",
+    });
+    await fixture.service.enrichClipping(clipping.id, { lastAttempt: true });
+    fixture.advanceClock(2 * HOUR);
+    await fixture.service.sweepStuck();
+    const sweepAttempts = async () =>
+      (
+        await fixture.pool.query<{ sweep_attempts: number }>(
+          `select sweep_attempts from clippings where id = $1`,
+          [clipping.id],
+        )
+      ).rows[0]?.sweep_attempts;
+    expect(await sweepAttempts()).toBe(1);
+
+    await fixture.service.deleteClipping(ana, clipping.id);
+    await fixture.service.importClippings(ana, [bookmark("https://example.com/a")], {
+      foldersAsTags: false,
+    });
+
+    expect(await sweepAttempts()).toBe(0);
+  });
+
   describe("folders as tags", () => {
     it("tags each bookmark with its folders, reusing the user's tags ignoring case and merging a page repeated in two folders", async () => {
       const ana = await fixture.createUser("ana");

@@ -4,25 +4,17 @@ import { fakeBrowser } from "wxt/testing/fake-browser";
 
 import { MAX_NOTE_LENGTH, type ExtensionSaveResponse } from "@clippings/shared";
 
-import { lookupClipping, saveClipping, saveNote } from "./api.ts";
+import { saveClipping, saveNote } from "./api.ts";
 import { isSignedIn } from "./auth.ts";
 import type { SaveResult } from "./messages.ts";
 import { clearQueue, ensureRetrying, queuedSaves, RETRY_ALARM } from "./queue.ts";
-import {
-  lookUpTab,
-  noteWithQuote,
-  quickSave,
-  saveFromPopup,
-  sendOfflineSaves,
-} from "./quick-save.ts";
+import { noteWithQuote, quickSave, saveFromPopup, sendOfflineSaves } from "./quick-save.ts";
 import { MENU, menuSave } from "./save-triggers.ts";
-import { SHOW_SAVED_KEY } from "./settings.ts";
 import { SAVED_BADGE_MS } from "./toolbar.ts";
 
 vi.mock("./api.ts", () => ({
   saveClipping: vi.fn(),
   saveNote: vi.fn(),
-  lookupClipping: vi.fn(),
 }));
 vi.mock("./auth.ts", () => ({ isSignedIn: vi.fn() }));
 // The service worker draws the icons on a canvas, which Node lacks.
@@ -83,7 +75,6 @@ beforeEach(() => {
   fakeBrowser.reset();
   vi.mocked(saveClipping).mockReset();
   vi.mocked(saveNote).mockReset();
-  vi.mocked(lookupClipping).mockReset();
   executeScript.mockReset();
   readsPage();
   Object.assign(fakeBrowser, { scripting: { executeScript } });
@@ -328,6 +319,26 @@ describe("saving offline", () => {
   });
 });
 
+describe("saving while Clippings can't be reached", () => {
+  it("queues the save from the context menu and the popup, and sends it when the server answers", async () => {
+    vi.mocked(saveClipping).mockResolvedValue({ ok: false, reason: "unreachable" });
+
+    await quickSave({ url: PAGE }, { tabId: TAB, pageUrl: PAGE });
+    expect(await badgeOf(TAB)).toBe("…");
+    expect(await queuedSaves()).toHaveLength(1);
+    await saveFromPopup(`${PAGE}?other`);
+    expect(await queuedSaves()).toHaveLength(2);
+
+    // Still down: the run stops at the first, and the save is kept without counting a failure.
+    await sendOfflineSaves();
+    expect(await queuedSaves()).toMatchObject([{ failures: 0 }, { failures: 0 }]);
+
+    vi.mocked(saveClipping).mockResolvedValue(saved());
+    await sendOfflineSaves();
+    expect(await queuedSaves()).toEqual([]);
+  });
+});
+
 describe("the queue and the sign-in", () => {
   async function queueOne() {
     online = false;
@@ -370,43 +381,5 @@ describe("the queue and the sign-in", () => {
     await ensureRetrying();
     expect(await browser.alarms.get(RETRY_ALARM)).toEqual(again);
     expect(first).toBeDefined();
-  });
-});
-
-describe("showing when a page is already saved", () => {
-  const permissions = { contains: vi.fn(async () => true) };
-
-  beforeEach(() => {
-    Object.assign(fakeBrowser, { permissions });
-  });
-
-  it("sends no address while the setting is off", async () => {
-    await lookUpTab(TAB, PAGE);
-    await browser.storage.local.set({ [SHOW_SAVED_KEY]: false });
-    await lookUpTab(TAB, PAGE);
-
-    expect(lookupClipping).not.toHaveBeenCalled();
-  });
-
-  it("sends no address when the tabs permission was taken back", async () => {
-    await browser.storage.local.set({ [SHOW_SAVED_KEY]: true });
-    permissions.contains.mockResolvedValueOnce(false);
-
-    await lookUpTab(TAB, PAGE);
-
-    expect(lookupClipping).not.toHaveBeenCalled();
-  });
-
-  it("fills the icon of a tab whose page is saved, once the user turns it on", async () => {
-    await browser.storage.local.set({ [SHOW_SAVED_KEY]: true });
-    vi.mocked(lookupClipping).mockResolvedValue("saved");
-
-    tabUrls.set(TAB, `${PAGE}#access_token=secret`);
-    await lookUpTab(TAB, `${PAGE}#access_token=secret`);
-    await lookUpTab(TAB + 1, "chrome://newtab");
-
-    // The normalized address: never the fragment.
-    expect(lookupClipping).toHaveBeenCalledExactlyOnceWith(PAGE);
-    expect(iconOf(TAB)).toBe("saved-icon");
   });
 });

@@ -8,6 +8,7 @@ import {
   importBookmarksAction,
   previewBookmarksImportAction,
 } from "@/app/(app)/settings/actions.ts";
+import { refreshTags } from "@/components/clippings/use-tags.ts";
 import {
   bookmarksFileProblem,
   describeImported,
@@ -71,7 +72,11 @@ export function ImportSettings({ pendingImports }: { pendingImports: number }) {
     if (current.current !== file) return;
     if (!result) setStage({ kind: "error", message: IMPORT_REQUEST_FAILED });
     else if (!result.ok) setStage({ kind: "error", message: result.message });
-    else setStage({ kind: "done", done: result.value });
+    else {
+      // An import can create tags (a folder becomes one).
+      refreshTags();
+      setStage({ kind: "done", done: result.value });
+    }
   }
 
   function cancel() {

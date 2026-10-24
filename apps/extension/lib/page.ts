@@ -68,11 +68,13 @@ async function readFrame(tabId: number, url: string): Promise<ExtensionPage | un
       injectImmediately: true,
       // Serialized into the tab: it can't see this module, so the limit comes in as an argument.
       func: (limit: number) => {
-        // The longest article, so an index page of teasers doesn't stand for one teaser.
+        // The longest article, so an index page of teasers doesn't stand for one teaser. Measured
+        // by `textContent`: `innerText` makes the browser lay the page out for each article, and
+        // only the one chosen is read that way.
         let root: HTMLElement | null = null;
         let longest = 0;
         for (const article of document.querySelectorAll("article")) {
-          const length = article.innerText.length;
+          const length = article.textContent.length;
           if (length > longest) {
             root = article;
             longest = length;

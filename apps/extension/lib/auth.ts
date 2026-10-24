@@ -3,7 +3,9 @@ import { browser } from "wxt/browser";
 
 import { EXTENSION_API_PATH, formatIsoUtc, UNKNOWN_CLIENT } from "@clippings/shared";
 
+import { clearLookups } from "./lookup-cache-storage.ts";
 import type { SignInProblem } from "./messages.ts";
+import { request } from "./request.ts";
 
 /** The Clippings web app: its authorization server and the extension API. */
 export const CLIPPINGS_ORIGIN = import.meta.env.CLIPPINGS_ORIGIN;
@@ -52,7 +54,7 @@ async function pkce() {
  * extension's own `chromiumapp.org` address, and whose tokens may be for the extension API.
  */
 async function registerClient(): Promise<string> {
-  const response = await fetch(`${AUTH_URL}/oauth2/register`, {
+  const response = await request(`${AUTH_URL}/oauth2/register`, {
     method: "POST",
     credentials: "omit",
     headers: { "content-type": "application/json" },
@@ -74,7 +76,7 @@ async function registerClient(): Promise<string> {
 
 /** Calls the token endpoint and keeps what it issues. Null when the grant was refused. */
 async function requestTokens(params: Record<string, string>): Promise<Tokens | null> {
-  const response = await fetch(`${AUTH_URL}/oauth2/token`, {
+  const response = await request(`${AUTH_URL}/oauth2/token`, {
     method: "POST",
     credentials: "omit",
     headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -124,9 +126,13 @@ export async function isSignedIn(): Promise<boolean> {
   return Boolean((await readStored()).tokens);
 }
 
-/** Drops this device's tokens: the user signs in again on the next save. */
+/**
+ * Drops this device's tokens: the user signs in again on the next save. The answers kept about
+ * which pages are saved go too, as they were the signed-in user's.
+ */
 export async function forgetTokens() {
   await browser.storage.local.remove("tokens");
+  await clearLookups();
 }
 
 /** What the authorization server's refusal, sent back to the extension, means for the popup. */
@@ -224,6 +230,8 @@ export async function signIn(): Promise<boolean> {
       code_verifier: verifier,
     });
     if (!tokens) throw new Error("The authorization code was refused");
+    // Another account may have signed in: what was kept about the last one's saves is not theirs.
+    await clearLookups();
     return true;
   } catch (error) {
     console.error("Couldn't sign in", error);
@@ -237,7 +245,7 @@ export async function signOut() {
   const { clientId, tokens } = await readStored();
   await forgetTokens();
   if (!clientId || !tokens) return;
-  await fetch(`${AUTH_URL}/oauth2/revoke`, {
+  await request(`${AUTH_URL}/oauth2/revoke`, {
     method: "POST",
     credentials: "omit",
     headers: { "content-type": "application/x-www-form-urlencoded" },

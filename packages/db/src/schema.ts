@@ -1,5 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   customType,
@@ -100,6 +101,18 @@ export const verification = pgTable(
   },
   (table) => [index("verification_identifier_idx").on(table.identifier)],
 );
+
+/**
+ * Better Auth's rate-limit counters (`rateLimit.storage: "database"`), so a limit holds across
+ * serverless instances instead of per instance. One row per client address and endpoint; Better
+ * Auth removes the expired ones itself. `lastRequest` is epoch milliseconds.
+ */
+export const rateLimit = pgTable("rateLimit", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull().unique("rateLimit_key_key"),
+  count: integer("count").notNull(),
+  lastRequest: bigint("lastRequest", { mode: "number" }).notNull(),
+});
 
 // The OAuth 2.1 authorization server's tables (`@better-auth/mcp` on `@better-auth/oauth-provider`,
 // with the JWT plugin's signing keys). Claude and the extension are its clients. Same naming as
@@ -355,6 +368,10 @@ export const clippings = pgTable(
     // When enrichment was last requested or the status last changed: the sweep's "stuck for an
     // hour". Not `updated_at`, which an edit to the note moves too.
     statusChangedAt: timestamptz("status_changed_at").notNull().defaultNow(),
+    // How many times the daily sweep started this clipping over from `failed`. A row that keeps
+    // failing stops being swept at `MAX_SWEEP_RESTARTS`; going pending or ready by any other
+    // route (a retry, a save, a successful read) sets it back to 0.
+    sweepAttempts: integer("sweep_attempts").notNull().default(0),
     // When the daily drain last requested this imported clipping's enrichment; null before that.
     // The drain counts these against its daily budget, so a second run the same day takes only
     // what is left and never requests the same clipping twice.
@@ -394,9 +411,6 @@ export const clippings = pgTable(
     check("clippings_source_check", sql`${table.source} in (${inList(CLIPPING_SOURCES)})`),
     index("clippings_user_newest_idx").on(table.userId, table.createdAt.desc(), table.id.desc()),
     index("clippings_search_tsv_idx").using("gin", table.searchTsv),
-    // Typo tolerance on the page's title: `<%` (word similarity) uses it. v1's match still reads
-    // it during a deploy; the release after v2 drops it, with the code that no longer needs it.
-    index("clippings_title_trgm_idx").using("gin", table.title.op("gin_trgm_ops")),
     // Typo tolerance on the title to show: `<%` (word similarity) uses it, and the expression
     // must be the one `shownTitle` writes in the service.
     index("clippings_shown_title_trgm_idx").using(

@@ -147,6 +147,60 @@ describe.skipIf(!TEST_DATABASE_URL)("connections service", () => {
     expect(await fixture.connections.recordUse(ana, claude, now())).toBe(false);
   });
 
+  describe("recording use", () => {
+    async function lastUsed(userId: string) {
+      return (await fixture.connections.listConnections(userId))[0]?.lastUsedAt;
+    }
+
+    it("writes a use only when the stored one is a minute old", async () => {
+      const ana = await fixture.createUser("ana");
+      const claude = await registerClient("claude", "Claude");
+      await connect(ana, claude, { at: subSeconds(now(), 3600) });
+      const issuedAt = subSeconds(now(), 10);
+
+      expect(await fixture.connections.recordUse(ana, claude, issuedAt)).toBe(true);
+      fixture.advanceClock(30_000);
+      expect(await fixture.connections.recordUse(ana, claude, issuedAt)).toBe(true);
+      expect(await lastUsed(ana)).toEqual(parseISO("2026-10-01T09:00:00.000Z"));
+
+      fixture.advanceClock(31_000);
+      expect(await fixture.connections.recordUse(ana, claude, issuedAt)).toBe(true);
+      expect(await lastUsed(ana)).toEqual(parseISO("2026-10-01T09:01:01.000Z"));
+    });
+
+    it("still refuses a token issued before a revocation within the minute of a use", async () => {
+      const ana = await fixture.createUser("ana");
+      const claude = await registerClient("claude", "Claude");
+      await connect(ana, claude);
+      const issuedAt = now();
+      await fixture.connections.recordUse(ana, claude, issuedAt);
+
+      fixture.advanceClock(1500);
+      await fixture.connections.revokeConnection(ana, claude);
+      fixture.advanceClock(1000);
+
+      expect(await fixture.connections.recordUse(ana, claude, issuedAt)).toBe(false);
+      // A token issued after the revocation is taken at once, and its use recorded.
+      const later = parseISO("2026-10-01T09:00:03.000Z");
+      expect(await fixture.connections.recordUse(ana, claude, later)).toBe(true);
+    });
+
+    it("throttles each client of each user on its own", async () => {
+      const ana = await fixture.createUser("ana");
+      const ben = await fixture.createUser("ben");
+      const claude = await registerClient("claude", "Claude");
+      await connect(ana, claude);
+      await connect(ben, claude);
+
+      await fixture.connections.recordUse(ana, claude, subSeconds(now(), 10));
+      fixture.advanceClock(5000);
+      await fixture.connections.recordUse(ben, claude, subSeconds(now(), 10));
+
+      expect(await lastUsed(ana)).toEqual(parseISO("2026-10-01T09:00:00.000Z"));
+      expect(await lastUsed(ben)).toEqual(parseISO("2026-10-01T09:00:05.000Z"));
+    });
+  });
+
   it("keeps users apart: one user never sees or revokes another's connections", async () => {
     const ana = await fixture.createUser("ana");
     const bo = await fixture.createUser("bo");
@@ -193,6 +247,88 @@ describe.skipIf(!TEST_DATABASE_URL)("connections service", () => {
       `select id from verification order by id`,
     );
     expect(rows.map((row) => row.id)).toEqual(["ana-other", "bo-claude", "not-json"]);
+  });
+
+  describe("purging unused clients", () => {
+    const DAY = 24 * 60 * 60;
+
+    async function registerAt(clientId: string, daysAgo: number | null) {
+      await fixture.pool.query(
+        `insert into "oauthClient" (id, "clientId", "redirectUris", "createdAt")
+         values ($1, $2, '{}', $3)`,
+        [randomUUID(), clientId, daysAgo === null ? null : subSeconds(now(), daysAgo * DAY)],
+      );
+      return clientId;
+    }
+
+    const remaining = async () =>
+      (
+        await fixture.pool.query<{ clientId: string }>(
+          `select "clientId" from "oauthClient" order by "clientId"`,
+        )
+      ).rows.map((row) => row.clientId);
+
+    it("removes only clients older than 30 days that hold no consent, token or code", async () => {
+      const ana = await fixture.createUser("ana");
+      await registerAt("abandoned", 31);
+      await registerAt("recent", 29);
+      await registerAt("undated", null);
+      const consented = await registerAt("consented", 90);
+      const refreshed = await registerAt("refreshed", 90);
+      const waiting = await registerAt("waiting-on-code", 90);
+      await fixture.pool.query(
+        `insert into "oauthConsent" (id, "clientId", "userId", scopes, "createdAt", "updatedAt")
+         values ($1, $2, $3, '{mcp}', now(), now())`,
+        [randomUUID(), consented, ana],
+      );
+      await fixture.pool.query(
+        `insert into "oauthRefreshToken" (id, token, "clientId", "userId", "expiresAt", "createdAt", scopes)
+         values ($1, $2, $3, $4, now(), now(), '{mcp}')`,
+        [randomUUID(), randomUUID(), refreshed, ana],
+      );
+      await fixture.pool.query(
+        `insert into verification (id, identifier, value, "expiresAt")
+         values ('code', 'code', $1, now() + interval '10 minutes'), ('plain', 'plain', 'a plain value', now())`,
+        [
+          JSON.stringify({
+            type: "authorization_code",
+            userId: ana,
+            query: { client_id: waiting },
+          }),
+        ],
+      );
+
+      expect(await fixture.connections.purgeUnusedClients()).toBe(1);
+
+      expect(await remaining()).toEqual([
+        "consented",
+        "recent",
+        "refreshed",
+        "undated",
+        "waiting-on-code",
+      ]);
+    });
+
+    it("keeps a client that only has a connection record, which may hold a revocation", async () => {
+      const ana = await fixture.createUser("ana");
+      await registerAt("revoked-long-ago", 90);
+      await fixture.pool.query(
+        `insert into oauth_connections (user_id, client_id, revoked_at) values ($1, $2, $3)`,
+        [ana, "revoked-long-ago", subSeconds(now(), 60 * DAY)],
+      );
+
+      expect(await fixture.connections.purgeUnusedClients()).toBe(0);
+      expect(await remaining()).toEqual(["revoked-long-ago"]);
+    });
+
+    it("counts the 30 days from the injected clock", async () => {
+      await registerAt("later", 20);
+
+      expect(await fixture.connections.purgeUnusedClients()).toBe(0);
+      fixture.advanceClock(11 * DAY * 1000);
+      expect(await fixture.connections.purgeUnusedClients()).toBe(1);
+      expect(await remaining()).toEqual([]);
+    });
   });
 
   it("refuses a token whose client was deleted, rather than failing", async () => {

@@ -1,7 +1,13 @@
 import { constructNow } from "date-fns";
 
 import { formatClippingDate } from "@/lib/format-date.ts";
-import type { Clipping, ClippingStatus, SearchHighlights, Tag } from "@clippings/shared";
+import type {
+  Clipping,
+  ClippingSource,
+  ClippingStatus,
+  SearchHighlights,
+  Tag,
+} from "@clippings/shared";
 
 import type { BrowseParams } from "./browse-params.ts";
 import { getClippings } from "./service.ts";
@@ -17,6 +23,8 @@ export interface ClippingRowData {
   /** ISO 8601, for the `<time>` element. */
   dateTime: string;
   status: ClippingStatus;
+  /** Where it was saved from: an imported one stays pending for hours, so its poll is slower. */
+  source: ClippingSource;
   /** The page's summary once it has been read, shown under the title when there's no snippet. */
   summary: string | null;
   tags: Tag[];
@@ -59,6 +67,7 @@ export function toRow(
     dateLabel: formatClippingDate(clipping.createdAt, now),
     dateTime: clipping.createdAt,
     status: clipping.status,
+    source: clipping.source,
     summary: clipping.summary,
     tags: clipping.tags,
     pinned: clipping.pinned,
@@ -68,16 +77,26 @@ export function toRow(
 /**
  * What the list shows for these params, worded as of now: search results when there is a query
  * (one page, no cursor), else one page of the user's clippings, newest first, with the pinned
- * ones that match the filters above them on the first page.
+ * ones that match the filters above them on the first page. `signal` cancels a search: the
+ * request that asked has gone away.
  */
 export async function loadRows(
   userId: string,
   { q, tags, sources, sort }: BrowseParams,
   cursor?: string,
+  signal?: AbortSignal,
 ): Promise<RowsPage> {
   const now = constructNow(undefined);
   if (q.trim()) {
-    const { items } = await getClippings().searchClippings(userId, { q, tags, sources, sort });
+    const { items } = await getClippings().searchClippings(userId, {
+      q,
+      tags,
+      sources,
+      sort,
+      // The list searches as the reader types, so a few letters are not worth embedding.
+      typeahead: true,
+      signal,
+    });
     return {
       pinned: [],
       rows: items.map((hit) => toRow(hit.clipping, now, hit.highlights)),

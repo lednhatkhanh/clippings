@@ -14,6 +14,7 @@ export {
   oauthConsent,
   oauthRefreshToken,
   oauthResource,
+  rateLimit,
   session,
   user,
   verification,

@@ -34,6 +34,8 @@ const MAX_WEEK_CLIPPINGS = 60;
 const MAX_RELATED = 3;
 /** How many of the week's clippings are asked for related ones, newest first. */
 const RELATED_FROM = 10;
+/** Related lookups in flight at once: each is a scan, and the pool is shared with the app. */
+const RELATED_CONCURRENCY = 3;
 /** A note longer than this is cut before the digester reads it. */
 const MAX_NOTE_LENGTH_READ = 500;
 /** How many users' digests are written at once. */
@@ -171,19 +173,28 @@ export function createDigestService({
   ): Promise<DigestClipping[]> {
     const inWeek = new Set(week.map((clipping) => clipping.id));
     const found = new Map<string, DigestClipping>();
-    for (const { id } of week.slice(0, RELATED_FROM)) {
-      if (found.size >= MAX_RELATED) break;
-      for (const clipping of await related.relatedClippings(userId, id)) {
-        if (inWeek.has(clipping.id) || found.has(clipping.id)) continue;
-        if (!isBefore(parseISO(clipping.createdAt), start)) continue;
-        found.set(clipping.id, {
-          id: clipping.id,
-          title: clipping.title,
-          summary: clipping.summary,
-          tags: clipping.tags.map((tag) => tag.name),
-          note: clipping.note.slice(0, MAX_NOTE_LENGTH_READ),
-        });
-        if (found.size >= MAX_RELATED) break;
+    const ids = week.slice(0, RELATED_FROM).map(({ id }) => id);
+    // A few lookups at a time, so a digest leaves the pool to everyone else; each batch is read in
+    // the week's order, as if one by one, and the next is not started once there are enough.
+    for (let from = 0; from < ids.length && found.size < MAX_RELATED; from += RELATED_CONCURRENCY) {
+      const batch = await Promise.all(
+        ids
+          .slice(from, from + RELATED_CONCURRENCY)
+          .map((id) => related.relatedClippings(userId, id)),
+      );
+      for (const neighbours of batch) {
+        for (const clipping of neighbours) {
+          if (found.size >= MAX_RELATED) break;
+          if (inWeek.has(clipping.id) || found.has(clipping.id)) continue;
+          if (!isBefore(parseISO(clipping.createdAt), start)) continue;
+          found.set(clipping.id, {
+            id: clipping.id,
+            title: clipping.title,
+            summary: clipping.summary,
+            tags: clipping.tags.map((tag) => tag.name),
+            note: clipping.note.slice(0, MAX_NOTE_LENGTH_READ),
+          });
+        }
       }
     }
     return [...found.values()];

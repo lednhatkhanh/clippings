@@ -6,6 +6,7 @@ import { DEFAULT_SCOPES } from "@/lib/mcp/scopes.ts";
 import { UNKNOWN_CLIENT } from "@clippings/shared";
 
 import { isAllowlisted, parseAllowlist } from "./allowlist.ts";
+import { authorizationRequestSource } from "./authorization-request.ts";
 import { closedPage } from "./connection.ts";
 import { NOT_ALLOWLISTED } from "./validate-user.ts";
 
@@ -70,9 +71,9 @@ export function consentGate({
         {
           matcher: (context) => GATED_PATHS.has(context.path ?? ""),
           handler: createAuthMiddleware(async (ctx) => {
-            // An authorization sent as a form (POST) carries its parameters in the body.
-            const inBody = ctx.method === "POST";
-            const sent: unknown = inBody ? ctx.body : ctx.query;
+            // An authorization sent as a form (POST) carries its parameters in the body, but one
+            // the consent page resumes has them in the query (see the helper).
+            const { sent, inBody } = authorizationRequestSource(ctx);
             // What the authorization request is rewritten to, on the paths that carry on.
             const defaults: Record<string, string> = {};
             const carryOn = () => {

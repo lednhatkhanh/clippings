@@ -1,6 +1,9 @@
 import { browser } from "wxt/browser";
 
+import { parseWebUrl } from "@clippings/shared";
+
 import { COLORS, toolbarIcons } from "./icons.ts";
+import { readLookup, writeLookup } from "./lookup-cache-storage.ts";
 
 /** How long the ✓ stays on the toolbar button after a save made without the popup. */
 export const SAVED_BADGE_MS = 2000;
@@ -26,12 +29,28 @@ export async function resetTab(tabId: number) {
   ]);
 }
 
-/** The filled icon: the page in this tab is saved. */
+/**
+ * The filled icon: the page in this tab is saved. The kept answer to "is this page saved?"
+ * (`lookup-cache.ts`) becomes saved too, so loading the page again doesn't show the old one.
+ */
 export async function showSaved(tabId: number) {
   await Promise.all([
     browser.action.setIcon({ tabId, imageData: toolbarIcons().saved }),
     browser.action.setTitle({ tabId, title: "Saved to Clippings" }),
   ]);
+  await rememberSaved(tabId);
+}
+
+/** Sets the kept answer for the tab's page to saved, unless it says so already. */
+async function rememberSaved(tabId: number) {
+  try {
+    const normalized = parseWebUrl((await browser.tabs.get(tabId)).url ?? "")?.normalized;
+    if (normalized && (await readLookup(normalized)) !== "saved") {
+      await writeLookup(normalized, true);
+    }
+  } catch {
+    // The tab has closed, or its address can't be read: the answer expires on its own.
+  }
 }
 
 async function setBadge(tabId: number, text: string, background: string, color: string) {
@@ -76,13 +95,16 @@ export async function showError(tabId: number, title: string) {
   ]);
 }
 
-/** The save waits for the browser to be back online. */
-export async function showQueued(tabId: number) {
+/** The save waits for the browser to be back online, or for Clippings to answer again. */
+export async function showQueued(tabId: number, reason: "offline" | "unreachable" = "offline") {
   await Promise.all([
     setBadge(tabId, QUEUED_BADGE, COLORS["accent-soft"], COLORS["on-accent-soft"]),
     browser.action.setTitle({
       tabId,
-      title: "You're offline. Clippings will save this when you're back online.",
+      title:
+        reason === "offline"
+          ? "You're offline. Clippings will save this when you're back online."
+          : "Couldn't reach Clippings. It will save this when it can.",
     }),
   ]);
 }

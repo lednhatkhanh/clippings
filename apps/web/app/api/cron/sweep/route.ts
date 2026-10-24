@@ -1,5 +1,6 @@
 import { connection } from "next/server";
 
+import { getConnections } from "@/lib/auth/connections.ts";
 import { getClippings } from "@/lib/clippings/service.ts";
 import { handleSweepRequest } from "@/lib/enrichment/sweep-request.ts";
 
@@ -11,5 +12,6 @@ export async function GET(request: Request) {
   return handleSweepRequest(request, {
     secret: process.env.CRON_SECRET,
     service: getClippings(),
+    connections: getConnections(),
   });
 }
