@@ -184,6 +184,48 @@ describe.skipIf(!TEST_DATABASE_URL)("OAuth authorization on the real auth and da
       expect(response.status).toBe(400);
       expect(await response.json()).toMatchObject({ error: "invalid_target" });
     });
+
+    it("applies the same rule to an authorization sent as a POST form", async () => {
+      const clientId = await registeredClientId(
+        await registerClient(call, { redirect_uris: [LOOPBACK] }),
+      );
+      const [, query] = authorizePath({
+        clientId,
+        challenge: pkce().challenge,
+        redirectUri: LOOPBACK,
+        resources: [mcpResourceUrl(ORIGIN), EXTENSION_API],
+      }).split("?");
+
+      const response = await call("/api/auth/oauth2/authorize", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/x-www-form-urlencoded", origin: ORIGIN },
+        body: query,
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ error: "invalid_target" });
+    });
+  });
+
+  describe("client registration", () => {
+    it("is rate limited per address, counted in the database", async () => {
+      const limited = serveAuth({
+        pool,
+        origin: ORIGIN,
+        allowedEmails: ALLOWED,
+        rateLimit: { enabled: true },
+      }).call;
+      const from = { "x-forwarded-for": "203.0.113.7" };
+
+      const statuses: number[] = [];
+      for (let attempt = 0; attempt < 7; attempt++) {
+        statuses.push((await registerClient(limited, { redirect_uris: [LOOPBACK] }, from)).status);
+      }
+
+      expect(statuses.slice(0, 5)).toEqual([201, 201, 201, 201, 201]);
+      expect(statuses.slice(5)).toEqual([429, 429]);
+      const { rows } = await pool.query(`select key, count from "rateLimit"`);
+      expect(rows).toHaveLength(1);
+    });
   });
 
   describe("redirect URIs", () => {

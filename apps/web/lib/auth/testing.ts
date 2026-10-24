@@ -29,11 +29,14 @@ export function serveAuth({
   origin,
   allowedEmails,
   extensionIds = [],
+  rateLimit,
 }: {
   pool: Pool;
   origin: string;
   allowedEmails: string;
   extensionIds?: readonly string[];
+  /** Turns rate limiting on, which tests otherwise skip (it is on in production only). */
+  rateLimit?: { enabled: boolean };
 }) {
   const auth = createAuth({
     database: createDatabase(pool),
@@ -42,6 +45,7 @@ export function serveAuth({
     allowedEmails,
     google: { clientId: "test", clientSecret: "test" },
     extensionIds,
+    ...(rateLimit ? { rateLimit } : {}),
   });
   vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
     auth.handler(new Request(input, init)),

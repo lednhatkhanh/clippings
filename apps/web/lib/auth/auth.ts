@@ -22,11 +22,13 @@ import {
   oauthConsent,
   oauthRefreshToken,
   oauthResource,
+  rateLimit,
   session,
   user,
   verification,
 } from "@clippings/db";
 
+import { allowlistGate } from "./allowlist-gate.ts";
 import { consentGate } from "./consent-gate.ts";
 import { isAllowedRedirectUri } from "./oauth-redirects.ts";
 import { createUserValidator } from "./validate-user.ts";
@@ -51,6 +53,8 @@ export interface AuthSetup {
   google: { clientId: string; clientSecret: string };
   /** The browser extensions that may sign in, by id. */
   extensionIds: readonly string[];
+  /** Rate limiting; left out, Better Auth's default: on in production only. For tests. */
+  rateLimit?: { enabled: boolean };
 }
 
 export function createAuth({
@@ -60,6 +64,7 @@ export function createAuth({
   allowedEmails,
   google,
   extensionIds,
+  rateLimit: rateLimitOptions,
 }: AuthSetup) {
   const extensionResource = extensionResourceUrl(baseURL);
   return betterAuth({
@@ -75,6 +80,7 @@ export function createAuth({
         jwks,
         oauthClient,
         oauthResource,
+        rateLimit,
         oauthClientResource,
         oauthRefreshToken,
         oauthAccessToken,
@@ -103,11 +109,14 @@ export function createAuth({
     // sessions: revoking a connection still takes effect at once.)
     session: { cookieCache: { enabled: true, maxAge: 5 * 60 } },
     onAPIError: { errorURL: "/sign-in" },
+    // On in production by default. Counted in the database, not Better Auth's default per-instance
+    // memory, so the limit on the open client registration (5 a minute per address) holds across
+    // serverless instances instead of multiplying with them.
+    rateLimit: { storage: "database", ...rateLimitOptions },
     // Deliberately left at Better Auth's defaults, for a Google-only, allowlisted app:
     // - trustedOrigins: `BETTER_AUTH_URL` is trusted; previews don't sign in (spec, "Hosting").
     //   The extension needs no entry: it sends no cookies, and only requests with cookies have
     //   their origin checked.
-    // - rateLimit: on in production by default; the surface is one OAuth start and callback.
     // - accountLinking: one provider, and `validateUserInfo` also gates linking.
     // - email verification, passwords, 2FA: not enabled; there is no email/password sign-in.
     plugins: [
@@ -131,6 +140,8 @@ export function createAuth({
         // client is linked to, and asks for tokens bound to it.
         resources: [extensionResource],
         clientRegistrationAllowedResources: [extensionResource],
+        // A client gets tokens only for resources it is linked to; the default, made explicit.
+        enforcePerClientResources: true,
         // Tokens always act for a user: no client-credentials grant.
         grantTypes: ["authorization_code", "refresh_token"],
         // Dynamic registration as well as metadata documents: clients that predate CIMD still
@@ -147,6 +158,7 @@ export function createAuth({
       // its metadata, fetched with a transport that refuses private addresses and redirects.
       cimd({ fetchClientMetadataResource, metadataProfile: "mcp-2026-07-28" }),
       consentGate({ allowedEmails, extensionIds }),
+      allowlistGate({ allowedEmails }),
       extensionResourceGate({ resource: extensionResource, extensionIds }),
       nextCookies(),
     ],

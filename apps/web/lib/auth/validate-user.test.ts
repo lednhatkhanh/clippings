@@ -5,10 +5,17 @@ import { REJECTED_EMAIL_COOKIE, createUserValidator } from "./validate-user.ts";
 function setup(allowed: string) {
   const setCookie = vi.fn();
   const validate = createUserValidator({ allowedEmails: allowed });
-  const run = (email: string | undefined) =>
-    validate({ user: { email }, source: { action: "create-user", method: "oauth" } }, {
-      setCookie,
-    } as never);
+  // `verified` is spread so that passing `undefined` explicitly differs from passing nothing.
+  const run = (email: string | undefined, ...verified: [unknown?]) =>
+    validate(
+      {
+        user: { email, emailVerified: (verified.length ? verified[0] : true) as boolean },
+        source: { action: "create-user", method: "oauth" },
+      },
+      {
+        setCookie,
+      } as never,
+    );
   return { run, setCookie };
 }
 
@@ -37,6 +44,16 @@ describe("createUserValidator", () => {
       expect.objectContaining({ httpOnly: true, sameSite: "lax", maxAge: 300, path: "/" }),
     );
     expect(JSON.stringify(result)).not.toContain("mallory");
+  });
+
+  it.each([
+    ["false", false],
+    ["missing", undefined],
+    ["not a boolean", "true"],
+  ])("rejects an allowlisted email whose verification is %s", async (_name, emailVerified) => {
+    const { run } = setup("ada@example.com");
+
+    expect(await run("ada@example.com", emailVerified)).toMatchObject({ error: "not_allowlisted" });
   });
 
   it("rejects a profile without an email", async () => {

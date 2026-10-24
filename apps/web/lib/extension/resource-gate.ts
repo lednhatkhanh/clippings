@@ -22,7 +22,7 @@ const refuse = () =>
  * Keeps the extension API's resource to the extension. Registration is open (Claude Code
  * registers itself), so without this any client could register for the resource and ask for a
  * token good there. Only a client whose every redirect is a trusted extension's may register for
- * it, and only an authorization that returns to one may ask for it.
+ * it, and only an authorization that returns to one may ask for it (on GET or POST).
  */
 export function extensionResourceGate({
   resource,
@@ -49,9 +49,15 @@ export function extensionResourceGate({
         {
           matcher: (context) => context.path === AUTHORIZE_PATH,
           handler: createAuthMiddleware(async (ctx) => {
-            const query = (ctx.query ?? {}) as { resource?: unknown; redirect_uri?: unknown };
-            if (!values(query.resource).includes(resource)) return;
-            if (!returnsToExtension(values(query.redirect_uri))) throw refuse();
+            // The provider reads an authorization from the query on GET and from the form body
+            // on POST, so the gate reads the same place.
+            const sent = (ctx.method === "POST" ? ctx.body : ctx.query) ?? {};
+            const { resource: asked, redirect_uri: redirectUri } = sent as {
+              resource?: unknown;
+              redirect_uri?: unknown;
+            };
+            if (!values(asked).includes(resource)) return;
+            if (!returnsToExtension(values(redirectUri))) throw refuse();
           }),
         },
       ],

@@ -11,8 +11,10 @@ type ValidateUserInfo = NonNullable<NonNullable<BetterAuthOptions["user"]>["vali
 
 /**
  * Better Auth's `validateUserInfo` gate: it runs on first sign-in, when linking an account, and
- * on every later Google sign-in with the provider's fresh email, so removing an email from the
- * allowlist locks that person out at their next sign-in.
+ * on every later Google sign-in with the provider's fresh profile. It accepts only an
+ * allowlisted email that the provider reports as verified, since the allowlist trusts the
+ * address. Removing an email from the allowlist ends the person's existing sessions too
+ * (`allowlistGate`), not only their next sign-in.
  *
  * The email travels in a short-lived cookie, not in the error redirect's query string, so it
  * stays out of browser history and access logs.
@@ -22,7 +24,7 @@ export function createUserValidator({ allowedEmails }: { allowedEmails: string |
 
   const validate: ValidateUserInfo = ({ user }, context) => {
     const email = typeof user.email === "string" ? user.email : undefined;
-    if (isAllowlisted(allowlist, email)) return;
+    if (user.emailVerified === true && isAllowlisted(allowlist, email)) return;
 
     if (email) {
       context.setCookie(REJECTED_EMAIL_COOKIE, normalizeEmail(email), {
