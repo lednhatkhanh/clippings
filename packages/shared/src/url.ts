@@ -2,6 +2,14 @@ const EXPLICIT_SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i;
 /** `mailto:`, `javascript:`, `data:` and the like. A digit after the colon is a port (`host:3000`). */
 const OTHER_SCHEME = /^[a-z][a-z0-9+.-]*:(?!\d|\/\/)/i;
 
+/**
+ * What a scheme-less input may name: a host with a dot (`example.com`, an IPv4 address),
+ * `localhost` or an IPv6 literal. A bare word (`hello`, or `tel` in `tel:123`) is more likely
+ * something that isn't a web address than a host on the user's network.
+ */
+const isPlausibleHost = (hostname: string) =>
+  hostname.includes(".") || hostname === "localhost" || hostname.startsWith("[");
+
 /** Query parameters that say how a link was reached, not which page it is. */
 const TRACKING_PARAMETERS = new Set([
   "fbclid",
@@ -32,18 +40,21 @@ export interface WebUrl {
 
 /**
  * Reads an http(s) address, or returns null for anything else: other schemes, addresses with
- * credentials, text that isn't a URL. A missing scheme is read as https.
+ * credentials, text that isn't a URL. A missing scheme is read as
+ * https, when what follows starts with a host that could be one (see `isPlausibleHost`).
  */
 export function parseWebUrl(input: string): WebUrl | null {
   const trimmed = input.trim();
   if (!trimmed || OTHER_SCHEME.test(trimmed)) return null;
 
+  const explicit = EXPLICIT_SCHEME.test(trimmed);
   let url: URL;
   try {
-    url = new URL(EXPLICIT_SCHEME.test(trimmed) ? trimmed : `https://${trimmed}`);
+    url = new URL(explicit ? trimmed : `https://${trimmed}`);
   } catch {
     return null;
   }
+  if (!explicit && !isPlausibleHost(url.hostname)) return null;
   if (url.protocol !== "http:" && url.protocol !== "https:") return null;
   if (url.username || url.password) return null;
 

@@ -11,6 +11,10 @@ describe("parseWebUrl", () => {
       ["surrounding whitespace", "  https://example.com/essay\n", "https://example.com/essay"],
       ["an upper-case host", "https://EXAMPLE.com/Essay", "https://example.com/Essay"],
       ["a host with a port", "localhost:3000/page", "https://localhost:3000/page"],
+      ["localhost with a port", "localhost:3000", "https://localhost:3000/"],
+      ["a domain with a port and path", "example.com:8080/path", "https://example.com:8080/path"],
+      ["an IPv4 address with a port", "127.0.0.1:3000", "https://127.0.0.1:3000/"],
+      ["an IPv6 literal", "[::1]:3000/page", "https://[::1]:3000/page"],
       [
         "tracking and a fragment, which stay in what the user gave",
         "https://example.com/essay/?utm_source=feed&id=7#part-2",
@@ -97,6 +101,11 @@ describe("parseWebUrl", () => {
       ["credentials", "https://ana:secret@example.com/private"],
       ["only a user name", "https://ana@example.com/private"],
       ["words", "not a url at all"],
+      ["a phone number link", "tel:123"],
+      ["an sms link", "sms:12345"],
+      ["a bare word", "hello"],
+      ["a bare word with a path", "hello/world"],
+      ["a bare word with a port", "intranet:8080"],
       ["a scheme with no host", "https://"],
     ])("refuses %s", (_label, input) => {
       expect(parseWebUrl(input)).toBeNull();
