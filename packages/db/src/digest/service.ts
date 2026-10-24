@@ -171,9 +171,13 @@ export function createDigestService({
   ): Promise<DigestClipping[]> {
     const inWeek = new Set(week.map((clipping) => clipping.id));
     const found = new Map<string, DigestClipping>();
-    for (const { id } of week.slice(0, RELATED_FROM)) {
+    // Every lookup runs at once, and the results are read in the week's order, as if one by one.
+    const lookups = await Promise.all(
+      week.slice(0, RELATED_FROM).map(({ id }) => related.relatedClippings(userId, id)),
+    );
+    for (const neighbours of lookups) {
       if (found.size >= MAX_RELATED) break;
-      for (const clipping of await related.relatedClippings(userId, id)) {
+      for (const clipping of neighbours) {
         if (inWeek.has(clipping.id) || found.has(clipping.id)) continue;
         if (!isBefore(parseISO(clipping.createdAt), start)) continue;
         found.set(clipping.id, {
