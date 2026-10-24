@@ -17,4 +17,15 @@ describe.skipIf(!TEST_DATABASE_URL)("createPool", () => {
     logged.mockRestore();
     await pool.end();
   });
+
+  it("gives up on a query that runs past the timeout, and keeps serving", async () => {
+    const database = await createTempDatabase();
+    const pool = createPool(database.url, { queryTimeoutMs: 200 });
+
+    await expect(pool.query("select pg_sleep(3)")).rejects.toThrow(/timeout/i);
+    expect((await pool.query("select 1 as one")).rows).toEqual([{ one: 1 }]);
+
+    await pool.end();
+    await database.drop();
+  });
 });
