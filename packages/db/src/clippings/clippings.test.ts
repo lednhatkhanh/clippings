@@ -668,12 +668,15 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
       const failedNew = await save("failed-new");
       await fixture.service.enrichClipping(failedNew.id, { lastAttempt: true });
       fixture.advanceClock(HOUR - 1000);
-      fixture.enrichmentRequests.length = 0;
+      fixture.batchedEnrichmentRequests.length = 0;
 
       const swept = await fixture.service.sweepStuck();
 
       expect(swept.toSorted()).toEqual([pendingOld.id, failedOld.id].toSorted());
-      expect(fixture.enrichmentRequests.toSorted()).toEqual(
+      // One batch, all at once.
+      expect(fixture.batchedEnrichmentRequests).toHaveLength(1);
+      expect(fixture.batchedEnrichmentRequests[0]!.spreadOverSeconds).toBe(0);
+      expect(fixture.batchedEnrichmentRequests[0]!.ids.toSorted()).toEqual(
         [pendingOld.id, failedOld.id].toSorted(),
       );
       const statusOf = async (id: string) => (await fixture.service.getClipping(ana, id))?.status;
@@ -683,8 +686,78 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
       expect(await statusOf(readyOld.id)).toBe("ready");
 
       // Swept just now, so the next sweep leaves them alone until another hour has passed.
-      fixture.enrichmentRequests.length = 0;
       expect(await fixture.service.sweepStuck()).toEqual([]);
+    });
+
+    describe("a clipping that keeps failing", () => {
+      const swept = async (id: string) => {
+        fixture.advanceClock(2 * HOUR);
+        return (await fixture.service.sweepStuck()).includes(id);
+      };
+
+      async function failing() {
+        const ana = await fixture.createUser("ana");
+        fixture.web.set("https://example.com/gone", { error: new Error("404") });
+        const { clipping } = await fixture.service.saveClipping(ana, {
+          url: "https://example.com/gone",
+          source: "web",
+        });
+        const fail = () => fixture.service.enrichClipping(clipping.id, { lastAttempt: true });
+        await fail();
+        return { ana, id: clipping.id, fail };
+      }
+
+      it("is started over three times, then left failed", async () => {
+        const { id, fail, ana } = await failing();
+
+        for (let round = 1; round <= 3; round++) {
+          expect(await swept(id)).toBe(true);
+          await fail();
+        }
+
+        expect(await swept(id)).toBe(false);
+        expect(await swept(id)).toBe(false);
+        expect((await fixture.service.getClipping(ana, id))?.status).toBe("failed");
+      });
+
+      it("is swept again after the user retries it", async () => {
+        const { id, fail, ana } = await failing();
+        for (let round = 1; round <= 3; round++) {
+          await swept(id);
+          await fail();
+        }
+        expect(await swept(id)).toBe(false);
+
+        await fixture.service.reEnrichClipping(ana, id);
+        await fail();
+
+        for (let round = 1; round <= 3; round++) {
+          expect(await swept(id)).toBe(true);
+          await fail();
+        }
+        expect(await swept(id)).toBe(false);
+      });
+
+      it("does not spend a restart on a clipping that was only pending", async () => {
+        const { id, fail } = await failing();
+
+        // Pending and lost for many days: the count is of failed restarts, not of sweeps.
+        expect(await swept(id)).toBe(true);
+        for (let round = 1; round <= 5; round++) expect(await swept(id)).toBe(true);
+        await fail();
+
+        expect(await swept(id)).toBe(true);
+      });
+
+      it("leaves a clipping that became ready alone", async () => {
+        const { id, ana } = await failing();
+        fixture.web.set("https://example.com/gone", essay);
+        await fixture.service.reEnrichClipping(ana, id);
+        await fixture.service.enrichClipping(id);
+
+        expect(await swept(id)).toBe(false);
+        expect((await fixture.service.getClipping(ana, id))?.status).toBe("ready");
+      });
     });
   });
 });

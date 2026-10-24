@@ -1,4 +1,5 @@
-import { and, asc, desc, eq, gt, isNull, lt, max, or, sql } from "drizzle-orm";
+import { subDays } from "date-fns";
+import { and, asc, desc, eq, gt, isNull, lt, max, notExists, or, sql } from "drizzle-orm";
 import { unionAll } from "drizzle-orm/pg-core";
 import type pg from "pg";
 
@@ -12,6 +13,12 @@ import {
   oauthRefreshToken,
   verification,
 } from "../schema.ts";
+
+/**
+ * How long a registered client may stay unused before the daily sweep removes it. Registration is
+ * open (Claude Code registers itself), so abandoned and abusive registrations pile up otherwise.
+ */
+export const UNUSED_CLIENT_DAYS = 30;
 
 export interface ConnectionsServiceDeps {
   pool: pg.Pool;
@@ -199,7 +206,52 @@ export function createConnectionsService({ pool, clock }: ConnectionsServiceDeps
     }
   }
 
-  return { listConnections, revokeConnection, recordUse };
+  /**
+   * For the daily cron: removes the clients registered more than `UNUSED_CLIENT_DAYS` ago that
+   * no one ever allowed or still uses: no consent, refresh token, access token or unexchanged
+   * authorization code. A client that connected keeps its row; one that is removed and returns
+   * simply registers again. Returns how many it removed.
+   */
+  async function purgeUnusedClients(): Promise<number> {
+    const registeredBefore = subDays(clock.now(), UNUSED_CLIENT_DAYS);
+    // As in `revokeConnection`: the cast sits behind a CASE that only reaches rows shaped like a code.
+    const code = sql`case when ${verification.value} like '{"type":"authorization_code"%' then ${verification.value}::jsonb end`;
+    const removed = await db
+      .delete(oauthClient)
+      .where(
+        and(
+          lt(oauthClient.createdAt, registeredBefore),
+          notExists(
+            db
+              .select({ one: sql`1` })
+              .from(oauthConsent)
+              .where(eq(oauthConsent.clientId, oauthClient.clientId)),
+          ),
+          notExists(
+            db
+              .select({ one: sql`1` })
+              .from(oauthRefreshToken)
+              .where(eq(oauthRefreshToken.clientId, oauthClient.clientId)),
+          ),
+          notExists(
+            db
+              .select({ one: sql`1` })
+              .from(oauthAccessToken)
+              .where(eq(oauthAccessToken.clientId, oauthClient.clientId)),
+          ),
+          notExists(
+            db
+              .select({ one: sql`1` })
+              .from(verification)
+              .where(sql`${code} -> 'query' ->> 'client_id' = ${oauthClient.clientId}`),
+          ),
+        ),
+      )
+      .returning({ id: oauthClient.id });
+    return removed.length;
+  }
+
+  return { listConnections, revokeConnection, recordUse, purgeUnusedClients };
 }
 
 /** Postgres' foreign_key_violation, as pg raises it or Drizzle wraps it. */
