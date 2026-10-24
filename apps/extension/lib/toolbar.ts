@@ -76,13 +76,16 @@ export async function showError(tabId: number, title: string) {
   ]);
 }
 
-/** The save waits for the browser to be back online. */
-export async function showQueued(tabId: number) {
+/** The save waits for the browser to be back online, or for Clippings to answer again. */
+export async function showQueued(tabId: number, reason: "offline" | "unreachable" = "offline") {
   await Promise.all([
     setBadge(tabId, QUEUED_BADGE, COLORS["accent-soft"], COLORS["on-accent-soft"]),
     browser.action.setTitle({
       tabId,
-      title: "You're offline. Clippings will save this when you're back online.",
+      title:
+        reason === "offline"
+          ? "You're offline. Clippings will save this when you're back online."
+          : "Couldn't reach Clippings. It will save this when it can.",
     }),
   ]);
 }

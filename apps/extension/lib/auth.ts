@@ -12,6 +12,12 @@ const AUTH_URL = `${CLIPPINGS_ORIGIN}/api/auth`;
 /** The resource the extension's tokens are issued for: the extension API, and nothing else. */
 export const API_RESOURCE = new URL(EXTENSION_API_PATH, CLIPPINGS_ORIGIN).toString();
 
+/** How long a request to Clippings may take before it is given up on. */
+export const REQUEST_TIMEOUT_MS = 15_000;
+
+/** A fresh signal that aborts the request after `REQUEST_TIMEOUT_MS`. */
+export const timeoutSignal = () => AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+
 /** A token response never refreshes later than this before it expires. */
 const EXPIRY_MARGIN_SECONDS = 60;
 
@@ -55,6 +61,7 @@ async function registerClient(): Promise<string> {
   const response = await fetch(`${AUTH_URL}/oauth2/register`, {
     method: "POST",
     credentials: "omit",
+    signal: timeoutSignal(),
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       client_name: "Clippings for Chrome",
@@ -77,6 +84,7 @@ async function requestTokens(params: Record<string, string>): Promise<Tokens | n
   const response = await fetch(`${AUTH_URL}/oauth2/token`, {
     method: "POST",
     credentials: "omit",
+    signal: timeoutSignal(),
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ ...params, resource: API_RESOURCE }),
   });
@@ -240,6 +248,7 @@ export async function signOut() {
   await fetch(`${AUTH_URL}/oauth2/revoke`, {
     method: "POST",
     credentials: "omit",
+    signal: timeoutSignal(),
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       token: tokens.refreshToken,

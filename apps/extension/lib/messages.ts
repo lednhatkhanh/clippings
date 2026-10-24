@@ -40,7 +40,24 @@ export interface StatusResponse {
 
 export type SaveResult =
   | { ok: true; saved: ExtensionSaveResponse }
-  | { ok: false; reason: "signed_out" | "not_allowlisted" | "invalid_url" | "offline" | "failed" };
+  | {
+      ok: false;
+      reason:
+        | "signed_out"
+        | "not_allowlisted"
+        | "invalid_url"
+        | "offline"
+        | "unreachable"
+        | "failed";
+    };
+
+/**
+ * Reasons a save can be tried again later, so it waits in the queue: the browser is offline, or
+ * the request never got an answer (the server is down, the connection dropped, it timed out).
+ */
+export const isRetryable = (
+  reason: Extract<SaveResult, { ok: false }>["reason"],
+): reason is "offline" | "unreachable" => reason === "offline" || reason === "unreachable";
 
 /** The answer to each request, by its type. */
 export interface PopupResponses {
@@ -58,11 +75,19 @@ export interface PopupResponses {
 /** How saving the clipping's tags went: "gone" when it was deleted in the meantime. */
 export type TagsReply = { type: "saved"; tags: Tag[] } | { type: "gone" } | { type: "failed" };
 
-/** Asks the service worker, from one of the extension's pages. */
-export function ask<Request extends PopupRequest>(
+/**
+ * Asks the service worker, from one of the extension's pages. Undefined when it can't answer: it
+ * failed while handling the request, or it couldn't be reached. Callers show their error state.
+ */
+export async function ask<Request extends PopupRequest>(
   request: Request,
-): Promise<PopupResponses[Request["type"]]> {
-  return browser.runtime.sendMessage(request);
+): Promise<PopupResponses[Request["type"]] | undefined> {
+  try {
+    return (await browser.runtime.sendMessage(request)) ?? undefined;
+  } catch (error) {
+    console.error("The service worker didn't answer", error);
+    return undefined;
+  }
 }
 
 /** The port the popup holds open while it's showing, named so the service worker knows it. */

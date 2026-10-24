@@ -9,7 +9,7 @@ import {
 
 import { lookupClipping, saveClipping, saveNote } from "./api.ts";
 import { isSignedIn } from "./auth.ts";
-import type { SaveResult } from "./messages.ts";
+import { isRetryable, type SaveResult } from "./messages.ts";
 import { readPage } from "./page.ts";
 import { enqueue, pauseRetrying, sendQueued, type PendingSave, type SendOutcome } from "./queue.ts";
 import { quoteSelection } from "./quote.ts";
@@ -121,9 +121,12 @@ export async function quickSave(
   }
   switch (result.reason) {
     case "offline":
+    case "unreachable": {
+      const reason = result.reason;
       await enqueue({ ...pending, tabId, pageUrl });
-      await feedback(showQueued);
+      await feedback((id) => showQueued(id, reason));
       return;
+    }
     case "signed_out":
     case "not_allowlisted":
       await feedback((id) => showError(id, "Sign in to save: open Clippings from the toolbar."));
@@ -142,20 +145,22 @@ export async function quickSave(
 
 /**
  * The popup's save, with the page's text the popup read. When the page is saved, the tab's icon
- * fills; when the browser is offline, the save waits in the queue like any other.
+ * fills; when the browser is offline or Clippings can't be reached, the save waits in the queue
+ * like any other.
  */
 export async function saveFromPopup(url: string, page?: ExtensionPage): Promise<SaveResult> {
   const result = await saveClipping(url, page);
   // A save that got through says the browser is online: send what waited.
   if (result.ok) void sendOfflineSaves();
-  if (result.ok || result.reason === "offline") {
+  const reason = result.ok ? undefined : result.reason;
+  if (result.ok || (reason !== undefined && isRetryable(reason))) {
     // `activeTab`: the toolbar click that opened the popup lets the tab's address be read.
     const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
     const tabId = tab?.id !== undefined && isPageOf(url, tab.url) ? tab.id : undefined;
     if (result.ok && tabId !== undefined) await showSaved(tabId);
-    if (!result.ok) {
+    if (reason !== undefined && isRetryable(reason)) {
       await enqueue({ url, page, tabId, pageUrl: url });
-      if (tabId !== undefined) await showQueued(tabId);
+      if (tabId !== undefined) await showQueued(tabId, reason);
     }
   }
   return result;
@@ -166,6 +171,7 @@ export function outcomeOf(result: QuickSaveResult): SendOutcome {
   if (result.ok) return "sent";
   switch (result.reason) {
     case "offline":
+    case "unreachable":
     case "signed_out":
     case "not_allowlisted":
       return "later";

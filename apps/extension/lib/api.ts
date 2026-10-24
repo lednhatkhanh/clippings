@@ -12,7 +12,13 @@ import {
   type Tag,
 } from "@clippings/shared";
 
-import { accessToken, API_RESOURCE, CLIPPINGS_ORIGIN, forgetTokens } from "./auth.ts";
+import {
+  accessToken,
+  API_RESOURCE,
+  CLIPPINGS_ORIGIN,
+  forgetTokens,
+  timeoutSignal,
+} from "./auth.ts";
 import type { SaveResult, TagsReply } from "./messages.ts";
 import { storePalette } from "./palette.ts";
 
@@ -32,6 +38,7 @@ async function call(
     fetch(`${API_RESOURCE}${path}`, {
       method,
       credentials: "omit",
+      signal: timeoutSignal(),
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify(body),
     });
@@ -44,6 +51,14 @@ async function call(
   const retried = await accessToken({ stale: true });
   if (!retried) return SIGNED_OUT;
   return send(retried);
+}
+
+/**
+ * Whether a request failed without an answer: `fetch` rejects with a TypeError when the network
+ * or the server can't be reached, and with a TimeoutError when `timeoutSignal` runs out.
+ */
+function isNetworkError(error: unknown): boolean {
+  return error instanceof TypeError || (error instanceof Error && error.name === "TimeoutError");
 }
 
 /** The API's reason for refusing a request, from its error body. */
@@ -67,7 +82,9 @@ export async function saveClipping(url: string, page?: ExtensionPage): Promise<S
     response = await call("/clippings", "POST", { url, page });
   } catch (error) {
     console.error("Couldn't reach Clippings", error);
-    return { ok: false, reason: navigator.onLine ? "failed" : "offline" };
+    // No answer at all, offline or not (the server may be down): the save waits and is retried.
+    if (!navigator.onLine) return { ok: false, reason: "offline" };
+    return { ok: false, reason: isNetworkError(error) ? "unreachable" : "failed" };
   }
   if (response === SIGNED_OUT) return { ok: false, reason: "signed_out" };
   if (!response.ok) {
@@ -80,7 +97,15 @@ export async function saveClipping(url: string, page?: ExtensionPage): Promise<S
     return { ok: false, reason: error === "invalid_url" ? "invalid_url" : "failed" };
   }
 
-  const saved = extensionSaveResponseSchema.safeParse(await response.json());
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch (error) {
+    // A 200 that isn't JSON (a proxy's page), or a body cut off by the timeout.
+    console.error("Clippings answered with something unreadable", error);
+    return { ok: false, reason: "failed" };
+  }
+  const saved = extensionSaveResponseSchema.safeParse(body);
   // The popup links to the clipping: only ever to this Clippings.
   if (!saved.success || new URL(saved.data.clipping.link).origin !== CLIPPINGS_ORIGIN) {
     return { ok: false, reason: "failed" };
