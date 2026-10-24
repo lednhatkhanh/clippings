@@ -168,6 +168,12 @@ export interface SearchClippingsInput {
    */
   words?: "all" | "any";
   /**
+   * The query is being typed, as in the list's search box: until it is long enough to mean
+   * something (`isWorthEmbedding`) it searches by words alone, without embedding it. Left out,
+   * every query is embedded, however short ("css", "AI").
+   */
+  typeahead?: boolean;
+  /**
    * Cancels the search: it stops waiting for the query's embedding and runs no SQL, and
    * `searchClippings` throws the signal's reason.
    */
@@ -437,6 +443,9 @@ function checkedVector(vector: number[]): number[] {
   }
   return vector;
 }
+
+/** How long a save waits for the queue to take its job; the daily sweep covers a lost one. */
+const SAVE_PUBLISH_TIMEOUT = { timeoutMs: 3000 };
 
 /** Has an embedding within `MAX_SEMANTIC_DISTANCE` of the vector `distance` measures from. */
 const closeInMeaning = (distance: SQL) =>
@@ -906,7 +915,7 @@ export function createClippingsService({
 
     if (created) {
       // The save stands even if the queue is down: the daily sweep requests the job again.
-      await jobs.requestEnrichment(created.id).catch((error: unknown) => {
+      await jobs.requestEnrichment(created.id, SAVE_PUBLISH_TIMEOUT).catch((error: unknown) => {
         console.error(`Couldn't request enrichment of clipping ${created.id}`, error);
       });
       return { status: "created", clipping: await oneWithTags(userId, created) };
@@ -971,7 +980,7 @@ export function createClippingsService({
       return { current: restarted ?? locked, requested: restarted !== undefined };
     });
     if (requested) {
-      await jobs.requestEnrichment(current.id).catch((error: unknown) => {
+      await jobs.requestEnrichment(current.id, SAVE_PUBLISH_TIMEOUT).catch((error: unknown) => {
         console.error(`Couldn't request enrichment of clipping ${current.id}`, error);
       });
     }
@@ -1084,6 +1093,7 @@ export function createClippingsService({
       sort = "relevance",
       limit = SEARCH_RESULT_LIMIT,
       words = "all",
+      typeahead = false,
       signal,
     }: SearchClippingsInput,
   ): Promise<SearchResults> {
@@ -1091,15 +1101,16 @@ export function createClippingsService({
     if (!text) return { items: [] };
     signal?.throwIfAborted();
 
-    // A short query is still being typed, and has no meaning to find yet: words alone.
-    const queryVector = isWorthEmbedding(text)
-      ? await embed(text, "query", signal).catch((error: unknown) => {
-          // A cancelled search is not a failed embedding.
-          signal?.throwIfAborted();
-          console.error("Couldn't embed the search query; searching by words alone", error);
-          return null;
-        })
-      : null;
+    // A query still being typed may have no meaning to find yet: words alone.
+    const queryVector =
+      !typeahead || isWorthEmbedding(text)
+        ? await embed(text, "query", signal).catch((error: unknown) => {
+            // A cancelled search is not a failed embedding.
+            signal?.throwIfAborted();
+            console.error("Couldn't embed the search query; searching by words alone", error);
+            return null;
+          })
+        : null;
     signal?.throwIfAborted();
 
     const query = keywordQuery(text, words);

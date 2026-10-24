@@ -173,10 +173,20 @@ describe.skipIf(!TEST_DATABASE_URL)("searching clippings by meaning", () => {
     await clip(ana, { url: "https://example.com/a", title: "Sedan reviews" });
     const embeddedBefore = fixture.embedded.length;
 
-    const { items } = await fixture.service.searchClippings(ana, { q: "sed" });
+    const { items } = await fixture.service.searchClippings(ana, { q: "sed", typeahead: true });
 
     expect(titles(items)).toEqual(["Sedan reviews"]);
     expect(fixture.embedded).toHaveLength(embeddedBefore);
+  });
+
+  it("embeds a short query unless it is being typed, as MCP and Ask search", async () => {
+    const ana = await fixture.createUser("ana");
+    await clip(ana, { url: "https://example.com/a", title: "Machine learning primer" });
+    const embeddedBefore = fixture.embedded.length;
+
+    await fixture.service.searchClippings(ana, { q: "AI" });
+
+    expect(fixture.embedded.slice(embeddedBefore)).toEqual([{ text: "AI", purpose: "query" }]);
   });
 
   it("stops a cancelled search before it embeds the query or reads the database", async () => {

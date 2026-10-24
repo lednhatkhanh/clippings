@@ -93,6 +93,8 @@ export async function loadRows(
       tags,
       sources,
       sort,
+      // The list searches as the reader types, so a few letters are not worth embedding.
+      typeahead: true,
       signal,
     });
     return {
