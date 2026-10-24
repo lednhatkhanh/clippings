@@ -86,6 +86,8 @@ export async function saveClippingAction(formData: FormData): Promise<SaveOutcom
 /** Saves the note on one of the user's clippings. False when it isn't theirs or is too long. */
 export async function updateClippingAction(clippingId: string, note: string): Promise<boolean> {
   const userId = await requireUserId();
+  // A server action takes whatever a client sends.
+  if (typeof clippingId !== "string" || typeof note !== "string") return false;
 
   try {
     const updated = await getClippings().updateClipping(userId, clippingId, { note: note.trim() });
@@ -212,6 +214,7 @@ export async function updateClippingTagsAction(
 /** Deletes one of the user's clippings, so that Undo can restore it. False if it isn't theirs. */
 export async function deleteClippingAction(clippingId: string): Promise<boolean> {
   const userId = await requireUserId();
+  if (typeof clippingId !== "string") return false;
   const deleted = await getClippings().deleteClipping(userId, clippingId);
   revalidatePath("/");
   revalidatePath(`/c/${clippingId}`);
@@ -221,6 +224,7 @@ export async function deleteClippingAction(clippingId: string): Promise<boolean>
 /** Undoes `deleteClippingAction`. False if the user has no such deleted clipping. */
 export async function restoreClippingAction(clippingId: string): Promise<boolean> {
   const userId = await requireUserId();
+  if (typeof clippingId !== "string") return false;
   const restored = await getClippings().restoreClipping(userId, clippingId);
   revalidatePath("/");
   revalidatePath(`/c/${clippingId}`);
@@ -230,6 +234,9 @@ export async function restoreClippingAction(clippingId: string): Promise<boolean
 /** The page after `cursor` of the list that `query` (a `toQueryString` result) describes. */
 export async function loadMoreClippingsAction(query: string, cursor: string): Promise<RowsPage> {
   const userId = await requireUserId();
+  if (typeof query !== "string" || typeof cursor !== "string") {
+    return { pinned: [], rows: [], nextCursor: null };
+  }
   return loadRows(userId, loadBrowseParams(query), cursor);
 }
 
@@ -240,6 +247,7 @@ export async function loadMoreClippingsAction(query: string, cursor: string): Pr
  */
 export async function reEnrichClippingAction(clippingId: string): Promise<ClippingRowData | null> {
   const userId = await requireUserId();
+  if (typeof clippingId !== "string") return null;
   const clipping = await getClippings().reEnrichClipping(userId, clippingId);
   revalidatePath("/");
   revalidatePath(`/c/${clippingId}`);
