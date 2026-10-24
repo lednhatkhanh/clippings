@@ -80,10 +80,16 @@
  * The navigation highlight: grows from its centre when its link (`data-active`) becomes current.
  * Its corners follow `--nav-indicator-radius` (default: `rounded-md`), which the element's own
  * `rounded-*` class should match.
+ *
+ * `will-change` gives it its own compositing layer from the first paint, as a transition does.
+ * Without it, iOS WebKit in the installed app left this negative-z-index child of the glass
+ * (`backdrop-filter`) navigation unpainted on launch: the current section showed no highlight
+ * until another tab was tapped and then this one again.
  */
 @utility nav-indicator {
   clip-path: inset(0 50% round var(--nav-indicator-radius, var(--shape-md)));
   opacity: 0;
+  will-change: clip-path, opacity;
   transition:
     clip-path var(--motion-spring-paper-duration) var(--motion-spring-paper),
     opacity var(--motion-spring-fade-duration) var(--motion-spring-fade);
