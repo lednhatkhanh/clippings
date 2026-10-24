@@ -10,6 +10,22 @@ export const ENRICH_PATH = "/api/jobs/enrich";
 const BATCH_SIZE = 100;
 
 /**
+ * How long a save waits for QStash to take its job. The save stands without the job (the daily
+ * sweep requests it again), so a slow queue must not hold the reader up. The SDK takes no signal,
+ * so the wait is cut and the request is left to finish or fail on its own.
+ */
+export const PUBLISH_TIMEOUT_MS = 3000;
+
+/** The promise, or a rejection once `ms` have passed. */
+export function within<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`QStash didn't answer in ${ms} ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+/**
  * Publishes enrichment jobs to QStash, which calls back the signed handler with retries. Reads
  * `QSTASH_TOKEN` (and `QSTASH_URL`, to publish to a local `qstash-cli dev` server) and calls the
  * app back at `BETTER_AUTH_URL`, its public origin.
@@ -37,7 +53,7 @@ export function createJobPublisher(): JobPublisher {
   return {
     async requestEnrichment(clippingId) {
       const { client, message } = connect();
-      await client.publishJSON(message(clippingId));
+      await within(client.publishJSON(message(clippingId)), PUBLISH_TIMEOUT_MS);
     },
 
     async requestEnrichments(clippingIds, { spreadOverSeconds }) {

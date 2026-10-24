@@ -61,7 +61,6 @@ import {
   tags,
   userSettings,
 } from "../schema.ts";
-import { isWorthEmbedding } from "./query-embedding.ts";
 import type {
   Clock,
   Embedder,
@@ -72,6 +71,7 @@ import type {
   PageSummary,
   Summarizer,
 } from "./ports.ts";
+import { isWorthEmbedding } from "./query-embedding.ts";
 
 export const systemClock: Clock = { now: () => constructNow(undefined) };
 
@@ -870,7 +870,7 @@ export function createClippingsService({
       ...statusChange("pending", now),
     };
     const created = await db.transaction(async (tx) => {
-      const [row] = await tx
+      const [saved] = await tx
         .insert(clippings)
         .values({ userId, urlNormalized: normalized, ...fresh })
         // A deleted clipping of the same page still holds its row: saving again starts it over,
@@ -880,9 +880,14 @@ export function createClippingsService({
           set: fresh,
           setWhere: isNotNull(clippings.deletedAt),
         })
-        .returning(clippingColumns);
-      if (row) {
-        await setTags(tx, userId, row.id, tagNames);
+        // `xmax` is 0 on a row this statement inserted, and not on one it revived.
+        .returning({ ...clippingColumns, inserted: sql<boolean>`(xmax = 0)` });
+      if (!saved) return undefined;
+      const { inserted, ...row } = saved;
+      await setTags(tx, userId, row.id, tagNames);
+      // A new row has no suggestions or text yet: only a revived one clears what it kept. The
+      // page the browser sent is stored after, so it isn't cleared with them.
+      if (!inserted) {
         await tx
           .delete(clippingTagSuggestions)
           .where(
@@ -894,8 +899,8 @@ export function createClippingsService({
         await tx
           .delete(clippingTexts)
           .where(and(eq(clippingTexts.clippingId, row.id), eq(clippingTexts.userId, userId)));
-        if (input.page) await keepBrowserPage(tx, userId, row.id, input.page, now);
       }
+      if (input.page) await keepBrowserPage(tx, userId, row.id, input.page, now);
       return row;
     });
 
@@ -984,31 +989,34 @@ export function createClippingsService({
       fromSources(sources),
       taggedWithAll(db, userId, tagNames),
     );
-    // The pinned group heads the first page only. `nulls last` is how the partial index sorts.
-    const pinnedRows = after
-      ? []
-      : await db
-          .select(clippingColumns)
-          .from(clippings)
-          .where(and(matching, isNotNull(clippings.pinnedAt)))
-          .orderBy(sql`${clippings.pinnedAt} desc nulls last`, desc(clippings.id));
-    // One extra row says whether another page follows without a second query.
-    const rows = await db
-      .select(clippingColumns)
-      .from(clippings)
-      .where(and(matching, isNull(clippings.pinnedAt), afterCursor(after)))
-      .orderBy(desc(clippings.createdAt), desc(clippings.id))
-      .limit(limit + 1);
+    const [pinnedRows, rows] = await Promise.all([
+      // The pinned group heads the first page only. `nulls last` is how the partial index sorts.
+      after
+        ? []
+        : db
+            .select(clippingColumns)
+            .from(clippings)
+            .where(and(matching, isNotNull(clippings.pinnedAt)))
+            .orderBy(sql`${clippings.pinnedAt} desc nulls last`, desc(clippings.id)),
+      // One extra row says whether another page follows without a second query.
+      db
+        .select(clippingColumns)
+        .from(clippings)
+        .where(and(matching, isNull(clippings.pinnedAt), afterCursor(after)))
+        .orderBy(desc(clippings.createdAt), desc(clippings.id))
+        .limit(limit + 1),
+    ]);
 
     const pageRows = rows.slice(0, limit);
     const last = pageRows.at(-1);
-    const [pinned, items] = await Promise.all([
-      withTags(userId, pinnedRows),
-      withTags(userId, pageRows),
-    ]);
+    // The tags of both groups in one query.
+    const byClipping = await tagsOn(
+      userId,
+      [...pinnedRows, ...pageRows].map((row) => row.id),
+    );
     return {
-      pinned,
-      items,
+      pinned: pinnedRows.map((row) => toClipping(row, byClipping.get(row.id))),
+      items: pageRows.map((row) => toClipping(row, byClipping.get(row.id))),
       nextCursor: rows.length > limit && last ? encodeCursor(last) : null,
     };
   }
