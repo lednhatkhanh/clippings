@@ -8,12 +8,7 @@ import { saveClipping, saveNote } from "./api.ts";
 import { isSignedIn } from "./auth.ts";
 import type { SaveResult } from "./messages.ts";
 import { clearQueue, ensureRetrying, queuedSaves, RETRY_ALARM } from "./queue.ts";
-import {
-  noteWithQuote,
-  quickSave,
-  saveFromPopup,
-  sendOfflineSaves,
-} from "./quick-save.ts";
+import { noteWithQuote, quickSave, saveFromPopup, sendOfflineSaves } from "./quick-save.ts";
 import { MENU, menuSave } from "./save-triggers.ts";
 import { SAVED_BADGE_MS } from "./toolbar.ts";
 
