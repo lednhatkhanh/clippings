@@ -255,6 +255,18 @@ describe.skipIf(!TEST_DATABASE_URL)("connections service", () => {
       ]);
     });
 
+    it("keeps a client that only has a connection record, which may hold a revocation", async () => {
+      const ana = await fixture.createUser("ana");
+      await registerAt("revoked-long-ago", 90);
+      await fixture.pool.query(
+        `insert into oauth_connections (user_id, client_id, revoked_at) values ($1, $2, $3)`,
+        [ana, "revoked-long-ago", subSeconds(now(), 60 * DAY)],
+      );
+
+      expect(await fixture.connections.purgeUnusedClients()).toBe(0);
+      expect(await remaining()).toEqual(["revoked-long-ago"]);
+    });
+
     it("counts the 30 days from the injected clock", async () => {
       await registerAt("later", 20);
 

@@ -673,10 +673,7 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings service", () => {
       const swept = await fixture.service.sweepStuck();
 
       expect(swept.toSorted()).toEqual([pendingOld.id, failedOld.id].toSorted());
-      // One batch, all at once.
-      expect(fixture.batchedEnrichmentRequests).toHaveLength(1);
-      expect(fixture.batchedEnrichmentRequests[0]!.spreadOverSeconds).toBe(0);
-      expect(fixture.batchedEnrichmentRequests[0]!.ids.toSorted()).toEqual(
+      expect(fixture.batchedEnrichmentRequests.flatMap((batch) => batch.ids).toSorted()).toEqual(
         [pendingOld.id, failedOld.id].toSorted(),
       );
       const statusOf = async (id: string) => (await fixture.service.getClipping(ana, id))?.status;

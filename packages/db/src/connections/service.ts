@@ -208,8 +208,8 @@ export function createConnectionsService({ pool, clock }: ConnectionsServiceDeps
 
   /**
    * For the daily cron: removes the clients registered more than `UNUSED_CLIENT_DAYS` ago that
-   * no one ever allowed or still uses: no consent, refresh token, access token or unexchanged
-   * authorization code. A client that connected keeps its row; one that is removed and returns
+   * no one ever allowed or still uses: no consent, refresh token, access token, unexchanged
+   * authorization code or connection record (which may hold a revocation). A client that connected keeps its row; one that is removed and returns
    * simply registers again. Returns how many it removed.
    */
   async function purgeUnusedClients(): Promise<number> {
@@ -244,6 +244,14 @@ export function createConnectionsService({ pool, clock }: ConnectionsServiceDeps
               .select({ one: sql`1` })
               .from(verification)
               .where(sql`${code} -> 'query' ->> 'client_id' = ${oauthClient.clientId}`),
+          ),
+          // A connection row may hold a revocation (`revoked_at`) that refuses JWTs issued
+          // before it; deleting the client would cascade it away.
+          notExists(
+            db
+              .select({ one: sql`1` })
+              .from(oauthConnections)
+              .where(eq(oauthConnections.clientId, oauthClient.clientId)),
           ),
         ),
       )

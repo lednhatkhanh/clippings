@@ -21,8 +21,10 @@ const CONNECTION_TIMEOUT_MS = 5_000;
  * `connectionTimeoutMillis` for getting a connection, and `query_timeout` for each query. The
  * query timeout is the client's, not Postgres's `statement_timeout`: PgBouncer refuses a
  * connection that sends `statement_timeout` or `idle_in_transaction_session_timeout` as a startup
- * parameter ("unsupported startup parameter"). A query that times out destroys its connection,
- * which makes the server stop it. Neon already ends a session idle in a transaction after 5 minutes.
+ * parameter ("unsupported startup parameter"). It frees the caller, not the server: a lone query
+ * that times out makes the pool drop its connection, which ends the query there, but inside a
+ * transaction the rollback queues behind it on the same connection, so the query may run on
+ * until it finishes. Neon ends a session idle in a transaction after 5 minutes.
  * The migration runner opens its own client, so none of this applies to it.
  */
 export function createPool(

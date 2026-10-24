@@ -1955,7 +1955,7 @@ export function createClippingsService({
    * most `MAX_SWEEP_RESTARTS` times; after that it stays failed until the user retries it.
    *
    * The jobs go out as one batch. If the queue can't be reached the clippings stay pending, and
-   * the sweep takes them again an hour on.
+   * the next daily sweep takes them again.
    */
   async function sweepStuck(): Promise<string[]> {
     const now = clock.now();
@@ -2212,6 +2212,7 @@ export function createClippingsService({
                 createdAt: sql`excluded.created_at`,
                 status: "pending",
                 statusChangedAt: now,
+                sweepAttempts: 0,
                 importRequestedAt: null,
                 ...noLinkVerdict,
                 updatedAt: now,
