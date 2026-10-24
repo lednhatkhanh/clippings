@@ -1,3 +1,5 @@
+import { availableParallelism } from "node:os";
+
 import { defineConfig, devices } from "@playwright/test";
 
 import {
@@ -5,6 +7,7 @@ import {
   APP_PORT,
   BASE_URL,
   FAKES_READY_PORT,
+  MAX_WORKERS,
   REPO_ROOT,
   WEB_DIR,
 } from "./support/env.ts";
@@ -17,7 +20,8 @@ export default defineConfig({
   // Every test signs in as a fresh user, so tests never depend on each other.
   fullyParallel: true,
   forbidOnly: ci,
-  workers: ci ? 1 : undefined,
+  // Playwright's own default (half the cores), within the allowlisted addresses' workers.
+  workers: ci ? 1 : Math.min(MAX_WORKERS, Math.max(1, Math.floor(availableParallelism() / 2))),
   retries: ci ? 1 : 0,
   // Under the CI job's 20 minute limit, so a hung run still uploads its report.
   globalTimeout: ci ? 15 * 60_000 : undefined,
