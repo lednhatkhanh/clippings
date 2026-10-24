@@ -1,6 +1,8 @@
 import type { BetterAuthPlugin } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 
+import { authorizationRequestSource } from "@/lib/auth/authorization-request.ts";
+
 import { isExtensionRedirectUri } from "./origins.ts";
 
 const REGISTER_PATH = "/oauth2/register";
@@ -49,9 +51,8 @@ export function extensionResourceGate({
         {
           matcher: (context) => context.path === AUTHORIZE_PATH,
           handler: createAuthMiddleware(async (ctx) => {
-            // The provider reads an authorization from the query on GET and from the form body
-            // on POST, so the gate reads the same place.
-            const sent = (ctx.method === "POST" ? ctx.body : ctx.query) ?? {};
+            // The gate reads the parameters from the place the provider does.
+            const sent = authorizationRequestSource(ctx).sent ?? {};
             const { resource: asked, redirect_uri: redirectUri } = sent as {
               resource?: unknown;
               redirect_uri?: unknown;

@@ -1,8 +1,9 @@
 import type { BetterAuthPlugin } from "better-auth";
 import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
+import { deleteSessionCookie } from "better-auth/cookies";
 
 import { isAllowlisted, parseAllowlist } from "./allowlist.ts";
-import { NOT_ALLOWLISTED } from "./validate-user.ts";
+import { NOT_ALLOWLISTED, rememberRejectedEmail } from "./validate-user.ts";
 
 const SESSION_PATH = "/get-session";
 // Sign-out must still work for a revoked user, and the OAuth endpoints refuse on their own in
@@ -20,8 +21,9 @@ const EXEMPT_PREFIXES = ["/sign-in", "/callback"];
  * - Every other endpoint under `/api/auth` (create-client, update-user, list-sessions and the
  *   rest) refuses with 403 for such a session.
  *
- * Either way the account's sessions are deleted on the spot, so the cookie stops working once
- * its five-minute cached copy has expired, even if a later request skips these hooks.
+ * Either way the account's sessions are deleted on the spot and its session cookies cleared (the
+ * cookie cache would otherwise keep answering for up to five minutes), even if a later request
+ * skips these hooks.
  */
 export function allowlistGate({ allowedEmails }: { allowedEmails: string | undefined }) {
   const allowlist = parseAllowlist(allowedEmails);
@@ -39,6 +41,8 @@ export function allowlistGate({ allowedEmails }: { allowedEmails: string | undef
             const session = await getSessionFromCtx(ctx);
             if (!session || isAllowlisted(allowlist, session.user.email)) return;
             await ctx.context.internalAdapter.deleteUserSessions(session.user.id);
+            deleteSessionCookie(ctx);
+            rememberRejectedEmail(ctx, session.user.email);
             throw new APIError("FORBIDDEN", {
               error: "access_denied",
               error_description: "This account is not on the allowlist.",
@@ -57,6 +61,10 @@ export function allowlistGate({ allowedEmails }: { allowedEmails: string | undef
               | undefined;
             if (!returned?.user || isAllowlisted(allowlist, returned.user.email)) return;
             await ctx.context.internalAdapter.deleteUserSessions(returned.user.id);
+            // As Better Auth's own null answer does: the cookies go too, the session cookie
+            // cache among them, and the sign-in page can name the account.
+            deleteSessionCookie(ctx);
+            if (returned.user.email) rememberRejectedEmail(ctx, returned.user.email);
             return ctx.json(null);
           }),
         },

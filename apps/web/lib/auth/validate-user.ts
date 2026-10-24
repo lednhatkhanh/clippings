@@ -1,4 +1,4 @@
-import type { BetterAuthOptions } from "better-auth";
+import type { BetterAuthOptions, GenericEndpointContext } from "better-auth";
 
 import { isAllowlisted, normalizeEmail, parseAllowlist } from "./allowlist.ts";
 
@@ -6,6 +6,20 @@ import { isAllowlisted, normalizeEmail, parseAllowlist } from "./allowlist.ts";
 export const REJECTED_EMAIL_COOKIE = "clippings-rejected-email";
 
 export const NOT_ALLOWLISTED = "not_allowlisted";
+
+/** Remembers the rejected email for the not-allowlisted page, in a cookie rather than the URL. */
+export function rememberRejectedEmail(
+  context: Pick<GenericEndpointContext, "setCookie">,
+  email: string,
+) {
+  context.setCookie(REJECTED_EMAIL_COOKIE, normalizeEmail(email), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 300,
+    path: "/",
+  });
+}
 
 type ValidateUserInfo = NonNullable<NonNullable<BetterAuthOptions["user"]>["validateUserInfo"]>;
 
@@ -26,15 +40,7 @@ export function createUserValidator({ allowedEmails }: { allowedEmails: string |
     const email = typeof user.email === "string" ? user.email : undefined;
     if (user.emailVerified === true && isAllowlisted(allowlist, email)) return;
 
-    if (email) {
-      context.setCookie(REJECTED_EMAIL_COOKIE, normalizeEmail(email), {
-        httpOnly: true,
-        sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
-        maxAge: 300,
-        path: "/",
-      });
-    }
+    if (email) rememberRejectedEmail(context, email);
     return { error: NOT_ALLOWLISTED, errorDescription: "This account is not on the allowlist." };
   };
 

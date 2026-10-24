@@ -46,6 +46,31 @@ describe.skipIf(!TEST_DATABASE_URL)("the allowlist on sessions", () => {
     expect(await sessionCount()).toBe(0);
   });
 
+  it("ignores the cached session cookie of an account removed from the allowlist, and clears the cookies", async () => {
+    const before = serveAuth({ pool, origin: ORIGIN, allowedEmails: "ada@example.com" });
+    const cookie = await signIn(pool, "ada", "ada@example.com");
+    // Reading the session while allowlisted hands out the signed copy of it (`session_data`).
+    const first = await before.call("/api/auth/get-session", { headers: { cookie } });
+    const cached = first.headers
+      .getSetCookie()
+      .map((header) => header.split(";")[0]!)
+      .find((pair) => pair.startsWith("better-auth.session_data="));
+    expect(cached).toBeDefined();
+
+    // The email leaves the list; the same secret still verifies the cookie.
+    const after = serveAuth({ pool, origin: ORIGIN, allowedEmails: "grace@example.com" });
+    const response = await after.call("/api/auth/get-session", {
+      headers: { cookie: `${cookie}; ${cached}` },
+    });
+
+    expect(await response.json()).toBeNull();
+    const cleared = response.headers.getSetCookie().join("\n");
+    expect(cleared).toMatch(/better-auth\.session_data=;/);
+    expect(cleared).toMatch(/better-auth\.session_token=;/);
+    expect(cleared).toContain("clippings-rejected-email=ada%40example.com");
+    expect(await sessionCount()).toBe(0);
+  });
+
   it("refuses the rest of Better Auth's endpoints to an account off the list", async () => {
     const { call } = serveAuth({ pool, origin: ORIGIN, allowedEmails: "grace@example.com" });
     const cookie = await signIn(pool, "ada", "ada@example.com");
