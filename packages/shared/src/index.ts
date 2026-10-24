@@ -34,12 +34,15 @@ export {
 export {
   CLIPPING_SOURCES,
   CLIPPING_STATUSES,
+  clippingStatusIdsSchema,
   MAX_NOTE_LENGTH,
   MAX_PAGE_TEXT,
+  MAX_STATUS_IDS,
   MAX_TITLE_LENGTH,
   type Clipping,
   type ClippingSource,
   type ClippingStatus,
+  type ClippingStatuses,
 } from "./clipping.ts";
 export { formatAbsoluteDate, formatIsoUtc } from "./dates.ts";
 export {

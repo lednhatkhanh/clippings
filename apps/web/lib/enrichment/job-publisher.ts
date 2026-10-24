@@ -1,4 +1,5 @@
 import { Client } from "@upstash/qstash";
+import { after } from "next/server";
 
 import type { JobPublisher } from "@clippings/db";
 
@@ -8,6 +9,28 @@ export const ENRICH_PATH = "/api/jobs/enrich";
 
 /** Messages per QStash batch call (its limit is 100). */
 const BATCH_SIZE = 100;
+
+/** The promise, or a rejection once `ms` have passed. */
+export function within<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`QStash didn't answer in ${ms} ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+/** Keeps the request going after the response, where the platform allows (inside a request). */
+function keepRunning(publishing: Promise<unknown>) {
+  const settled = publishing.then(
+    () => undefined,
+    (error: unknown) => console.error("Couldn't request enrichment after the wait", error),
+  );
+  try {
+    after(() => settled);
+  } catch {
+    // Not inside a request (a test, a script): there is no response to outlive.
+  }
+}
 
 /**
  * Publishes enrichment jobs to QStash, which calls back the signed handler with retries. Reads
@@ -35,9 +58,17 @@ export function createJobPublisher(): JobPublisher {
   }
 
   return {
-    async requestEnrichment(clippingId) {
+    async requestEnrichment(clippingId, { timeoutMs } = {}) {
       const { client, message } = connect();
-      await client.publishJSON(message(clippingId));
+      const publishing = client.publishJSON(message(clippingId));
+      if (timeoutMs === undefined) {
+        await publishing;
+        return;
+      }
+      // The SDK takes no signal, so the wait is cut, not the request: after the response it runs
+      // on, and its retries can still land the job.
+      keepRunning(publishing);
+      await within(publishing, timeoutMs);
     },
 
     async requestEnrichments(clippingIds, { spreadOverSeconds }) {

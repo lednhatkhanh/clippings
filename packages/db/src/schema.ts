@@ -411,9 +411,6 @@ export const clippings = pgTable(
     check("clippings_source_check", sql`${table.source} in (${inList(CLIPPING_SOURCES)})`),
     index("clippings_user_newest_idx").on(table.userId, table.createdAt.desc(), table.id.desc()),
     index("clippings_search_tsv_idx").using("gin", table.searchTsv),
-    // Typo tolerance on the page's title: `<%` (word similarity) uses it. v1's match still reads
-    // it during a deploy; the release after v2 drops it, with the code that no longer needs it.
-    index("clippings_title_trgm_idx").using("gin", table.title.op("gin_trgm_ops")),
     // Typo tolerance on the title to show: `<%` (word similarity) uses it, and the expression
     // must be the one `shownTitle` writes in the service.
     index("clippings_shown_title_trgm_idx").using(

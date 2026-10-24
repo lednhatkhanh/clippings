@@ -147,6 +147,60 @@ describe.skipIf(!TEST_DATABASE_URL)("connections service", () => {
     expect(await fixture.connections.recordUse(ana, claude, now())).toBe(false);
   });
 
+  describe("recording use", () => {
+    async function lastUsed(userId: string) {
+      return (await fixture.connections.listConnections(userId))[0]?.lastUsedAt;
+    }
+
+    it("writes a use only when the stored one is a minute old", async () => {
+      const ana = await fixture.createUser("ana");
+      const claude = await registerClient("claude", "Claude");
+      await connect(ana, claude, { at: subSeconds(now(), 3600) });
+      const issuedAt = subSeconds(now(), 10);
+
+      expect(await fixture.connections.recordUse(ana, claude, issuedAt)).toBe(true);
+      fixture.advanceClock(30_000);
+      expect(await fixture.connections.recordUse(ana, claude, issuedAt)).toBe(true);
+      expect(await lastUsed(ana)).toEqual(parseISO("2026-10-01T09:00:00.000Z"));
+
+      fixture.advanceClock(31_000);
+      expect(await fixture.connections.recordUse(ana, claude, issuedAt)).toBe(true);
+      expect(await lastUsed(ana)).toEqual(parseISO("2026-10-01T09:01:01.000Z"));
+    });
+
+    it("still refuses a token issued before a revocation within the minute of a use", async () => {
+      const ana = await fixture.createUser("ana");
+      const claude = await registerClient("claude", "Claude");
+      await connect(ana, claude);
+      const issuedAt = now();
+      await fixture.connections.recordUse(ana, claude, issuedAt);
+
+      fixture.advanceClock(1500);
+      await fixture.connections.revokeConnection(ana, claude);
+      fixture.advanceClock(1000);
+
+      expect(await fixture.connections.recordUse(ana, claude, issuedAt)).toBe(false);
+      // A token issued after the revocation is taken at once, and its use recorded.
+      const later = parseISO("2026-10-01T09:00:03.000Z");
+      expect(await fixture.connections.recordUse(ana, claude, later)).toBe(true);
+    });
+
+    it("throttles each client of each user on its own", async () => {
+      const ana = await fixture.createUser("ana");
+      const ben = await fixture.createUser("ben");
+      const claude = await registerClient("claude", "Claude");
+      await connect(ana, claude);
+      await connect(ben, claude);
+
+      await fixture.connections.recordUse(ana, claude, subSeconds(now(), 10));
+      fixture.advanceClock(5000);
+      await fixture.connections.recordUse(ben, claude, subSeconds(now(), 10));
+
+      expect(await lastUsed(ana)).toEqual(parseISO("2026-10-01T09:00:00.000Z"));
+      expect(await lastUsed(ben)).toEqual(parseISO("2026-10-01T09:00:05.000Z"));
+    });
+  });
+
   it("keeps users apart: one user never sees or revokes another's connections", async () => {
     const ana = await fixture.createUser("ana");
     const bo = await fixture.createUser("bo");

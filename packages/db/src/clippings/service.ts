@@ -71,6 +71,7 @@ import type {
   PageSummary,
   Summarizer,
 } from "./ports.ts";
+import { isWorthEmbedding } from "./query-embedding.ts";
 
 export const systemClock: Clock = { now: () => constructNow(undefined) };
 
@@ -166,6 +167,17 @@ export interface SearchClippingsInput {
    * reads the query as plain words.
    */
   words?: "all" | "any";
+  /**
+   * The query is being typed, as in the list's search box: until it is long enough to mean
+   * something (`isWorthEmbedding`) it searches by words alone, without embedding it. Left out,
+   * every query is embedded, however short ("css", "AI").
+   */
+  typeahead?: boolean;
+  /**
+   * Cancels the search: it stops waiting for the query's embedding and runs no SQL, and
+   * `searchClippings` throws the signal's reason.
+   */
+  signal?: AbortSignal;
 }
 
 export interface SearchResults {
@@ -425,8 +437,20 @@ const SEMANTIC_CANDIDATES = 50;
 const MAX_SEMANTIC_DISTANCE = 0.6;
 /** Most related clippings the detail page shows. */
 const RELATED_LIMIT = 5;
-// One call each, in turn: 50 fit the sweep route's 60 s with room to spare.
+// Most clippings one `embedMissing` run embeds, so a run fits the sweep route's 60 s.
 const EMBED_BATCH_SIZE = 50;
+// Most texts in one embedding call, a few at a time so one bad text costs only its call.
+const EMBED_CALL_SIZE = 25;
+
+function checkedVector(vector: number[]): number[] {
+  if (vector.length !== EMBEDDING_DIMENSIONS || !vector.every(Number.isFinite)) {
+    throw new Error(`Expected ${EMBEDDING_DIMENSIONS} numbers, got ${vector.length}`);
+  }
+  return vector;
+}
+
+/** How long a save waits for the queue to take its job; the daily sweep covers a lost one. */
+const SAVE_PUBLISH_TIMEOUT = { timeoutMs: 3000 };
 
 /** Has an embedding within `MAX_SEMANTIC_DISTANCE` of the vector `distance` measures from. */
 const closeInMeaning = (distance: SQL) =>
@@ -618,12 +642,21 @@ export function createClippingsService({
   const db = createDatabase(pool);
 
   /** The embedder's vector, checked to fit the column, so a wrong model fails here and not in SQL. */
-  async function embed(text: string, purpose: EmbeddingPurpose): Promise<number[]> {
-    const vector = await embedder.embed(text, purpose);
-    if (vector.length !== EMBEDDING_DIMENSIONS || !vector.every(Number.isFinite)) {
-      throw new Error(`Expected ${EMBEDDING_DIMENSIONS} numbers, got ${vector.length}`);
+  async function embed(
+    text: string,
+    purpose: EmbeddingPurpose,
+    signal?: AbortSignal,
+  ): Promise<number[]> {
+    return checkedVector(await embedder.embed(text, purpose, signal));
+  }
+
+  /** `embed` for several texts in one call: one vector each, in order. */
+  async function embedMany(texts: readonly string[], purpose: EmbeddingPurpose) {
+    const vectors = await embedder.embedMany(texts, purpose);
+    if (vectors.length !== texts.length) {
+      throw new Error(`Expected ${texts.length} embeddings, got ${vectors.length}`);
     }
-    return vector;
+    return vectors.map(checkedVector);
   }
 
   /** The user's tags on each of these clippings, by name; a clipping with none is left out. */
@@ -857,7 +890,7 @@ export function createClippingsService({
       ...statusChange("pending", now),
     };
     const created = await db.transaction(async (tx) => {
-      const [row] = await tx
+      const [saved] = await tx
         .insert(clippings)
         .values({ userId, urlNormalized: normalized, ...fresh })
         // A deleted clipping of the same page still holds its row: saving again starts it over,
@@ -867,9 +900,14 @@ export function createClippingsService({
           set: fresh,
           setWhere: isNotNull(clippings.deletedAt),
         })
-        .returning(clippingColumns);
-      if (row) {
-        await setTags(tx, userId, row.id, tagNames);
+        // `xmax` is 0 on a row this statement inserted, and not on one it revived.
+        .returning({ ...clippingColumns, inserted: sql<boolean>`(xmax = 0)` });
+      if (!saved) return undefined;
+      const { inserted, ...row } = saved;
+      await setTags(tx, userId, row.id, tagNames);
+      // A new row has no suggestions or text yet: only a revived one clears what it kept. The
+      // page the browser sent is stored after, so it isn't cleared with them.
+      if (!inserted) {
         await tx
           .delete(clippingTagSuggestions)
           .where(
@@ -881,14 +919,14 @@ export function createClippingsService({
         await tx
           .delete(clippingTexts)
           .where(and(eq(clippingTexts.clippingId, row.id), eq(clippingTexts.userId, userId)));
-        if (input.page) await keepBrowserPage(tx, userId, row.id, input.page, now);
       }
+      if (input.page) await keepBrowserPage(tx, userId, row.id, input.page, now);
       return row;
     });
 
     if (created) {
       // The save stands even if the queue is down: the daily sweep requests the job again.
-      await jobs.requestEnrichment(created.id).catch((error: unknown) => {
+      await jobs.requestEnrichment(created.id, SAVE_PUBLISH_TIMEOUT).catch((error: unknown) => {
         console.error(`Couldn't request enrichment of clipping ${created.id}`, error);
       });
       return { status: "created", clipping: await oneWithTags(userId, created) };
@@ -953,7 +991,7 @@ export function createClippingsService({
       return { current: restarted ?? locked, requested: restarted !== undefined };
     });
     if (requested) {
-      await jobs.requestEnrichment(current.id).catch((error: unknown) => {
+      await jobs.requestEnrichment(current.id, SAVE_PUBLISH_TIMEOUT).catch((error: unknown) => {
         console.error(`Couldn't request enrichment of clipping ${current.id}`, error);
       });
     }
@@ -971,31 +1009,34 @@ export function createClippingsService({
       fromSources(sources),
       taggedWithAll(db, userId, tagNames),
     );
-    // The pinned group heads the first page only. `nulls last` is how the partial index sorts.
-    const pinnedRows = after
-      ? []
-      : await db
-          .select(clippingColumns)
-          .from(clippings)
-          .where(and(matching, isNotNull(clippings.pinnedAt)))
-          .orderBy(sql`${clippings.pinnedAt} desc nulls last`, desc(clippings.id));
-    // One extra row says whether another page follows without a second query.
-    const rows = await db
-      .select(clippingColumns)
-      .from(clippings)
-      .where(and(matching, isNull(clippings.pinnedAt), afterCursor(after)))
-      .orderBy(desc(clippings.createdAt), desc(clippings.id))
-      .limit(limit + 1);
+    const [pinnedRows, rows] = await Promise.all([
+      // The pinned group heads the first page only. `nulls last` is how the partial index sorts.
+      after
+        ? []
+        : db
+            .select(clippingColumns)
+            .from(clippings)
+            .where(and(matching, isNotNull(clippings.pinnedAt)))
+            .orderBy(sql`${clippings.pinnedAt} desc nulls last`, desc(clippings.id)),
+      // One extra row says whether another page follows without a second query.
+      db
+        .select(clippingColumns)
+        .from(clippings)
+        .where(and(matching, isNull(clippings.pinnedAt), afterCursor(after)))
+        .orderBy(desc(clippings.createdAt), desc(clippings.id))
+        .limit(limit + 1),
+    ]);
 
     const pageRows = rows.slice(0, limit);
     const last = pageRows.at(-1);
-    const [pinned, items] = await Promise.all([
-      withTags(userId, pinnedRows),
-      withTags(userId, pageRows),
-    ]);
+    // The tags of both groups in one query.
+    const byClipping = await tagsOn(
+      userId,
+      [...pinnedRows, ...pageRows].map((row) => row.id),
+    );
     return {
-      pinned,
-      items,
+      pinned: pinnedRows.map((row) => toClipping(row, byClipping.get(row.id))),
+      items: pageRows.map((row) => toClipping(row, byClipping.get(row.id))),
       nextCursor: rows.length > limit && last ? encodeCursor(last) : null,
     };
   }
@@ -1063,15 +1104,25 @@ export function createClippingsService({
       sort = "relevance",
       limit = SEARCH_RESULT_LIMIT,
       words = "all",
+      typeahead = false,
+      signal,
     }: SearchClippingsInput,
   ): Promise<SearchResults> {
     const text = q.trim().slice(0, MAX_QUERY_LENGTH).trim();
     if (!text) return { items: [] };
+    signal?.throwIfAborted();
 
-    const queryVector = await embed(text, "query").catch((error: unknown) => {
-      console.error("Couldn't embed the search query; searching by words alone", error);
-      return null;
-    });
+    // A query still being typed may have no meaning to find yet: words alone.
+    const queryVector =
+      !typeahead || isWorthEmbedding(text)
+        ? await embed(text, "query", signal).catch((error: unknown) => {
+            // A cancelled search is not a failed embedding.
+            signal?.throwIfAborted();
+            console.error("Couldn't embed the search query; searching by words alone", error);
+            return null;
+          })
+        : null;
+    signal?.throwIfAborted();
 
     const query = keywordQuery(text, words);
     const scope = and(
@@ -1205,6 +1256,23 @@ export function createClippingsService({
   }
 
   /**
+   * Where each of these clippings is in enrichment, for a list that polls its pending rows: only
+   * the ones the user has and that are live, in no order. An id that is not the user's, not live
+   * or not a UUID is left out.
+   */
+  async function getClippingStatuses(
+    userId: string,
+    clippingIds: readonly string[],
+  ): Promise<{ id: string; status: Clipping["status"] }[]> {
+    const ids = clippingIds.filter((id) => UUID.test(id));
+    if (ids.length === 0) return [];
+    return db
+      .select({ id: clippings.id, status: clippings.status })
+      .from(clippings)
+      .where(and(eq(clippings.userId, userId), inArray(clippings.id, ids), live));
+  }
+
+  /**
    * The page text the last successful reading of the user's clipping saved, with the time it was
    * read and the clipping's url and title as shown, or null when the user has no such live
    * clipping or no reading has saved text for it. Text the browser sent with a save that no reading
@@ -1217,11 +1285,14 @@ export function createClippingsService({
 
   /**
    * `getClippingText` for several clippings in one query: the ones that have text, by id. An id
-   * that is not the user's, not live, without read text or not a UUID is left out.
+   * that is not the user's, not live, without read text or not a UUID is left out. With
+   * `maxChars`, the database cuts each text to that many characters, so a reader that keeps only
+   * the start doesn't pull the rest.
    */
   async function getClippingTexts(
     userId: string,
     clippingIds: readonly string[],
+    { maxChars }: { maxChars?: number } = {},
   ): Promise<Map<string, ClippingText>> {
     const ids = clippingIds.filter((id) => UUID.test(id));
     const texts = new Map<string, ClippingText>();
@@ -1231,7 +1302,10 @@ export function createClippingsService({
         id: clippingTexts.clippingId,
         url: clippings.url,
         title: sql<string>`${shownTitle}`,
-        text: clippingTexts.text,
+        text:
+          maxChars === undefined
+            ? clippingTexts.text
+            : sql<string>`left(${clippingTexts.text}, ${maxChars})`,
         fetchedAt: clippingTexts.fetchedAt,
       })
       .from(clippingTexts)
@@ -2305,21 +2379,23 @@ export function createClippingsService({
       .orderBy(desc(clippings.createdAt))
       .limit(EMBED_BATCH_SIZE);
     let count = 0;
-    for (const row of missing) {
-      let vector: number[];
+    for (const group of chunks(missing, EMBED_CALL_SIZE)) {
+      let vectors: number[][];
       try {
-        vector = await embed(documentText(row), "document");
+        vectors = await embedMany(group.map(documentText), "document");
       } catch (error) {
-        console.error(`Couldn't embed clipping ${row.id}; stopping for today`, error);
+        console.error(`Couldn't embed ${group.length} clippings; stopping for today`, error);
         break;
       }
-      // Only while still missing: enrichment may have written one in the meantime.
-      const [updated] = await db
-        .update(clippings)
-        .set({ embedding: vector })
-        .where(and(eq(clippings.id, row.id), isNull(embedding)))
-        .returning({ id: clippings.id });
-      if (updated) count += 1;
+      for (const [index, row] of group.entries()) {
+        // Only while still missing: enrichment may have written one in the meantime.
+        const [updated] = await db
+          .update(clippings)
+          .set({ embedding: vectors[index]! })
+          .where(and(eq(clippings.id, row.id), isNull(embedding)))
+          .returning({ id: clippings.id });
+        if (updated) count += 1;
+      }
     }
     return count;
   }
@@ -2436,6 +2512,7 @@ export function createClippingsService({
     exportClippings,
     getClippingText,
     getClippingTexts,
+    getClippingStatuses,
     updateClipping,
     tagClippings,
     getClipping,

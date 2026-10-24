@@ -1,7 +1,8 @@
 import { browser, type Browser } from "wxt/browser";
 
 import { ensureRetrying, RETRY_ALARM } from "./queue.ts";
-import { lookUpTab, quickSave, sendOfflineSaves } from "./quick-save.ts";
+import { quickSave, sendOfflineSaves } from "./quick-save.ts";
+import { lookUpTabCached } from "./saved-lookup.ts";
 import { SHOW_SAVED_KEY } from "./settings.ts";
 import { resetTab, showDefaultIcon } from "./toolbar.ts";
 
@@ -55,7 +56,7 @@ export function menuSave(info: Browser.contextMenus.OnClickData) {
 /** Looks up the page in each window's current tab, once the user turns the setting on. */
 async function lookUpCurrentTabs() {
   for (const tab of await browser.tabs.query({ active: true })) {
-    if (tab.id !== undefined && !tab.incognito) await lookUpTab(tab.id, tab.url);
+    if (tab.id !== undefined && !tab.incognito) await lookUpTabCached(tab.id, tab.url);
   }
 }
 
@@ -91,7 +92,7 @@ export function registerQuickSave() {
     if (changeInfo.status === "loading") void resetTab(tabId).catch(() => undefined);
     // Only with "Show when a page is already saved" on, which grants `tabs` and so `tab.url`.
     // Private windows are never looked up.
-    if (changeInfo.status === "complete" && !tab.incognito) void lookUpTab(tabId, tab.url);
+    if (changeInfo.status === "complete" && !tab.incognito) void lookUpTabCached(tabId, tab.url);
   });
 
   browser.storage.local.onChanged.addListener((changes) => {

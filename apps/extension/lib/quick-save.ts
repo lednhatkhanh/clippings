@@ -7,13 +7,12 @@ import {
   type ExtensionPage,
 } from "@clippings/shared";
 
-import { lookupClipping, saveClipping, saveNote } from "./api.ts";
+import { saveClipping, saveNote } from "./api.ts";
 import { isSignedIn } from "./auth.ts";
 import { isRetryable, type SaveResult } from "./messages.ts";
 import { readPage } from "./page.ts";
 import { enqueue, pauseRetrying, sendQueued, type PendingSave, type SendOutcome } from "./queue.ts";
 import { quoteSelection } from "./quote.ts";
-import { showsSavedPages } from "./settings.ts";
 import { flashSaved, resetTab, showError, showQueued, showSaved } from "./toolbar.ts";
 
 const CANT_SAVE = "Clippings can't save this page.";
@@ -211,18 +210,4 @@ export async function sendOfflineSaves(): Promise<void> {
     }
     return outcomeOf(result);
   });
-}
-
-/**
- * When the user turned on "Show when a page is already saved", asks whether the page the tab
- * has loaded is saved, and fills the icon if it is. With the setting off, nothing is sent. Only
- * the normalized address goes: no fragment, which can hold a token.
- */
-export async function lookUpTab(tabId: number, url: string | undefined): Promise<void> {
-  if (!url || !isSaveablePage(url) || !(await showsSavedPages())) return;
-  const normalized = parseWebUrl(url)?.normalized;
-  if (!normalized) return;
-  if ((await lookupClipping(normalized)) === "saved" && (await stillShows(tabId, url))) {
-    await showSaved(tabId);
-  }
 }

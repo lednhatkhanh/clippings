@@ -29,8 +29,8 @@ import { HighlightedText } from "./highlighted-text.tsx";
 import { copyLinkWithToast, shareLinkWithToast, useCanShare } from "./link-actions.ts";
 import { refreshFirstPage } from "./refresh-first-page.ts";
 import { StatusMotion } from "./status-motion.tsx";
+import { useListPoll } from "./use-list-poll.ts";
 import { useOnScreen } from "./use-on-screen.ts";
-import { usePendingPoll } from "./use-pending-poll.ts";
 
 /** Whether every animation on an element has finished: a row settles on its last one. */
 const hasSettled = (element: Element) =>
@@ -77,10 +77,10 @@ function ClippingRow({
 
   // A pending row asks for itself until enrichment has finished, then shows the result in place.
   // Only while on screen, and ever more slowly (`poll-schedule.ts`): an imported backlog stays
-  // pending for hours, and its rows must not each hold a request open.
+  // pending for hours. The rows asking at once share one status request (`pending-poller.ts`).
   const pending = row.status === "pending";
   const onScreen = useOnScreen(element, pending);
-  usePendingPoll(row.id, pending && onScreen, setRow);
+  useListPoll(row.id, row.source, pending && onScreen, setRow);
 
   // The row can't be a link (it's a grid list item), so it warms the detail page itself. Under
   // partial prefetching the shell is shared by every `/c/<id>`, so this is cheap after the first.

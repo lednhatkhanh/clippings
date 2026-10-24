@@ -2,7 +2,12 @@ import type Anthropic from "@anthropic-ai/sdk";
 
 import type { ClippingsService } from "@clippings/db";
 
-import { buildSearchResults, type AskCited, type AskSource } from "./search-results.ts";
+import {
+  buildSearchResults,
+  MAX_PAGE_TEXT_CHARS,
+  type AskCited,
+  type AskSource,
+} from "./search-results.ts";
 
 export const ASK_MODEL = "claude-sonnet-5-5";
 
@@ -32,12 +37,13 @@ export async function retrieveSources(
     q: question,
     limit: ASK_HIT_LIMIT,
     words: "any",
+    signal,
   });
-  // The embedder takes no signal, so the first check comes once the search is back.
   signal?.throwIfAborted();
   const texts = await clippings.getClippingTexts(
     userId,
     items.map(({ clipping }) => clipping.id),
+    { maxChars: MAX_PAGE_TEXT_CHARS },
   );
   return items.map(({ clipping }) => ({
     clipping,

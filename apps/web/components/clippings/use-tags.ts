@@ -1,4 +1,4 @@
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
 
 import type { Tag } from "@clippings/shared";
 
@@ -12,10 +12,22 @@ async function fetchTags(url: string): Promise<Tag[]> {
 }
 
 /**
+ * Forgets the tags read so far, wherever the picker is open or not: the next open reads them
+ * again. For a change made away from the picker (the tags page, an import).
+ */
+export function refreshTags() {
+  void mutate(TAGS_KEY, undefined, { revalidate: true });
+}
+
+/**
  * The user's tags, for the picker to offer. Empty until they load, or if they can't: a new tag can
- * still be typed. `refresh` reads them again after a save may have created one.
+ * still be typed. They are read once and kept, not read on each open: `refresh` reads them again
+ * after a save may have created one, and `refreshTags` after a change made elsewhere.
  */
 export function useTags() {
-  const { data, mutate } = useSWR(TAGS_KEY, fetchTags, { revalidateOnFocus: false });
-  return { tags: data ?? [], refresh: () => void mutate() };
+  const { data, mutate: revalidate } = useSWR(TAGS_KEY, fetchTags, {
+    revalidateOnFocus: false,
+    revalidateIfStale: false,
+  });
+  return { tags: data ?? [], refresh: () => void revalidate() };
 }
