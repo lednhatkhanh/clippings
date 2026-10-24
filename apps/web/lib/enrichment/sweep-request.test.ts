@@ -11,9 +11,16 @@ function setup(
   let purges = 0;
   let embeds = 0;
   let drains = 0;
+  let clientPurges = 0;
   const linkLimits: number[] = [];
   const deps = {
     secret,
+    connections: {
+      purgeUnusedClients: async () => {
+        clientPurges += 1;
+        return 2;
+      },
+    },
     service: {
       sweepStuck: async () => {
         calls += 1;
@@ -40,6 +47,7 @@ function setup(
     },
   };
   return {
+    clientPurges: () => clientPurges,
     calls: () => calls,
     purges: () => purges,
     embeds: () => embeds,
@@ -67,6 +75,7 @@ describe("handleSweepRequest", () => {
       embedded: 4,
       imports: 5,
       purged: 3,
+      clientsPurged: 2,
       linksChecked: 7,
       linksDead: 2,
     });
@@ -78,7 +87,9 @@ describe("handleSweepRequest", () => {
   });
 
   it("still purges when the import drain fails, and says so", async () => {
-    const { call, purges, embeds, drains } = setup("cron-secret", { drainFails: true });
+    const { call, purges, embeds, drains, clientPurges } = setup("cron-secret", {
+      drainFails: true,
+    });
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const response = await call("Bearer cron-secret");
@@ -90,12 +101,14 @@ describe("handleSweepRequest", () => {
       imports: 0,
       importsFailed: true,
       purged: 3,
+      clientsPurged: 2,
       linksChecked: 7,
       linksDead: 2,
     });
     expect(embeds()).toBe(1);
     expect(drains()).toBe(1);
     expect(purges()).toBe(1);
+    expect(clientPurges()).toBe(1);
     expect(logged).toHaveBeenCalledOnce();
     logged.mockRestore();
   });
@@ -119,7 +132,7 @@ describe("handleSweepRequest", () => {
   });
 
   it("refuses a missing or wrong secret", async () => {
-    const { call, calls, purges, embeds, drains, linkLimits } = setup();
+    const { call, calls, purges, embeds, drains, linkLimits, clientPurges } = setup();
 
     expect((await call()).status).toBe(401);
     expect((await call("Bearer nope")).status).toBe(401);
@@ -128,6 +141,7 @@ describe("handleSweepRequest", () => {
     expect(embeds()).toBe(0);
     expect(drains()).toBe(0);
     expect(purges()).toBe(0);
+    expect(clientPurges()).toBe(0);
     expect(linkLimits()).toEqual([]);
   });
 

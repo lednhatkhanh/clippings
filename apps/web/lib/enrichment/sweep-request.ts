@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 
-import type { ClippingsService } from "@clippings/db";
+import type { ClippingsService, ConnectionsService } from "@clippings/db";
 
 export interface SweepRequestDeps {
   /** `CRON_SECRET`. Vercel sends it as a bearer token with each cron call. */
@@ -9,6 +9,7 @@ export interface SweepRequestDeps {
     ClippingsService,
     "sweepStuck" | "embedMissing" | "purgeDeleted" | "drainImports" | "checkLinks"
   >;
+  connections: Pick<ConnectionsService, "purgeUnusedClients">;
 }
 
 /**
@@ -28,13 +29,14 @@ export function isAuthorized(authorization: string | null, secret: string | unde
 /**
  * The daily cron: requests enrichment again for clippings stuck in pending or failed, embeds ready
  * clippings that have no embedding, requests the day's share of the imported backlog, and removes
- * clippings deleted more than a day ago, then checks the links that are due. The drain needs the
+ * clippings deleted more than a day ago and the OAuth clients registered a month ago that no one
+ * ever used, then checks the links that are due. The drain needs the
  * queue, which can be down: its failure is logged and reported as `importsFailed`, and the purge
  * still runs, since a deleted clipping must not outlive its day because of it.
  */
 export async function handleSweepRequest(
   request: Request,
-  { secret, service }: SweepRequestDeps,
+  { secret, service, connections }: SweepRequestDeps,
 ): Promise<Response> {
   if (!isAuthorized(request.headers.get("authorization"), secret)) {
     return new Response("Unauthorized", { status: 401 });
@@ -50,6 +52,12 @@ export async function handleSweepRequest(
     console.error("Couldn't request the import backlog", error);
   }
   const purged = await service.purgeDeleted();
+  let clientsPurged = 0;
+  try {
+    clientsPurged = await connections.purgeUnusedClients();
+  } catch (error) {
+    console.error("Couldn't purge unused OAuth clients", error);
+  }
   let links = { checked: 0, dead: 0 };
   let linksFailed = false;
   try {
@@ -64,6 +72,7 @@ export async function handleSweepRequest(
     imports: imports.length,
     ...(importsFailed && { importsFailed }),
     purged,
+    clientsPurged,
     linksChecked: links.checked,
     linksDead: links.dead,
     ...(linksFailed && { linksFailed }),
