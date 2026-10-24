@@ -19,15 +19,31 @@ const config: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   reactCompiler: true,
-  // The app icons and install screenshots in public/ keep their names across deploys, so a day's
-  // caching, then a background check, rather than Next's revalidate-every-time default.
-  headers: async () =>
-    ["/icons/:file*", "/screenshots/:file*"].map((source) => ({
+  headers: async () => [
+    // Every route. The CSP carries only what can't break Next or sign-in: no `script-src` (it
+    // needs per-request nonces, which `cacheComponents` prerendering can't have) and no
+    // `form-action` (Chrome applies it to the redirect to Google after the sign-in form).
+    {
+      source: "/:path*",
+      headers: [
+        { key: "X-Content-Type-Options", value: "nosniff" },
+        { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        { key: "X-Frame-Options", value: "DENY" },
+        {
+          key: "Content-Security-Policy",
+          value: "frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
+        },
+      ],
+    },
+    // The app icons and install screenshots in public/ keep their names across deploys, so a
+    // day's caching, then a background check, rather than Next's revalidate-every-time default.
+    ...["/icons/:file*", "/screenshots/:file*"].map((source) => ({
       source,
       headers: [
         { key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" },
       ],
     })),
+  ],
   experimental: {
     // Keeps a visited page's data for 30 s, so the in-app back link finds the list already rendered
     // and its row's sheet morphs back (React Aria's list renders a newly mounted row a commit late).
