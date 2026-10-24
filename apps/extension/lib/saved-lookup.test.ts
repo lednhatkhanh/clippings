@@ -3,6 +3,7 @@ import { browser } from "wxt/browser";
 import { fakeBrowser } from "wxt/testing/fake-browser";
 
 import { lookupClipping } from "./api.ts";
+import { forgetTokens } from "./auth.ts";
 import { lookUpTabCached } from "./saved-lookup.ts";
 import { SHOW_SAVED_KEY } from "./settings.ts";
 import { showSaved } from "./toolbar.ts";
@@ -17,6 +18,7 @@ vi.mock("./icons.ts", () => ({
 const TAB = 7;
 const PAGE = "https://example.com/essay";
 
+const contains = vi.fn(async () => true);
 const setIcon = vi.fn(async (_details: { tabId?: number; imageData: unknown }) => undefined);
 const iconOf = (tabId: number) =>
   setIcon.mock.calls.filter(([details]) => details.tabId === tabId).at(-1)?.[0].imageData;
@@ -31,7 +33,8 @@ beforeEach(async () => {
   Object.assign(fakeBrowser.tabs, {
     get: async (tabId: number) => ({ id: tabId, url: tabUrls.get(tabId) }),
   });
-  Object.assign(fakeBrowser, { permissions: { contains: vi.fn(async () => true) } });
+  contains.mockReset().mockResolvedValue(true);
+  Object.assign(fakeBrowser, { permissions: { contains } });
   setIcon.mockClear();
   Object.assign(fakeBrowser.action, { setIcon });
   vi.mocked(lookupClipping).mockReset();
@@ -108,6 +111,38 @@ describe("looking up the page of a tab", () => {
     await lookUpTabCached(TAB + 1, "https://example.com/other");
 
     expect(lookupClipping).toHaveBeenCalledTimes(2);
+  });
+
+  it("doesn't use a kept answer after the user signs out", async () => {
+    vi.mocked(lookupClipping).mockResolvedValue("saved");
+    await lookUpTabCached(TAB, PAGE);
+
+    await forgetTokens();
+    vi.mocked(lookupClipping).mockResolvedValue("not_saved");
+    setIcon.mockClear();
+    await lookUpTabCached(TAB, PAGE);
+
+    expect(lookupClipping).toHaveBeenCalledTimes(2);
+    expect(iconOf(TAB)).toBeUndefined();
+  });
+
+  it("sends only the normalized address, and none for a page that can't be saved", async () => {
+    vi.mocked(lookupClipping).mockResolvedValue("saved");
+    tabUrls.set(TAB, `${PAGE}#access_token=secret`);
+
+    await lookUpTabCached(TAB, `${PAGE}#access_token=secret`);
+    await lookUpTabCached(TAB + 1, "chrome://newtab");
+
+    expect(lookupClipping).toHaveBeenCalledExactlyOnceWith(PAGE);
+    expect(iconOf(TAB)).toBe("saved-icon");
+  });
+
+  it("sends no address when the tabs permission was taken back", async () => {
+    contains.mockResolvedValueOnce(false);
+
+    await lookUpTabCached(TAB, PAGE);
+
+    expect(lookupClipping).not.toHaveBeenCalled();
   });
 
   it("sends no address while the setting is off", async () => {

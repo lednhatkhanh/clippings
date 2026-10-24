@@ -22,6 +22,18 @@ export async function readLookup(url: string): Promise<"saved" | "not_saved" | u
 }
 
 /**
+ * Forgets every kept answer. They are the signed-in user's: a sign-out or another sign-in must not
+ * show the old account's saved pages.
+ */
+export async function clearLookups(): Promise<void> {
+  try {
+    await browser.storage.session.remove(KEY);
+  } catch (error) {
+    console.error("Couldn't clear the kept lookups", error);
+  }
+}
+
+/**
  * Keeps the answer for a normalized address. A save sets it to saved at once, so the next load
  * of a page just saved doesn't show the old answer. A failed write only costs a lookup.
  */

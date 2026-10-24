@@ -3,6 +3,7 @@ import { browser } from "wxt/browser";
 
 import { EXTENSION_API_PATH, formatIsoUtc, UNKNOWN_CLIENT } from "@clippings/shared";
 
+import { clearLookups } from "./lookup-cache-storage.ts";
 import type { SignInProblem } from "./messages.ts";
 
 /** The Clippings web app: its authorization server and the extension API. */
@@ -124,9 +125,13 @@ export async function isSignedIn(): Promise<boolean> {
   return Boolean((await readStored()).tokens);
 }
 
-/** Drops this device's tokens: the user signs in again on the next save. */
+/**
+ * Drops this device's tokens: the user signs in again on the next save. The answers kept about
+ * which pages are saved go too, as they were the signed-in user's.
+ */
 export async function forgetTokens() {
   await browser.storage.local.remove("tokens");
+  await clearLookups();
 }
 
 /** What the authorization server's refusal, sent back to the extension, means for the popup. */
@@ -224,6 +229,8 @@ export async function signIn(): Promise<boolean> {
       code_verifier: verifier,
     });
     if (!tokens) throw new Error("The authorization code was refused");
+    // Another account may have signed in: what was kept about the last one's saves is not theirs.
+    await clearLookups();
     return true;
   } catch (error) {
     console.error("Couldn't sign in", error);
