@@ -1,6 +1,5 @@
-import { MAX_STATUS_IDS, type ClippingSource, type ClippingStatus } from "@clippings/shared";
-
 import type { ClippingRowData } from "@/lib/clippings/rows.ts";
+import { MAX_STATUS_IDS, type ClippingSource, type ClippingStatus } from "@clippings/shared";
 
 import { pollDelay, pollMax } from "./poll-schedule.ts";
 

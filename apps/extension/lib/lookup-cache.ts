@@ -35,7 +35,5 @@ export function rememberLookup(
     ([address, entry]) => address !== url && now - entry.at < LOOKUP_TTL_MS && entry.at <= now,
   );
   fresh.push([url, { saved, at: now }]);
-  return Object.fromEntries(
-    fresh.sort((a, b) => a[1].at - b[1].at).slice(-MAX_CACHED_LOOKUPS),
-  );
+  return Object.fromEntries(fresh.sort((a, b) => a[1].at - b[1].at).slice(-MAX_CACHED_LOOKUPS));
 }

@@ -29,8 +29,8 @@ import { HighlightedText } from "./highlighted-text.tsx";
 import { copyLinkWithToast, shareLinkWithToast, useCanShare } from "./link-actions.ts";
 import { refreshFirstPage } from "./refresh-first-page.ts";
 import { StatusMotion } from "./status-motion.tsx";
-import { useOnScreen } from "./use-on-screen.ts";
 import { useListPoll } from "./use-list-poll.ts";
+import { useOnScreen } from "./use-on-screen.ts";
 
 /** Whether every animation on an element has finished: a row settles on its last one. */
 const hasSettled = (element: Element) =>

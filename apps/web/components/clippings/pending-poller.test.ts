@@ -172,7 +172,11 @@ describe("createPendingPoller", () => {
 
     await advance(0);
 
-    expect(requests.map(({ ids: asked }) => asked.length)).toEqual([MAX_STATUS_IDS, MAX_STATUS_IDS, 5]);
+    expect(requests.map(({ ids: asked }) => asked.length)).toEqual([
+      MAX_STATUS_IDS,
+      MAX_STATUS_IDS,
+      5,
+    ]);
     expect(requests.flatMap(({ ids: asked }) => asked)).toEqual(ids);
   });
 

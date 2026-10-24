@@ -79,10 +79,12 @@ describe("handleSweepRequest", () => {
 
   it("runs the cheap jobs before the embedding backfill, so a slow provider can't starve them", async () => {
     const order: string[] = [];
-    const step = <T>(name: string, value: T) => async () => {
-      order.push(name);
-      return value;
-    };
+    const step =
+      <T>(name: string, value: T) =>
+      async () => {
+        order.push(name);
+        return value;
+      };
     const response = await handleSweepRequest(
       new Request("https://clippings.example/api/cron/sweep", {
         headers: { authorization: "Bearer cron-secret" },
@@ -100,7 +102,13 @@ describe("handleSweepRequest", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(order).toEqual(["sweepStuck", "drainImports", "purgeDeleted", "embedMissing", "checkLinks"]);
+    expect(order).toEqual([
+      "sweepStuck",
+      "drainImports",
+      "purgeDeleted",
+      "embedMissing",
+      "checkLinks",
+    ]);
   });
 
   it("still purges when the import drain fails, and says so", async () => {

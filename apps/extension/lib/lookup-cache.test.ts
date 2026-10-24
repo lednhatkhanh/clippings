@@ -25,10 +25,25 @@ describe("cachedLookup", () => {
       now: NOW + 1000,
       expected: "not_saved",
     },
-    { name: "the last moment of the time", url: URL, now: NOW + LOOKUP_TTL_MS - 1, expected: "saved" },
+    {
+      name: "the last moment of the time",
+      url: URL,
+      now: NOW + LOOKUP_TTL_MS - 1,
+      expected: "saved",
+    },
     { name: "an answer past its time", url: URL, now: NOW + LOOKUP_TTL_MS, expected: undefined },
-    { name: "an address never asked about", url: "https://example.com/new", now: NOW, expected: undefined },
-    { name: "an answer from the future (the clock moved back)", url: URL, now: NOW - 1, expected: undefined },
+    {
+      name: "an address never asked about",
+      url: "https://example.com/new",
+      now: NOW,
+      expected: undefined,
+    },
+    {
+      name: "an answer from the future (the clock moved back)",
+      url: URL,
+      now: NOW - 1,
+      expected: undefined,
+    },
     { name: "a name every object has", url: "constructor", now: NOW, expected: undefined },
   ])("$name", ({ url, now, expected }) => {
     expect(cachedLookup(cache, url, now)).toBe(expected);
