@@ -5,7 +5,12 @@ export interface Clock {
 
 /** Starts background enrichment of a clipping. */
 export interface JobPublisher {
-  requestEnrichment: (clippingId: string) => Promise<void>;
+  /**
+   * `timeoutMs` bounds the wait for the queue to take the job: a save that must not be held up by
+   * a slow queue passes it, and the publisher finishes the request in the background when it can.
+   * Left out, the call waits for the queue.
+   */
+  requestEnrichment: (clippingId: string, options?: { timeoutMs?: number }) => Promise<void>;
   /**
    * Starts enrichment of many clippings at once, each delayed so the jobs arrive spread evenly
    * over `spreadOverSeconds` instead of all together. For the import backlog.

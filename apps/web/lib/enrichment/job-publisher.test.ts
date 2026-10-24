@@ -1,6 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PUBLISH_TIMEOUT_MS, within } from "./job-publisher.ts";
+import { createJobPublisher, within } from "./job-publisher.ts";
+
+const PUBLISH_TIMEOUT_MS = 3000;
+const publishJSON = vi.fn();
+
+vi.mock("@upstash/qstash", () => ({
+  Client: class {
+    publishJSON = publishJSON;
+  },
+}));
 
 describe("within", () => {
   beforeEach(() => {
@@ -31,5 +40,50 @@ describe("within", () => {
     await vi.advanceTimersByTimeAsync(PUBLISH_TIMEOUT_MS);
 
     await failure;
+  });
+});
+
+describe("requesting enrichment", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubEnv("QSTASH_TOKEN", "token");
+    vi.stubEnv("BETTER_AUTH_URL", "https://clippings.example");
+    publishJSON.mockReset();
+    // A queue that takes ten seconds to answer.
+    publishJSON.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve({ messageId: "m" }), 10_000)),
+    );
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+  });
+
+  it("waits for a slow queue when the caller set no bound", async () => {
+    let done = false;
+    const request = createJobPublisher()
+      .requestEnrichment("c1")
+      .then(() => {
+        done = true;
+      });
+
+    await vi.advanceTimersByTimeAsync(PUBLISH_TIMEOUT_MS + 1000);
+    expect(done).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    await request;
+    expect(done).toBe(true);
+  });
+
+  it("gives up on a slow queue after the caller's bound", async () => {
+    const request = expect(
+      createJobPublisher().requestEnrichment("c1", { timeoutMs: PUBLISH_TIMEOUT_MS }),
+    ).rejects.toThrow("didn't answer");
+
+    await vi.advanceTimersByTimeAsync(PUBLISH_TIMEOUT_MS);
+
+    await request;
+    expect(publishJSON).toHaveBeenCalledOnce();
   });
 });
