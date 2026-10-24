@@ -128,16 +128,16 @@ export function createMcpRoute({
       }
       const userId = String(authInfo.extra?.userId);
       const { internalAdapter } = await auth.$context;
-      const user = await internalAdapter.findUserById(userId);
+      // Better Auth always sets `iat`; a token without one can't be checked, so it is refused.
+      // The user and the connection are read together; the allowlist is judged first.
+      const issuedAt = typeof claims.iat === "number" ? fromUnixTime(claims.iat) : undefined;
+      const [user, recorded] = await Promise.all([
+        internalAdapter.findUserById(userId),
+        issuedAt ? connections.recordUse(userId, authInfo.clientId, issuedAt) : false,
+      ]);
       if (!isAllowlisted(allowlist, user?.email))
         return refuse("This account is not on the allowlist.");
-
-      // Better Auth always sets `iat`; a token without one can't be checked, so it is refused.
-      if (typeof claims.iat !== "number") return revoked(resource);
-      const issuedAt = fromUnixTime(claims.iat);
-      if (!(await connections.recordUse(userId, authInfo.clientId, issuedAt))) {
-        return revoked(resource);
-      }
+      if (!recorded) return revoked(resource);
 
       request.auth = authInfo;
       return mcp(request);
