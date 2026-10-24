@@ -76,9 +76,12 @@ function Shortcuts() {
 }
 
 function SignIn() {
+  // No answer from the service worker: show the sign-in as it stands, with a problem to retry.
   const initial = use(loadingStatus);
-  const [signedIn, setSignedIn] = useState(initial.signedIn);
-  const [problem, setProblem] = useState<SignInProblem | null>(initial.signInProblem);
+  const [signedIn, setSignedIn] = useState(initial?.signedIn ?? false);
+  const [problem, setProblem] = useState<SignInProblem | null>(
+    initial ? initial.signInProblem : "failed",
+  );
   const [waiting, setWaiting] = useState(false);
 
   async function signIn() {
@@ -86,8 +89,8 @@ function SignIn() {
     setProblem(null);
     const result = await ask({ type: "signIn" });
     setWaiting(false);
-    setSignedIn(result.signedIn);
-    if (!result.signedIn) setProblem((await ask({ type: "status" })).signInProblem ?? "failed");
+    setSignedIn(result?.signedIn ?? false);
+    if (!result?.signedIn) setProblem((await ask({ type: "status" }))?.signInProblem ?? "failed");
   }
 
   if (signedIn) {

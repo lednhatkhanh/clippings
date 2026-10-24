@@ -14,13 +14,13 @@ const CLIPPING_ID = "5b0b3f3e-5b43-4a52-9e0e-0d0e6e0a6c11";
 const base64url = (input: Buffer | string) => Buffer.from(input).toString("base64url");
 
 /** What QStash attaches to a delivery: an HS256 JWT over the URL and a hash of the body. */
-function sign(body: string, key: string): string {
+function sign(body: string, key: string, destination = URL): string {
   const now = getUnixTime(constructNow(undefined));
   const header = base64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const claims = base64url(
     JSON.stringify({
       iss: "Upstash",
-      sub: URL,
+      sub: destination,
       exp: now + 300,
       nbf: now - 10,
       iat: now,
@@ -36,6 +36,7 @@ function setup() {
   const enriched: Array<{ id: string; lastAttempt: boolean | undefined }> = [];
   let failWith: Error | null = null;
   const deps = {
+    url: URL,
     receiver: new Receiver({ currentSigningKey: CURRENT_KEY, nextSigningKey: NEXT_KEY }),
     service: {
       enrichClipping: async (id: string, options?: { lastAttempt?: boolean }) => {
@@ -78,6 +79,17 @@ describe("handleEnrichRequest", () => {
 
     expect(wrongKey.status).toBe(401);
     expect(otherBody.status).toBe(401);
+    expect(enriched).toEqual([]);
+  });
+
+  it("rejects a signature QStash made for another endpoint", async () => {
+    const { deliver, enriched } = setup();
+
+    const response = await deliver(job, {
+      "Upstash-Signature": sign(job, CURRENT_KEY, "https://clippings.example/api/cron/other"),
+    });
+
+    expect(response.status).toBe(401);
     expect(enriched).toEqual([]);
   });
 

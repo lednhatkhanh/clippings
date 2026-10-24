@@ -15,6 +15,7 @@ import {
 import { accessToken, API_RESOURCE, CLIPPINGS_ORIGIN, forgetTokens } from "./auth.ts";
 import type { SaveResult, TagsReply } from "./messages.ts";
 import { storePalette } from "./palette.ts";
+import { NetworkError, request } from "./request.ts";
 
 const SIGNED_OUT = "signed_out";
 
@@ -29,7 +30,7 @@ async function call(
   body?: unknown,
 ): Promise<Response | "signed_out"> {
   const send = (token: string) =>
-    fetch(`${API_RESOURCE}${path}`, {
+    request(`${API_RESOURCE}${path}`, {
       method,
       credentials: "omit",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
@@ -67,7 +68,9 @@ export async function saveClipping(url: string, page?: ExtensionPage): Promise<S
     response = await call("/clippings", "POST", { url, page });
   } catch (error) {
     console.error("Couldn't reach Clippings", error);
-    return { ok: false, reason: navigator.onLine ? "failed" : "offline" };
+    // No answer at all, offline or not (the server may be down): the save waits and is retried.
+    if (!navigator.onLine) return { ok: false, reason: "offline" };
+    return { ok: false, reason: error instanceof NetworkError ? "unreachable" : "failed" };
   }
   if (response === SIGNED_OUT) return { ok: false, reason: "signed_out" };
   if (!response.ok) {
@@ -80,7 +83,15 @@ export async function saveClipping(url: string, page?: ExtensionPage): Promise<S
     return { ok: false, reason: error === "invalid_url" ? "invalid_url" : "failed" };
   }
 
-  const saved = extensionSaveResponseSchema.safeParse(await response.json());
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch (error) {
+    // A 200 that isn't JSON (a proxy's page), or a body cut off by the timeout.
+    console.error("Clippings answered with something unreadable", error);
+    return { ok: false, reason: "failed" };
+  }
+  const saved = extensionSaveResponseSchema.safeParse(body);
   // The popup links to the clipping: only ever to this Clippings.
   if (!saved.success || new URL(saved.data.clipping.link).origin !== CLIPPINGS_ORIGIN) {
     return { ok: false, reason: "failed" };

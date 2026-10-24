@@ -5,6 +5,7 @@ import { EXTENSION_API_PATH, formatIsoUtc, UNKNOWN_CLIENT } from "@clippings/sha
 
 import { clearLookups } from "./lookup-cache-storage.ts";
 import type { SignInProblem } from "./messages.ts";
+import { request } from "./request.ts";
 
 /** The Clippings web app: its authorization server and the extension API. */
 export const CLIPPINGS_ORIGIN = import.meta.env.CLIPPINGS_ORIGIN;
@@ -53,7 +54,7 @@ async function pkce() {
  * extension's own `chromiumapp.org` address, and whose tokens may be for the extension API.
  */
 async function registerClient(): Promise<string> {
-  const response = await fetch(`${AUTH_URL}/oauth2/register`, {
+  const response = await request(`${AUTH_URL}/oauth2/register`, {
     method: "POST",
     credentials: "omit",
     headers: { "content-type": "application/json" },
@@ -75,7 +76,7 @@ async function registerClient(): Promise<string> {
 
 /** Calls the token endpoint and keeps what it issues. Null when the grant was refused. */
 async function requestTokens(params: Record<string, string>): Promise<Tokens | null> {
-  const response = await fetch(`${AUTH_URL}/oauth2/token`, {
+  const response = await request(`${AUTH_URL}/oauth2/token`, {
     method: "POST",
     credentials: "omit",
     headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -244,7 +245,7 @@ export async function signOut() {
   const { clientId, tokens } = await readStored();
   await forgetTokens();
   if (!clientId || !tokens) return;
-  await fetch(`${AUTH_URL}/oauth2/revoke`, {
+  await request(`${AUTH_URL}/oauth2/revoke`, {
     method: "POST",
     credentials: "omit",
     headers: { "content-type": "application/x-www-form-urlencoded" },

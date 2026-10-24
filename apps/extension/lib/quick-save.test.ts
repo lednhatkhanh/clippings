@@ -319,6 +319,26 @@ describe("saving offline", () => {
   });
 });
 
+describe("saving while Clippings can't be reached", () => {
+  it("queues the save from the context menu and the popup, and sends it when the server answers", async () => {
+    vi.mocked(saveClipping).mockResolvedValue({ ok: false, reason: "unreachable" });
+
+    await quickSave({ url: PAGE }, { tabId: TAB, pageUrl: PAGE });
+    expect(await badgeOf(TAB)).toBe("…");
+    expect(await queuedSaves()).toHaveLength(1);
+    await saveFromPopup(`${PAGE}?other`);
+    expect(await queuedSaves()).toHaveLength(2);
+
+    // Still down: the run stops at the first, and the save is kept without counting a failure.
+    await sendOfflineSaves();
+    expect(await queuedSaves()).toMatchObject([{ failures: 0 }, { failures: 0 }]);
+
+    vi.mocked(saveClipping).mockResolvedValue(saved());
+    await sendOfflineSaves();
+    expect(await queuedSaves()).toEqual([]);
+  });
+});
+
 describe("the queue and the sign-in", () => {
   async function queueOne() {
     online = false;

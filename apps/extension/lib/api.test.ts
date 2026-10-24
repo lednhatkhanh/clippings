@@ -220,8 +220,37 @@ describe("saving a page", () => {
     });
   });
 
-  it("is failed when the request doesn't get through but the browser is online", async () => {
+  it("is unreachable, to be retried, when the request doesn't get through but the browser is online", async () => {
     serve(() => new TypeError("Failed to fetch"));
+
+    expect(await saveClipping("https://example.com/essay")).toEqual({
+      ok: false,
+      reason: "unreachable",
+    });
+  });
+
+  it("is unreachable when the request times out", async () => {
+    serve(() => new DOMException("The operation timed out.", "TimeoutError"));
+
+    expect(await saveClipping("https://example.com/essay")).toEqual({
+      ok: false,
+      reason: "unreachable",
+    });
+  });
+
+  it("is failed when a 200 isn't JSON", async () => {
+    serve(() => new Response("<html>Welcome to a captive portal</html>", { status: 200 }));
+
+    expect(await saveClipping("https://example.com/essay")).toEqual({
+      ok: false,
+      reason: "failed",
+    });
+  });
+
+  it("is failed, not unreachable, when the server answers something unexpected", async () => {
+    serve(() => {
+      throw new Error("not a network error");
+    });
 
     expect(await saveClipping("https://example.com/essay")).toEqual({
       ok: false,
@@ -239,7 +268,7 @@ describe("saving a page", () => {
     });
   });
 
-  it("is failed when the refresh can't reach the server, and stays signed in", async () => {
+  it("is unreachable when the refresh can't reach the server, and stays signed in", async () => {
     serve(
       () => json({ error: "invalid_token" }, 401),
       () => new TypeError("Failed to fetch"),
@@ -247,7 +276,7 @@ describe("saving a page", () => {
 
     expect(await saveClipping("https://example.com/essay")).toEqual({
       ok: false,
-      reason: "failed",
+      reason: "unreachable",
     });
     expect(await isSignedIn()).toBe(true);
   });

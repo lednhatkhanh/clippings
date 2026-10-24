@@ -249,6 +249,88 @@ describe.skipIf(!TEST_DATABASE_URL)("connections service", () => {
     expect(rows.map((row) => row.id)).toEqual(["ana-other", "bo-claude", "not-json"]);
   });
 
+  describe("purging unused clients", () => {
+    const DAY = 24 * 60 * 60;
+
+    async function registerAt(clientId: string, daysAgo: number | null) {
+      await fixture.pool.query(
+        `insert into "oauthClient" (id, "clientId", "redirectUris", "createdAt")
+         values ($1, $2, '{}', $3)`,
+        [randomUUID(), clientId, daysAgo === null ? null : subSeconds(now(), daysAgo * DAY)],
+      );
+      return clientId;
+    }
+
+    const remaining = async () =>
+      (
+        await fixture.pool.query<{ clientId: string }>(
+          `select "clientId" from "oauthClient" order by "clientId"`,
+        )
+      ).rows.map((row) => row.clientId);
+
+    it("removes only clients older than 30 days that hold no consent, token or code", async () => {
+      const ana = await fixture.createUser("ana");
+      await registerAt("abandoned", 31);
+      await registerAt("recent", 29);
+      await registerAt("undated", null);
+      const consented = await registerAt("consented", 90);
+      const refreshed = await registerAt("refreshed", 90);
+      const waiting = await registerAt("waiting-on-code", 90);
+      await fixture.pool.query(
+        `insert into "oauthConsent" (id, "clientId", "userId", scopes, "createdAt", "updatedAt")
+         values ($1, $2, $3, '{mcp}', now(), now())`,
+        [randomUUID(), consented, ana],
+      );
+      await fixture.pool.query(
+        `insert into "oauthRefreshToken" (id, token, "clientId", "userId", "expiresAt", "createdAt", scopes)
+         values ($1, $2, $3, $4, now(), now(), '{mcp}')`,
+        [randomUUID(), randomUUID(), refreshed, ana],
+      );
+      await fixture.pool.query(
+        `insert into verification (id, identifier, value, "expiresAt")
+         values ('code', 'code', $1, now() + interval '10 minutes'), ('plain', 'plain', 'a plain value', now())`,
+        [
+          JSON.stringify({
+            type: "authorization_code",
+            userId: ana,
+            query: { client_id: waiting },
+          }),
+        ],
+      );
+
+      expect(await fixture.connections.purgeUnusedClients()).toBe(1);
+
+      expect(await remaining()).toEqual([
+        "consented",
+        "recent",
+        "refreshed",
+        "undated",
+        "waiting-on-code",
+      ]);
+    });
+
+    it("keeps a client that only has a connection record, which may hold a revocation", async () => {
+      const ana = await fixture.createUser("ana");
+      await registerAt("revoked-long-ago", 90);
+      await fixture.pool.query(
+        `insert into oauth_connections (user_id, client_id, revoked_at) values ($1, $2, $3)`,
+        [ana, "revoked-long-ago", subSeconds(now(), 60 * DAY)],
+      );
+
+      expect(await fixture.connections.purgeUnusedClients()).toBe(0);
+      expect(await remaining()).toEqual(["revoked-long-ago"]);
+    });
+
+    it("counts the 30 days from the injected clock", async () => {
+      await registerAt("later", 20);
+
+      expect(await fixture.connections.purgeUnusedClients()).toBe(0);
+      fixture.advanceClock(11 * DAY * 1000);
+      expect(await fixture.connections.purgeUnusedClients()).toBe(1);
+      expect(await remaining()).toEqual([]);
+    });
+  });
+
   it("refuses a token whose client was deleted, rather than failing", async () => {
     const ana = await fixture.createUser("ana");
 

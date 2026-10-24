@@ -13,7 +13,8 @@ export interface JobPublisher {
   requestEnrichment: (clippingId: string, options?: { timeoutMs?: number }) => Promise<void>;
   /**
    * Starts enrichment of many clippings at once, each delayed so the jobs arrive spread evenly
-   * over `spreadOverSeconds` instead of all together. For the import backlog.
+   * over `spreadOverSeconds` instead of all together (0: all at once). For the import backlog and
+   * the stuck sweep.
    */
   requestEnrichments: (
     clippingIds: readonly string[],

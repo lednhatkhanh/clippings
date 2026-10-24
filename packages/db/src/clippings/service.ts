@@ -290,11 +290,16 @@ const live = isNull(clippings.deletedAt);
 /** A clipping starting over has no link verdict yet: the last one was about another life of the row. */
 const noLinkVerdict = { linkCheckedAt: null, linkFailures: 0, linkDeadSince: null };
 
-/** The columns every status change writes together. */
+/**
+ * The columns every status change writes together. Failing keeps the sweep's restart count, so
+ * the cap holds across fail-and-restart rounds; pending or ready by any other route starts it
+ * over.
+ */
 const statusChange = (status: ClippingRow["status"], at: Date) => ({
   status,
   statusChangedAt: at,
   updatedAt: at,
+  ...(status === "failed" ? {} : { sweepAttempts: 0 }),
 });
 
 const toClipping = (row: ClippingRow, tagList: Tag[] = []): Clipping => ({
@@ -462,6 +467,12 @@ const documentText = ({
 /** How long a clipping can sit pending or failed before the sweep requests it again. */
 const STUCK_AFTER_HOURS = 1;
 const SWEEP_BATCH_SIZE = 100;
+/**
+ * How many times the sweep starts a failed clipping over before it leaves it failed: a page that
+ * is gone or refuses us would otherwise cost a read and a model call every day, forever. The
+ * user's Retry still works, and starts the count again.
+ */
+const MAX_SWEEP_RESTARTS = 3;
 /**
  * How long a deleted clipping is kept before the purge removes it for good: far past the Undo
  * toast's 8 seconds, so a purge never races an Undo.
@@ -2014,7 +2025,11 @@ export function createClippingsService({
    * For the daily cron: requests enrichment again for clippings that have been pending or failed
    * for more than an hour, starting failed ones over. Returns the ids it requested. A batch is
    * capped, so a backlog drains over several days instead of one long run. Imports waiting their
-   * turn are pending on purpose: `drainImports` takes those.
+   * turn are pending on purpose: `drainImports` takes those. A failed clipping is started over at
+   * most `MAX_SWEEP_RESTARTS` times; after that it stays failed until the user retries it.
+   *
+   * The jobs go out as one batch. If the queue can't be reached the clippings stay pending, and
+   * the next daily sweep takes them again.
    */
   async function sweepStuck(): Promise<string[]> {
     const now = clock.now();
@@ -2027,20 +2042,34 @@ export function createClippingsService({
           inArray(clippings.status, ["pending", "failed"]),
           lt(clippings.statusChangedAt, stuckBefore),
           or(ne(clippings.source, "import"), ne(clippings.status, "pending")),
+          or(eq(clippings.status, "pending"), lt(clippings.sweepAttempts, MAX_SWEEP_RESTARTS)),
           live,
         ),
       )
       .limit(SWEEP_BATCH_SIZE);
     const restarted = await db
       .update(clippings)
-      .set(statusChange("pending", now))
-      .where(inArray(clippings.id, stuck))
+      .set({
+        ...statusChange("pending", now),
+        // Only a failed clipping being started over counts toward the cap.
+        sweepAttempts: sql`case when ${clippings.status} = 'failed' then ${clippings.sweepAttempts} + 1 else ${clippings.sweepAttempts} end`,
+      })
+      .where(
+        and(
+          inArray(clippings.id, stuck),
+          // Read again at the update: a clipping that became ready since the select stays so.
+          inArray(clippings.status, ["pending", "failed"]),
+        ),
+      )
       .returning({ id: clippings.id });
 
     const ids = restarted.map((row) => row.id);
-    const results = await Promise.allSettled(ids.map((id) => jobs.requestEnrichment(id)));
-    for (const result of results) {
-      if (result.status === "rejected") console.error("Couldn't request enrichment", result.reason);
+    if (ids.length > 0) {
+      try {
+        await jobs.requestEnrichments(ids, { spreadOverSeconds: 0 });
+      } catch (error) {
+        console.error("Couldn't request enrichment", error);
+      }
     }
     return ids;
   }
@@ -2257,6 +2286,7 @@ export function createClippingsService({
                 createdAt: sql`excluded.created_at`,
                 status: "pending",
                 statusChangedAt: now,
+                sweepAttempts: 0,
                 importRequestedAt: null,
                 ...noLinkVerdict,
                 updatedAt: now,
