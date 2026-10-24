@@ -1,3 +1,4 @@
+import { isAfter, isBefore, subSeconds } from "date-fns";
 import { and, asc, desc, eq, gt, isNull, lt, max, or, sql } from "drizzle-orm";
 import { unionAll } from "drizzle-orm/pg-core";
 import type pg from "pg";
@@ -12,6 +13,9 @@ import {
   oauthRefreshToken,
   verification,
 } from "../schema.ts";
+
+/** How long a stored last use stands before the next call writes a new one. */
+const LAST_USED_REFRESH_SECONDS = 60;
 
 export interface ConnectionsServiceDeps {
   pool: pg.Pool;
@@ -176,9 +180,24 @@ export function createConnectionsService({ pool, clock }: ConnectionsServiceDeps
    * refused. `issuedAt` is the token's `iat`, in whole seconds, so a token issued in the second
    * of a revocation is refused too. Also false when the client or user no longer exists: the
    * token outlived them.
+   *
+   * A client calls many times a minute and the last use is shown to the minute, so a use within
+   * `LAST_USED_REFRESH_SECONDS` of the stored one is not written again. The revocation check is
+   * the same either way, and a revocation clears the stored use, so it is never skipped.
    */
   async function recordUse(userId: string, clientId: string, issuedAt: Date): Promise<boolean> {
     const lastUsedAt = clock.now();
+    const [stored] = await db
+      .select({ revokedAt: oauthConnections.revokedAt, lastUsedAt: oauthConnections.lastUsedAt })
+      .from(oauthConnections)
+      .where(and(eq(oauthConnections.userId, userId), eq(oauthConnections.clientId, clientId)));
+    if (
+      stored?.lastUsedAt &&
+      isAfter(stored.lastUsedAt, subSeconds(lastUsedAt, LAST_USED_REFRESH_SECONDS)) &&
+      (!stored.revokedAt || isBefore(stored.revokedAt, issuedAt))
+    ) {
+      return true;
+    }
     try {
       const recorded = await db
         .insert(oauthConnections)

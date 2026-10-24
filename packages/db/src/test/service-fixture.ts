@@ -97,12 +97,22 @@ export async function createServiceFixture() {
   /** Word → the meaning it carries. Words that share a meaning embed close together. */
   const meanings = new Map<string, string>();
   const embedded: { text: string; purpose: EmbeddingPurpose }[] = [];
+  /** The size of each `embedMany` call, in order. */
+  const embeddedBatches: number[] = [];
   let embedding: "up" | "down" = "up";
   const embedder: Embedder = {
     embed: async (text, purpose) => {
       if (embedding === "down") throw new Error("the embedder is unreachable");
       embedded.push({ text, purpose });
       return fakeEmbedding(text, meanings, embedded.length);
+    },
+    embedMany: async (texts, purpose) => {
+      if (embedding === "down") throw new Error("the embedder is unreachable");
+      embeddedBatches.push(texts.length);
+      return texts.map((text) => {
+        embedded.push({ text, purpose });
+        return fakeEmbedding(text, meanings, embedded.length);
+      });
     },
   };
 
@@ -178,6 +188,8 @@ export async function createServiceFixture() {
     meanings,
     /** Every text the embedder was asked for, in order. */
     embedded,
+    /** How many texts each batched embedding call carried, in order. */
+    embeddedBatches,
     /** Makes the embedder throw (or work again), the way an unreachable provider does. */
     setEmbedding: (state: "up" | "down") => {
       embedding = state;

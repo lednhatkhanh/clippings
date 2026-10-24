@@ -279,6 +279,60 @@ describe.skipIf(!TEST_DATABASE_URL)("the weekly digest", () => {
     ]);
   });
 
+  it("offers at most three older clippings, those close to the newest of the week first", async () => {
+    const ana = await fixture.createUser("ana");
+    fixture.meanings.set("garden", "plants");
+    fixture.meanings.set("bread", "baking");
+    await save(ana, "garden-old", "2026-07-01T10:00:00.000Z", { text: "garden" });
+    const newGarden = await save(ana, "garden-new", "2026-07-02T10:00:00.000Z", { text: "garden" });
+    const oldBread = await save(ana, "bread-old", "2026-07-03T10:00:00.000Z", { text: "bread" });
+    const newBread = await save(ana, "bread-new", "2026-07-04T10:00:00.000Z", { text: "bread" });
+    await save(ana, "week-garden", IN_WEEK, { text: "garden" });
+    await save(ana, "week-bread", "2026-09-24T10:00:00.000Z", { text: "bread" });
+
+    await generate();
+
+    // The week reads newest first: its bread comes first, then its garden for the one left.
+    expect(fixture.digested[0]!.related.map(({ id }) => id)).toEqual([
+      newBread,
+      oldBread,
+      newGarden,
+    ]);
+  });
+
+  it("asks for the related clippings of the week's newest ten, three lookups at a time", async () => {
+    const ana = await fixture.createUser("ana");
+    for (let n = 0; n < 12; n++) {
+      await save(ana, `week-${n}`, `2026-09-23T10:${String(n).padStart(2, "0")}:00.000Z`);
+    }
+    let running = 0;
+    let most = 0;
+    let asked = 0;
+    const digests = createDigestService({
+      pool: fixture.pool,
+      clock: fixture.clock,
+      digester: { digest: async () => ({ groups: [], resurfaced: [] }) },
+      clippings: {
+        relatedClippings: async () => {
+          asked += 1;
+          running += 1;
+          most = Math.max(most, running);
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          running -= 1;
+          return [];
+        },
+      },
+    });
+
+    await digests.generateWeeklyDigests({
+      limit: 10,
+      deadline: addMinutes(fixture.clock.now(), 10),
+    });
+
+    expect(asked).toBe(10);
+    expect(most).toBe(3);
+  });
+
   it("shows clippings under their current titles and leaves deleted ones out", async () => {
     const ana = await fixture.createUser("ana");
     const renamed = await save(ana, "renamed", IN_WEEK);

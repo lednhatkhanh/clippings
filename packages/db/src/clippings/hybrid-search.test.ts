@@ -167,6 +167,68 @@ describe.skipIf(!TEST_DATABASE_URL)("searching clippings by meaning", () => {
       { text: "bread", purpose: "query" },
     ]);
   });
+
+  it("searches a query too short to mean anything by words alone, without embedding it", async () => {
+    const ana = await fixture.createUser("ana");
+    await clip(ana, { url: "https://example.com/a", title: "Sedan reviews" });
+    const embeddedBefore = fixture.embedded.length;
+
+    const { items } = await fixture.service.searchClippings(ana, { q: "sed", typeahead: true });
+
+    expect(titles(items)).toEqual(["Sedan reviews"]);
+    expect(fixture.embedded).toHaveLength(embeddedBefore);
+  });
+
+  it("embeds a short query unless it is being typed, as MCP and Ask search", async () => {
+    const ana = await fixture.createUser("ana");
+    await clip(ana, { url: "https://example.com/a", title: "Machine learning primer" });
+    const embeddedBefore = fixture.embedded.length;
+
+    await fixture.service.searchClippings(ana, { q: "AI" });
+
+    expect(fixture.embedded.slice(embeddedBefore)).toEqual([{ text: "AI", purpose: "query" }]);
+  });
+
+  it("stops a cancelled search before it embeds the query or reads the database", async () => {
+    const ana = await fixture.createUser("ana");
+    await clip(ana, { url: "https://example.com/a", title: "Sedan reviews" });
+    const embeddedBefore = fixture.embedded.length;
+
+    await expect(
+      fixture.service.searchClippings(ana, { q: "sedan", signal: AbortSignal.abort() }),
+    ).rejects.toThrow();
+
+    expect(fixture.embedded).toHaveLength(embeddedBefore);
+  });
+
+  it("embeds the missing clippings in one call, not one each", async () => {
+    const ana = await fixture.createUser("ana");
+    fixture.setEmbedding("down");
+    await clip(ana, { url: "https://example.com/a", title: "Rye loaf" });
+    await clip(ana, { url: "https://example.com/b", title: "Sedan reviews" });
+    await clip(ana, { url: "https://example.com/c", title: "Sourdough" });
+    fixture.setEmbedding("up");
+
+    const embedded = await fixture.service.embedMissing();
+
+    expect(embedded).toBe(3);
+    expect(fixture.embeddedBatches).toEqual([3]);
+    const { items } = await fixture.service.searchClippings(ana, { q: "automobile" });
+    expect(titles(items)).toEqual(["Sedan reviews"]);
+  });
+
+  it("embeds nothing when the batch fails, and the clippings stay for tomorrow", async () => {
+    const ana = await fixture.createUser("ana");
+    fixture.setEmbedding("down");
+    await clip(ana, { url: "https://example.com/a", title: "Rye loaf" });
+
+    const failed = await fixture.service.embedMissing();
+    fixture.setEmbedding("up");
+    const retried = await fixture.service.embedMissing();
+
+    expect(failed).toBe(0);
+    expect(retried).toBe(1);
+  });
 });
 
 describe.skipIf(!TEST_DATABASE_URL)("related clippings", () => {

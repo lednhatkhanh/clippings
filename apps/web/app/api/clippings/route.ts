@@ -12,5 +12,11 @@ export async function GET(request: Request) {
   if (!session) return new Response("Not signed in", { status: 401 });
 
   const params = loadBrowseParams(request);
-  return Response.json(await loadRows(session.user.id, params));
+  try {
+    return Response.json(await loadRows(session.user.id, params, undefined, request.signal));
+  } catch (error) {
+    // The reader typed past this search and the client cancelled it: nobody is waiting.
+    if (request.signal.aborted) return new Response(null, { status: 499 });
+    throw error;
+  }
 }

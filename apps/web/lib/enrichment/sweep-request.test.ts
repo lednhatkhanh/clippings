@@ -77,6 +77,40 @@ describe("handleSweepRequest", () => {
     expect(linkLimits()).toEqual([40]);
   });
 
+  it("runs the cheap jobs before the embedding backfill, so a slow provider can't starve them", async () => {
+    const order: string[] = [];
+    const step =
+      <T>(name: string, value: T) =>
+      async () => {
+        order.push(name);
+        return value;
+      };
+    const response = await handleSweepRequest(
+      new Request("https://clippings.example/api/cron/sweep", {
+        headers: { authorization: "Bearer cron-secret" },
+      }),
+      {
+        secret: "cron-secret",
+        service: {
+          sweepStuck: step("sweepStuck", []),
+          drainImports: step("drainImports", []),
+          purgeDeleted: step("purgeDeleted", 0),
+          embedMissing: step("embedMissing", 0),
+          checkLinks: step("checkLinks", { checked: 0, dead: 0 }),
+        },
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(order).toEqual([
+      "sweepStuck",
+      "drainImports",
+      "purgeDeleted",
+      "embedMissing",
+      "checkLinks",
+    ]);
+  });
+
   it("still purges when the import drain fails, and says so", async () => {
     const { call, purges, embeds, drains } = setup("cron-secret", { drainFails: true });
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});

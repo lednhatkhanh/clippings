@@ -1,0 +1,27 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "7275850e-ed1b-4fee-850f-d62febefb5cb",
+  "prevIds": ["b39d6ab9-2c42-4fde-968b-af2efc66bb1a"],
+  "footprints": [
+    {
+      "statementType": "drop_index",
+      "statementTarget": ["index", "public", "clippings", "clippings_title_trgm_idx"],
+      "writes": [
+        "s|idx|public.clippings_title_trgm_idx",
+        "n|idx|public.clippings_title_trgm_idx",
+        "e|idx|public.clippings_title_trgm_idx",
+        "n|rel|public.clippings_title_trgm_idx"
+      ],
+      "reads": ["e|tbl|public.clippings", "n|sch|public", "e|col|public.clippings.title"],
+      "sharedWrites": []
+    }
+  ],
+  "deltas": [
+    {
+      "op": "drop",
+      "key": "indexes\u0000[\"public\",\"clippings_title_trgm_idx\"]"
+    }
+  ]
+}

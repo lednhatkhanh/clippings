@@ -83,7 +83,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
             checkLink: unavailable("Checking a link"),
           },
           summarizer: { summarize: unavailable("Summarizing") },
-          embedder: { embed: unavailable("Embedding") },
+          embedder: { embed: unavailable("Embedding"), embedMany: unavailable("Embedding") },
         }),
       );
     },

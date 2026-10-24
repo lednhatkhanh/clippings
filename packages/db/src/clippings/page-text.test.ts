@@ -142,6 +142,20 @@ describe.skipIf(!TEST_DATABASE_URL)("the saved page text", () => {
     expect(await fixture.service.getClippingTexts(ana, [])).toEqual(new Map());
   });
 
+  it("cuts each text to maxChars in the database, and leaves a shorter one whole", async () => {
+    const ana = await fixture.createUser("ana");
+    setPage("0123456789");
+    const long = await saveAndRead(ana);
+    const short = await saveAndReadAt(ana, "https://example.com/short", "abc");
+
+    const cut = await fixture.service.getClippingTexts(ana, [long, short], { maxChars: 4 });
+    const whole = await fixture.service.getClippingTexts(ana, [long, short]);
+
+    expect(cut.get(long)?.text).toBe("0123");
+    expect(cut.get(short)?.text).toBe("abc");
+    expect(whole.get(long)?.text).toBe("0123456789");
+  });
+
   it("keeps users apart when reading several texts at once", async () => {
     const ana = await fixture.createUser("ana");
     const ben = await fixture.createUser("ben");

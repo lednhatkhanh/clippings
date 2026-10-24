@@ -11,6 +11,7 @@ import {
   renameTagAction,
   setTagColorAction,
 } from "@/app/(app)/tags/actions.ts";
+import { refreshTags } from "@/components/clippings/use-tags.ts";
 import { hrefWithTag, loadBrowseParams } from "@/lib/clippings/browse-params.ts";
 import { MAX_TAG_LENGTH, TAG_COLORS, type TagColor, type TagSummary } from "@clippings/shared";
 import {
@@ -69,8 +70,10 @@ function RenameForm({ tag, onDone }: { tag: TagSummary; onDone: () => void }) {
     startTransition(async () => {
       const outcome = await renameTagAction(tag.id, name);
       if (outcome?.status === "invalid") setError(outcome.message);
-      else if (outcome) onDone();
-      else setError("Couldn't rename the tag. Try again.");
+      else if (outcome) {
+        refreshTags();
+        onDone();
+      } else setError("Couldn't rename the tag. Try again.");
     });
   }
 
@@ -119,8 +122,10 @@ function ConfirmForm({
 }) {
   async function confirm() {
     // A thrown action (a lost session, an unreachable database) gets the same toast as a refusal.
-    if (await action().catch(() => false)) onDone();
-    else toasts.show({ message: failure });
+    if (await action().catch(() => false)) {
+      refreshTags();
+      onDone();
+    } else toasts.show({ message: failure });
   }
 
   return (
@@ -200,9 +205,8 @@ function TagRow({ tag, others }: { tag: TagSummary; others: readonly TagSummary[
 
   async function setColor(color: TagColor) {
     if (color === tag.color) return;
-    if (!(await setTagColorAction(tag.id, color).catch(() => false))) {
-      toasts.show({ message: "Couldn't change the tag's color. Try again." });
-    }
+    if (await setTagColorAction(tag.id, color).catch(() => false)) refreshTags();
+    else toasts.show({ message: "Couldn't change the tag's color. Try again." });
   }
 
   return (
