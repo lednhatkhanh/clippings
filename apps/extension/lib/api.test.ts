@@ -238,14 +238,6 @@ describe("saving a page", () => {
     });
   });
 
-  it("gives every request a timeout", async () => {
-    serve(() => json({ status: "created", clipping: clipping() }, 201));
-
-    await saveClipping("https://example.com/essay");
-
-    expect(vi.mocked(fetch).mock.lastCall?.[1]?.signal).toBeInstanceOf(AbortSignal);
-  });
-
   it("is failed when a 200 isn't JSON", async () => {
     serve(() => new Response("<html>Welcome to a captive portal</html>", { status: 200 }));
 

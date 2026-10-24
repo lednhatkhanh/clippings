@@ -12,15 +12,10 @@ import {
   type Tag,
 } from "@clippings/shared";
 
-import {
-  accessToken,
-  API_RESOURCE,
-  CLIPPINGS_ORIGIN,
-  forgetTokens,
-  timeoutSignal,
-} from "./auth.ts";
+import { accessToken, API_RESOURCE, CLIPPINGS_ORIGIN, forgetTokens } from "./auth.ts";
 import type { SaveResult, TagsReply } from "./messages.ts";
 import { storePalette } from "./palette.ts";
+import { NetworkError, request } from "./request.ts";
 
 const SIGNED_OUT = "signed_out";
 
@@ -35,10 +30,9 @@ async function call(
   body?: unknown,
 ): Promise<Response | "signed_out"> {
   const send = (token: string) =>
-    fetch(`${API_RESOURCE}${path}`, {
+    request(`${API_RESOURCE}${path}`, {
       method,
       credentials: "omit",
-      signal: timeoutSignal(),
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify(body),
     });
@@ -51,14 +45,6 @@ async function call(
   const retried = await accessToken({ stale: true });
   if (!retried) return SIGNED_OUT;
   return send(retried);
-}
-
-/**
- * Whether a request failed without an answer: `fetch` rejects with a TypeError when the network
- * or the server can't be reached, and with a TimeoutError when `timeoutSignal` runs out.
- */
-function isNetworkError(error: unknown): boolean {
-  return error instanceof TypeError || (error instanceof Error && error.name === "TimeoutError");
 }
 
 /** The API's reason for refusing a request, from its error body. */
@@ -84,7 +70,7 @@ export async function saveClipping(url: string, page?: ExtensionPage): Promise<S
     console.error("Couldn't reach Clippings", error);
     // No answer at all, offline or not (the server may be down): the save waits and is retried.
     if (!navigator.onLine) return { ok: false, reason: "offline" };
-    return { ok: false, reason: isNetworkError(error) ? "unreachable" : "failed" };
+    return { ok: false, reason: error instanceof NetworkError ? "unreachable" : "failed" };
   }
   if (response === SIGNED_OUT) return { ok: false, reason: "signed_out" };
   if (!response.ok) {
