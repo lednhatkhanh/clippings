@@ -9,6 +9,8 @@ import type { ClippingsService } from "@clippings/db";
 export const ENRICHMENT_RETRIES = 3;
 
 export interface EnrichRequestDeps {
+  /** This route's absolute URL, the destination QStash signed. */
+  url: string;
   receiver: Pick<Receiver, "verify">;
   service: Pick<ClippingsService, "enrichClipping">;
 }
@@ -27,17 +29,18 @@ function clippingIdOf(body: string): string | null {
 
 /**
  * A QStash delivery of an enrichment job. The signature is the only credential, so nothing runs
- * before it checks out. Any non-2xx answer makes QStash retry with backoff.
+ * before it checks out, and the signature must be for this route's URL, so a signed message QStash
+ * delivered to another endpoint can't be replayed here. Any non-2xx answer makes QStash retry with backoff.
  */
 export async function handleEnrichRequest(
   request: Request,
-  { receiver, service }: EnrichRequestDeps,
+  { url, receiver, service }: EnrichRequestDeps,
 ): Promise<Response> {
   const signature = request.headers.get("Upstash-Signature");
   const body = await request.text();
   if (!signature) return new Response("Missing signature", { status: 401 });
   try {
-    if (!(await receiver.verify({ signature, body }))) throw new Error("Bad signature");
+    if (!(await receiver.verify({ signature, body, url }))) throw new Error("Bad signature");
   } catch {
     return new Response("Invalid signature", { status: 401 });
   }
