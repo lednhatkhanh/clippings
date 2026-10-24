@@ -11,7 +11,14 @@ import {
 } from "@clippings/db";
 import { createTestSession, sessionCookieName } from "@clippings/db/testing";
 
-import { AUTH_SECRET, BASE_URL, E2E_DATABASE_URL } from "./env.ts";
+import {
+  AUTH_SECRET,
+  BASE_URL,
+  E2E_DATABASE_URL,
+  MAX_WORKERS,
+  USERS_PER_TEST,
+  e2eUserEmail,
+} from "./env.ts";
 
 /** A user the suite created, and the session cookie that signs them in. */
 export interface E2EUser {
@@ -24,8 +31,9 @@ interface TestFixtures {
   /** Whether the test's browser context starts signed in as `user`. Anonymous specs turn it off. */
   signedIn: boolean;
   /**
-   * A fresh `e2e-<random>` user for this test, signed in on its browser context unless the test
-   * is `signedIn: false`. Set up for every test, so a test needs it only to know who it is.
+   * A fresh user for this test, on an allowlisted address (`e2eUserEmail`), signed in on its
+   * browser context unless the test is `signedIn: false`. Set up for every test, so a test needs
+   * it only to know who it is.
    */
   user: E2EUser;
   /** Creates another fresh user, not signed in anywhere: for specs about two people. */
@@ -90,11 +98,20 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     { scope: "worker" },
   ],
 
-  createUser: async ({ database }, use) => {
+  createUser: async ({ database }, use, testInfo) => {
+    let created = 0;
     await use(async () => {
-      const slug = randomUUID().slice(0, 8);
-      const id = `e2e-${slug}`;
-      const email = `${id}@example.com`;
+      const worker = testInfo.parallelIndex;
+      if (worker >= MAX_WORKERS || created >= USERS_PER_TEST) {
+        throw new Error(
+          `Worker ${worker}'s user ${created} has no allowlisted address: raise MAX_WORKERS or USERS_PER_TEST in support/env.ts`,
+        );
+      }
+      const email = e2eUserEmail(worker, created++);
+      // The address's last holder (an earlier test on this worker, or an earlier run) goes, with
+      // its clippings, so the user starts from nothing.
+      await database.query(`delete from "user" where email = $1`, [email]);
+      const id = `e2e-${randomUUID().slice(0, 8)}`;
       const { cookieValue } = await createTestSession({
         db: database,
         secret: AUTH_SECRET,
