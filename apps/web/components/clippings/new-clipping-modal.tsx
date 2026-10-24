@@ -149,10 +149,9 @@ function SaveForm({ initial, onSaved }: { initial: Prefill; onSaved: () => void 
         name="tags"
         tags={tags}
         value={tagNames}
-        onChange={(names) => {
-          setTagNames(names);
-          clearInvalid();
-        }}
+        // Not `clearInvalid` here: the form's reset after a submit calls this too. Typing a tag is
+        // an input event, which clears it.
+        onChange={setTagNames}
         maxLength={MAX_TAG_LENGTH}
         errorMessage={invalid?.field === "tags" ? invalid.message : undefined}
       />
