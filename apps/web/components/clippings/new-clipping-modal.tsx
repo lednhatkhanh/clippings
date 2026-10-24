@@ -117,8 +117,12 @@ function SaveForm({ initial, onSaved }: { initial: Prefill; onSaved: () => void 
   }
 
   const invalid = outcome?.status === "invalid" ? outcome : null;
+  // A field marked invalid blocks the form's next submit, so an edit clears the server's verdict.
+  const clearInvalid = () => {
+    if (invalid) setOutcome(null);
+  };
   return (
-    <form action={save} className="flex flex-col gap-4">
+    <form action={save} onInput={clearInvalid} className="flex flex-col gap-4">
       <TextField
         name="url"
         label="Address"
@@ -145,7 +149,10 @@ function SaveForm({ initial, onSaved }: { initial: Prefill; onSaved: () => void 
         name="tags"
         tags={tags}
         value={tagNames}
-        onChange={setTagNames}
+        onChange={(names) => {
+          setTagNames(names);
+          clearInvalid();
+        }}
         maxLength={MAX_TAG_LENGTH}
         errorMessage={invalid?.field === "tags" ? invalid.message : undefined}
       />
