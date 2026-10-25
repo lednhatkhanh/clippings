@@ -49,6 +49,8 @@ const PALETTES: Record<PaletteName, string> = {
   ochre: "Ochre palette",
   terracotta: "Terracotta palette",
   ink: "Ink palette",
+  raspberry: "Raspberry palette",
+  graphite: "Graphite palette",
 };
 
 /**

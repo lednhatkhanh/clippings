@@ -29,9 +29,20 @@ const PALETTES: Record<PaletteName, { label: string; hint: string; swatch: strin
     hint: "Cool blue",
     swatch: "bg-linear-to-b from-palette-ink-top to-palette-ink text-on-palette-ink",
   },
+  raspberry: {
+    label: "Raspberry",
+    hint: "Bold pink",
+    swatch:
+      "bg-linear-to-b from-palette-raspberry-top to-palette-raspberry text-on-palette-raspberry",
+  },
+  graphite: {
+    label: "Graphite",
+    hint: "Black and white",
+    swatch: "bg-linear-to-b from-palette-graphite-top to-palette-graphite text-on-palette-graphite",
+  },
 };
 
-/** The accent: four paper cards, each with a swatch in its own colors. */
+/** The accent: a paper card per palette, each with a swatch in its own colors. */
 export function PalettePicker({
   value,
   onChange,
@@ -45,7 +56,7 @@ export function PalettePicker({
       value={value}
       onChange={(next) => onChange(next as PaletteName)}
     >
-      <div className="grid grid-cols-2 gap-2.5 medium:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 medium:grid-cols-3">
         {PALETTE_NAMES.map((palette) => (
           <Radio
             key={palette}

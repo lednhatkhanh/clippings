@@ -48,6 +48,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       suppressHydrationWarning
     >
       <head>
+        {/* oxlint-disable-next-line shadcn/no-inline-styles -- paints the ground before any stylesheet loads */}
         <style dangerouslySetInnerHTML={{ __html: FIRST_PAINT_STYLE }} />
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH_SCRIPT }} />
       </head>

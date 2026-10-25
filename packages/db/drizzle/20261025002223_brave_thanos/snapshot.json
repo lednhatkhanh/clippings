@@ -1,0 +1,30 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "4c34cd6e-7103-494c-ba7a-1be90c0eff55",
+  "prevIds": ["7275850e-ed1b-4fee-850f-d62febefb5cb", "35e9f5a8-6a06-4b87-90d9-e4137fed14f4"],
+  "footprints": [
+    {
+      "statementType": "alter_check",
+      "statementTarget": ["table", "public", "user_settings"],
+      "writes": ["s|ck|public.user_settings.user_settings_palette_check"],
+      "reads": [
+        "n|tbl|public.user_settings",
+        "n|sch|public",
+        "n|col|public.user_settings.palette",
+        "e|col|public.user_settings.palette"
+      ],
+      "sqlHash": "2f04d0ee5a10cfb5"
+    }
+  ],
+  "deltas": [
+    {
+      "op": "alter",
+      "key": "checks\u0000[\"public\",\"user_settings\",\"user_settings_palette_check\"]",
+      "set": {
+        "value": "\"palette\" in ('olive', 'ochre', 'terracotta', 'ink', 'raspberry', 'graphite')"
+      }
+    }
+  ]
+}
