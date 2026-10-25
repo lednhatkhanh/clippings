@@ -1,5 +1,12 @@
 /** The seed palettes the theme is generated from. */
-export const PALETTE_NAMES = ["olive", "ochre", "terracotta", "ink"] as const;
+export const PALETTE_NAMES = [
+  "olive",
+  "ochre",
+  "terracotta",
+  "ink",
+  "raspberry",
+  "graphite",
+] as const;
 export type PaletteName = (typeof PALETTE_NAMES)[number];
 
 export const DEFAULT_PALETTE: PaletteName = "olive";

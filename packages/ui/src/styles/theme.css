@@ -99,6 +99,14 @@
   --color-palette-ink-top: var(--palette-ink-accent-top);
   --color-on-palette-ink: var(--palette-ink-on-accent);
   --color-palette-ink-soft: var(--palette-ink-soft);
+  --color-palette-raspberry: var(--palette-raspberry-accent);
+  --color-palette-raspberry-top: var(--palette-raspberry-accent-top);
+  --color-on-palette-raspberry: var(--palette-raspberry-on-accent);
+  --color-palette-raspberry-soft: var(--palette-raspberry-soft);
+  --color-palette-graphite: var(--palette-graphite-accent);
+  --color-palette-graphite-top: var(--palette-graphite-accent-top);
+  --color-on-palette-graphite: var(--palette-graphite-on-accent);
+  --color-palette-graphite-soft: var(--palette-graphite-soft);
 
   --font-*: initial;
   --font-serif: var(--typeface-brand, "Fraunces"), Georgia, serif;

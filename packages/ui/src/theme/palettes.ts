@@ -24,6 +24,9 @@ export const PALETTES: Record<PaletteName, PaletteSeed> = {
   ochre: { seed: "#E2AE1C", fill: { light: 73, dark: 74 }, neutral: { hue: 92, chroma: 5 } },
   terracotta: { seed: "#BF5629", fill: { light: 48, dark: 70 }, neutral: { hue: 84, chroma: 5 } },
   ink: { seed: "#3E5E8A", fill: { light: 40, dark: 78 }, neutral: { hue: 90, chroma: 5 } },
+  raspberry: { seed: "#BD0F72", fill: { light: 41.8, dark: 72 }, neutral: { hue: 40, chroma: 4 } },
+  // Near-black on near-white, inverted in dark mode; a trace of chroma keeps it off pure grey.
+  graphite: { seed: "#2D2F33", fill: { light: 20, dark: 88 }, neutral: { hue: 90, chroma: 1.5 } },
 };
 
 /** Paper is the neutral at this share of its chroma, so cards read whiter than the ground. */

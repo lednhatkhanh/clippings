@@ -1,6 +1,8 @@
 import { Hct, argbFromHex } from "@material/material-color-utilities";
 import { describe, expect, it } from "vitest";
 
+import { PALETTE_NAMES } from "@clippings/shared";
+
 import { generateTheme, renderThemesCss, renderTokensJson } from "./generate.ts";
 
 // The color roles, spelled out here as the spec rather than read back from the generator.
@@ -116,7 +118,7 @@ const findRule = (rules: Rule[], selector: string, atRule: string | null = null)
   return rule!.declarations;
 };
 
-const PALETTES = ["olive", "ochre", "terracotta", "ink"] as const;
+const PALETTES = PALETTE_NAMES;
 const CONTRASTS = ["standard", "medium", "high"] as const;
 const MODES = ["light", "dark"] as const;
 
