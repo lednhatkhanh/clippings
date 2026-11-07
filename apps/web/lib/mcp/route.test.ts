@@ -410,6 +410,7 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
       "apply_suggestion",
       "create_folder",
       "delete_clipping",
+      "delete_tag",
       "dismiss_suggestion",
       "get_clipping",
       "get_page_text",

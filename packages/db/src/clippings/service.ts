@@ -938,19 +938,6 @@ export function createClippingsService({
   }
 
   /**
-   * Removes the tag from every clipping and from the user's tags; the clippings stay. Returns
-   * false when the user has no such tag.
-   */
-  async function deleteTag(userId: string, tagId: string): Promise<boolean> {
-    if (!UUID.test(tagId)) return false;
-    const deleted = await db
-      .delete(tags)
-      .where(and(eq(tags.id, tagId), eq(tags.userId, userId)))
-      .returning({ id: tags.id });
-    return deleted.length > 0;
-  }
-
-  /**
    * Gives the tag one of `TAG_COLORS`, by name. Returns the tag as it now stands, or null when
    * the user has no such tag. Throws on a name that isn't a tag color. A color set here is the
    * user's choice, so the librarian leaves it alone.
@@ -2808,7 +2795,6 @@ export function createClippingsService({
     findTagByName,
     renameTag,
     mergeTag,
-    deleteTag,
     setTagColor,
     listClippings,
     listSavedClippings,

@@ -5,6 +5,7 @@ import { useState, useTransition, type FormEvent } from "react";
 import { Button as AriaButton, Link } from "react-aria-components";
 import { useFormStatus } from "react-dom";
 
+import { undoChangeAction } from "@/app/(app)/settings/library/actions.ts";
 import {
   deleteTagAction,
   mergeTagAction,
@@ -14,7 +15,14 @@ import {
 import { refreshTags } from "@/components/clippings/use-tags.ts";
 import { hrefWithTag, loadBrowseParams } from "@/lib/clippings/browse-params.ts";
 import type { TagPlacement } from "@clippings/db";
-import { MAX_TAG_LENGTH, TAG_COLORS, type TagColor, type TagSummary } from "@clippings/shared";
+import {
+  AUTOMATIC_TAG_COLOR,
+  MAX_TAG_LENGTH,
+  TAG_COLORS,
+  type TagColor,
+  type TagColorChoice,
+  type TagSummary,
+} from "@clippings/shared";
 import {
   Button,
   cn,
@@ -107,7 +115,7 @@ function RenameForm({ tag, onDone }: { tag: TagSummary; onDone: () => void }) {
   );
 }
 
-/** Asks before a change that can't be undone, then makes it. */
+/** Asks before a change, then makes it. */
 function ConfirmForm({
   children,
   action,
@@ -140,6 +148,26 @@ function ConfirmForm({
       </div>
     </form>
   );
+}
+
+/** Deletes the tag and offers to take it back: false when the server refused. */
+async function deleteTag(tag: TagSummary): Promise<boolean> {
+  const deleted = await deleteTagAction(tag.id);
+  if (!deleted) return false;
+  async function undo() {
+    const outcome = await undoChangeAction(deleted!.changeId).catch(() => null);
+    if (outcome?.status === "done") refreshTags();
+    else {
+      toasts.show({
+        message: outcome?.status === "refused" ? outcome.message : "Couldn't bring the tag back.",
+      });
+    }
+  }
+  toasts.show({
+    message: `Deleted “${tag.name}”.`,
+    action: { label: "Undo", onAction: () => void undo() },
+  });
+  return true;
 }
 
 function TagDialog({
@@ -181,14 +209,14 @@ function TagDialog({
         <Dialog role="alertdialog">
           <Heading>{`Delete “${tag.name}”?`}</Heading>
           <ConfirmForm
-            action={() => deleteTagAction(tag.id)}
+            action={() => deleteTag(tag)}
             confirmLabel="Delete"
             failure="Couldn't delete the tag. Try again."
             onDone={onDone}
           >
             {tag.clippingCount === 0
-              ? "No clippings carry it."
-              : `It comes off its ${clippings}. The clippings themselves stay.`}
+              ? "No clippings carry it. You can undo this in Library review, under Settings."
+              : `It comes off its ${clippings}. The clippings themselves stay. You can undo this in Library review, under Settings.`}
           </ConfirmForm>
         </Dialog>
       );
@@ -212,8 +240,14 @@ function TagRow({
     setIsOpen(true);
   }
 
-  async function setColor(color: TagColor) {
-    if (color === tag.color) return;
+  // A color of the user's own: the librarian leaves it alone until it is handed back.
+  const ownColor = placement?.colorOverridden ?? false;
+  // A tag the user left without a color has nothing to call theirs.
+  const showsOwnColor = ownColor && tag.color !== "none";
+  const folder = placement?.folder;
+
+  async function setColor(color: TagColorChoice) {
+    if (color === AUTOMATIC_TAG_COLOR ? !ownColor : ownColor && color === tag.color) return;
     if (await setTagColorAction(tag.id, color).catch(() => false)) refreshTags();
     else toasts.show({ message: "Couldn't change the tag's color. Try again." });
   }
@@ -233,11 +267,11 @@ function TagRow({
           <TagDot color={tag.color} />
           <span className="truncate">{tag.name}</span>
         </span>
-        {placement?.folder || placement?.colorOverridden ? (
+        {folder || showsOwnColor ? (
           <span className="min-w-0 truncate typescale-label-md text-ink-faint">
-            {placement.folder ? `In ${placement.folder.name}` : null}
-            {placement.folder && placement.colorOverridden ? " · " : null}
-            {placement.colorOverridden ? "Your color" : null}
+            {folder ? `In ${folder.name}` : null}
+            {folder && showsOwnColor ? " · " : null}
+            {showsOwnColor ? "Your color" : null}
           </span>
         ) : null}
         <span className="ms-auto typescale-body-md text-ink-faint tabular-nums">
@@ -267,9 +301,13 @@ function TagRow({
               aria-label="Color"
               selectionMode="single"
               disallowEmptySelection
-              selectedKeys={[tag.color]}
-              onAction={(key) => void setColor(key as TagColor)}
+              selectedKeys={[ownColor ? tag.color : AUTOMATIC_TAG_COLOR]}
+              onAction={(key) => void setColor(key as TagColorChoice)}
             >
+              <MenuItem id={AUTOMATIC_TAG_COLOR} isDisabled={!ownColor}>
+                Automatic
+              </MenuItem>
+              <MenuSeparator />
               {TAG_COLORS.map((color) => (
                 <MenuItem key={color} id={color} leading={<TagDot color={color} showNone />}>
                   {TAG_COLOR_LABELS[color]}

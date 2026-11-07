@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 
 import { requireUserId } from "@/lib/auth/session.ts";
-import { getClippings } from "@/lib/clippings/service.ts";
 import { getLibrarian } from "@/lib/librarian/service.ts";
 import {
   InvalidTagsError,
@@ -11,7 +10,7 @@ import {
   LibrarianNotFoundError,
   TagNameTakenError,
 } from "@clippings/db";
-import { isTagColor } from "@clippings/shared";
+import { isTagColorChoice } from "@clippings/shared";
 
 export type RenameOutcome = { status: "renamed" } | { status: "invalid"; message: string };
 
@@ -69,26 +68,43 @@ export async function mergeTagAction(sourceId: string, targetId: string): Promis
   return true;
 }
 
-/** Deletes one of the user's tags; its clippings stay. */
-export async function deleteTagAction(tagId: string): Promise<boolean> {
+/**
+ * Deletes one of the user's tags; its clippings stay. A logged change of the user's own, so it
+ * can be undone: the change's id comes back for that. Null when the tag isn't theirs.
+ */
+export async function deleteTagAction(tagId: string): Promise<{ changeId: string } | null> {
   const userId = await requireUserId();
-  if (typeof tagId !== "string") return false;
-  const deleted = await getClippings().deleteTag(userId, tagId);
-  if (deleted) revalidateTagged();
-  return deleted;
+  if (typeof tagId !== "string") return null;
+  try {
+    const deleted = await getLibrarian().proposeChange(userId, "user_via_mcp", {
+      action: "delete_tag",
+      tagId,
+      reason: "Deleted by you on the Tags page",
+    });
+    if (deleted.outcome !== "applied") return null;
+    revalidateTagged();
+    return { changeId: deleted.change.id };
+  } catch (error) {
+    if (error instanceof LibrarianInputError) return null;
+    throw error;
+  }
 }
 
 /**
  * Sets one of the user's tags to a color from `TAG_COLORS`, by name. The color is then the
- * user's own choice: the librarian leaves it alone. Logged, so it can be undone.
+ * user's own choice: the librarian leaves it alone. `AUTOMATIC_TAG_COLOR` gives the choice back:
+ * the tag takes its folder's color, or none, and the librarian may color it again. Logged, so it
+ * can be undone.
  */
 export async function setTagColorAction(tagId: string, color: string): Promise<boolean> {
   const userId = await requireUserId();
-  if (typeof tagId !== "string" || typeof color !== "string" || !isTagColor(color)) return false;
+  if (typeof tagId !== "string" || typeof color !== "string" || !isTagColorChoice(color)) {
+    return false;
+  }
 
   try {
-    // For the user's own change a skip only means the tag is already that color, and already
-    // the user's choice: nothing to change, and nothing wrong.
+    // For the user's own change a skip only means the tag is already that color (and already the
+    // user's choice, or already automatic): nothing to change, and nothing wrong.
     await getLibrarian().proposeChange(userId, "user_via_mcp", {
       action: "set_tag_color",
       tagId,

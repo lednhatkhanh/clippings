@@ -445,8 +445,8 @@ export function createLibrarianService({ pool, clock }: LibrarianServiceDeps) {
    * `ChangeNotFoundError` for a change that is not the user's, `ChangeNotUndoableError` for one
    * that was never applied or was undone already, and `ChangeConflictError`, changing nothing,
    * when a later applied change touched the same things (or the world has moved so that the old
-   * state can't come back, such as a name now taken). Undoing a merge recreates the tag, its
-   * color, folder and topic page, and puts it back on its clippings.
+   * state can't come back, such as a name now taken). Undoing a merge or a tag's deletion
+   * recreates the tag, its color, folder and topic page, and puts it back on its clippings.
    */
   async function undoChange(userId: string, changeId: string): Promise<LibraryChange> {
     if (!isUuid(changeId)) throw new ChangeNotFoundError();

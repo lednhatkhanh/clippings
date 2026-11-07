@@ -30,6 +30,7 @@ import {
   type ResearchService,
 } from "@clippings/db";
 import {
+  AUTOMATIC_TAG_COLOR,
   CLIPPING_KINDS,
   CLIPPING_SOURCES,
   CLIPPING_STATUSES,
@@ -758,6 +759,38 @@ export function registerClippingTools(
   );
 
   server.registerTool(
+    "delete_tag",
+    {
+      title: "Delete a tag",
+      description:
+        "Delete one of the user's tags: it comes off every clipping that carries it, and its topic page goes with it. The clippings themselves stay. Tags are found by name, ignoring case. The deletion is logged with everything needed to bring the tag back, so undo_change can reverse it (unless a later change touched the tag); still, only delete what the user asked you to. To keep the clippings tagged, merge_tag the tag into another instead.",
+      inputSchema: z.object({
+        tag: z.string().min(1).describe("The tag to delete, as list_tags shows it."),
+        reason: reasonSchema,
+        dryRun: dryRunSchema,
+      }),
+      outputSchema: proposalOutput,
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+    },
+    async ({ tag, reason, dryRun }, ctx) => {
+      const caller = callerFrom(ctx);
+      const found = await clippings.findTagByName(caller.userId, tag);
+      if (!found) return failure(unknownTag(tag));
+      try {
+        const outcome = await librarian.proposeChange(
+          caller.userId,
+          "user_via_mcp",
+          { action: "delete_tag", tagId: found.id, reason: reason?.trim() || USER_ASKED },
+          { dryRun },
+        );
+        return result(presentOutcome(outcome));
+      } catch (error) {
+        return librarianFailure(error) ?? rethrow(error);
+      }
+    },
+  );
+
+  server.registerTool(
     "delete_clipping",
     {
       title: "Delete a clipping",
@@ -827,6 +860,8 @@ const reasonSchema = z
   );
 
 const colorSchema = z.enum(TAG_COLORS);
+
+const colorChoiceSchema = z.enum([...TAG_COLORS, AUTOMATIC_TAG_COLOR]);
 
 /** The ids a change keeps for undo, as a count: a merge's list of clippings can be long. */
 const COUNTED_LISTS: Record<string, string> = {
@@ -927,11 +962,11 @@ function registerLibrarianTools(
     "set_tag_color",
     {
       title: "Set a tag's color",
-      description: `Give one of the user's tags a color. Tags are found by name, ignoring case. A color set here counts as the user's own choice: the librarian never changes it afterwards. "none" shows the tag without a color. The change is logged and undo_change can reverse it.`,
+      description: `Give one of the user's tags a color. Tags are found by name, ignoring case. A color set here counts as the user's own choice: the librarian never changes it afterwards. "none" is also the user's choice, of a tag without a color. "auto" gives the choice back: the tag takes the color of its folder (none outside a folder) and the librarian may color it again, so use it when the user wants the color to be automatic, never "none". The change is logged and undo_change can reverse it.`,
       inputSchema: z.object({
         tag: z.string().min(1).describe("The tag's name, as list_tags shows it."),
-        color: colorSchema.describe(
-          "A palette color name; the app renders each in the user's theme.",
+        color: colorChoiceSchema.describe(
+          `A palette color name (the app renders each in the user's theme), or "${AUTOMATIC_TAG_COLOR}" for the folder's color.`,
         ),
         reason: reasonSchema,
         dryRun: dryRunSchema,

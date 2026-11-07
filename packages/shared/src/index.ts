@@ -80,15 +80,18 @@ export {
   type TextSegment,
 } from "./search.ts";
 export {
+  AUTOMATIC_TAG_COLOR,
   MAX_TAG_LENGTH,
   MAX_TAGS_PER_CLIPPING,
   normalizeTagName,
   normalizeTagNames,
   isTagColor,
+  isTagColorChoice,
   TAG_COLORS,
   tagNameKey,
   type Tag,
   type TagColor,
+  type TagColorChoice,
   type TagSummary,
 } from "./tag.ts";
 export { extractSharedUrl, type SharedData, type SharedLink } from "./share.ts";
