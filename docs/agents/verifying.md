@@ -102,6 +102,16 @@ for going offline; a second build gets a new build id, so it triggers the update
   first call shows suggestions in `list_suggestions` (an idea already waiting, or dismissed, is not
   proposed again); to see high-confidence changes applied, save something new after the first run,
   or delete the user's `library_changes` rows to start again.
+- **Lessons**: a request for the forced `write_lesson` tool gets a short stand-in lesson on the
+  topic named in the message (`Topic: <name>.`, else "recent reading"): a Markdown body with
+  headings, a four-choice quiz, a recap when the message holds a `<previous_lesson>` (empty when
+  not) and the first two saved items it lists as sources. Run the Tuesday/Friday job by hand with
+  `curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3100/api/cron/lessons`: it
+  publishes a `{ userId, day }` job per user with a library to the fake QStash, which delivers it
+  to `/api/jobs/lessons` (the day is today's UTC day, and a lesson exists once per user per day, so
+  a second call that day answers `exists`; delete the user's `lessons` row to write it again). Set
+  the daily cap to `0.00` to see a lesson skipped as `cap_reached`; a note holding `[fake-error
+  overloaded]` in the topic's items makes the job fail and QStash retry it once.
 - **Voyage AI** embeds a text as its words (one hashed axis per word), so search by meaning finds
   texts that share a word even where keyword search wouldn't, such as a word in the summary.
   Real semantic quality stays with the user.

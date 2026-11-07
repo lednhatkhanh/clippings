@@ -5,10 +5,12 @@ import pg from "pg";
 
 import {
   createClippingsService,
+  createLessonsService,
   createLibrarianService,
   createPool,
   systemClock,
   type ClippingsService,
+  type LessonsService,
   type LibrarianService,
 } from "@clippings/db";
 import { createTestSession, sessionCookieName } from "@clippings/db/testing";
@@ -51,6 +53,8 @@ interface WorkerFixtures {
   clippings: ClippingsService;
   /** The librarian on the end-to-end database, to seed suggestions and applied changes. */
   librarian: LibrarianService;
+  /** The lessons on the end-to-end database, to seed written and skipped ones. */
+  lessons: LessonsService;
 }
 
 /**
@@ -106,6 +110,13 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   librarian: [
     async ({ database }, use) => {
       await use(createLibrarianService({ pool: database, clock: systemClock }));
+    },
+    { scope: "worker" },
+  ],
+
+  lessons: [
+    async ({ database }, use) => {
+      await use(createLessonsService({ pool: database, clock: systemClock }));
     },
     { scope: "worker" },
   ],

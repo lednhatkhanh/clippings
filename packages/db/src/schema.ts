@@ -33,8 +33,14 @@ import {
   ITEM_LINK_CREATORS,
   LIBRARY_CHANGE_ACTORS,
   LIBRARY_CHANGE_CONFIDENCES,
+  LESSON_SKIP_KINDS,
+  LESSON_SOURCES,
+  LESSON_STATUSES,
   LIBRARY_CHANGE_STATUSES,
   MAX_BRIEF_LENGTH,
+  MAX_LESSON_LENGTH,
+  MAX_LESSON_RECAP_LENGTH,
+  MAX_LESSON_TOPIC_LENGTH,
   MAX_FOLDER_NAME_LENGTH,
   MAX_LINK_REASON_LENGTH,
   MAX_TOPIC_PAGE_LENGTH,
@@ -1014,5 +1020,71 @@ export const researchSubmissions = pgTable(
     // "A user's submissions since the start of a UTC day".
     index("research_submissions_user_submitted_idx").on(table.userId, table.submittedAt),
     index("research_submissions_brief_idx").on(table.briefId),
+  ],
+);
+
+/**
+ * A lesson, written twice a week from the user's recent saves and the gaps in their topic pages:
+ * one per user per UTC day (`day`), so a cron that fires twice or a job delivered twice writes one.
+ * A job claims the day as `writing`; it ends `ready` or `skipped` with a reason for the Lessons
+ * page. AI content: a lesson is never a clipping, so it is never enriched, researched or taught
+ * from in turn. `source_ids` are the clippings and notes it drew on; not foreign keys, so deleting
+ * one leaves the lesson, and readers show only those still there.
+ */
+export const lessons = pgTable(
+  "lessons",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    day: date("day", { mode: "string" }).notNull(),
+    status: text("status", { enum: LESSON_STATUSES }).notNull(),
+    topic: text("topic").notNull().default(""),
+    // The tag the lesson was about, when it was about one: topic picking leaves recently taught
+    // tags alone. Not a foreign key, so a deleted or merged tag leaves the lesson.
+    tagId: uuid("tag_id"),
+    // Markdown; set when ready.
+    body: text("body"),
+    // `LessonQuiz`; set when ready.
+    quiz: jsonb("quiz"),
+    // Markdown recap of the previous lesson; empty when there was none.
+    recap: text("recap").notNull().default(""),
+    sourceIds: uuid("source_ids")
+      .array()
+      .notNull()
+      .default(sql`'{}'::uuid[]`),
+    // Set together when skipped, null otherwise.
+    skipKind: text("skip_kind", { enum: LESSON_SKIP_KINDS }),
+    skipReason: text("skip_reason"),
+    source: text("source", { enum: LESSON_SOURCES }).notNull().default("ai"),
+    // No default: the service stamps all of these from its clock.
+    createdAt: timestamptz("created_at").notNull(),
+    updatedAt: timestamptz("updated_at").notNull(),
+    // When a job took up a `writing` lesson; a redelivery finds it recent and stands down, or
+    // stale and takes over.
+    writerStartedAt: timestamptz("writer_started_at"),
+  },
+  (table) => [
+    // Also "this user's lessons, newest first", read backwards.
+    unique("lessons_user_id_day_key").on(table.userId, table.day),
+    check("lessons_status_check", sql`${table.status} in (${inList(LESSON_STATUSES)})`),
+    check(
+      "lessons_skip_kind_check",
+      sql`${table.skipKind} is null or ${table.skipKind} in (${inList(LESSON_SKIP_KINDS)})`,
+    ),
+    check("lessons_source_check", sql`${table.source} in (${inList(LESSON_SOURCES)})`),
+    check(
+      "lessons_body_check",
+      sql`char_length(${table.body}) <= ${sql.raw(String(MAX_LESSON_LENGTH))}`,
+    ),
+    check(
+      "lessons_recap_check",
+      sql`char_length(${table.recap}) <= ${sql.raw(String(MAX_LESSON_RECAP_LENGTH))}`,
+    ),
+    check(
+      "lessons_topic_check",
+      sql`char_length(${table.topic}) <= ${sql.raw(String(MAX_LESSON_TOPIC_LENGTH))}`,
+    ),
   ],
 );
