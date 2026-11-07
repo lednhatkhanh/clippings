@@ -56,14 +56,14 @@ export function TagSuggestions({
         </span>
       ))}
       {names.length > 1 ? (
-        <>
+        <span className="flex items-center gap-2">
           <Button variant="text" isDisabled={isDisabled} onPress={onAcceptAll}>
             Add all
           </Button>
           <Button variant="text" isDisabled={isDisabled} onPress={onDismissAll}>
             Dismiss all
           </Button>
-        </>
+        </span>
       ) : null}
     </div>
   );
