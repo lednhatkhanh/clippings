@@ -7,6 +7,7 @@ import {
   MAX_FOLDER_NAME_LENGTH,
   MAX_LINK_REASON_LENGTH,
   MAX_TAG_LENGTH,
+  MAX_TAGS_PER_CLIPPING,
   MAX_TOPIC_PAGE_LENGTH,
   normalizeTagName,
   tagNameKey,
@@ -62,9 +63,12 @@ const plainText = (text: string) => text.replace(/<[^>]*>/g, "").trim();
  *   them, so no change in the list depends on another one having happened first;
  * - a fold needs a tag used at most once and past its grace period;
  * - a rename needs a canonical name that is not near another tag's;
+ * - a tag is added to an item only if it exists, the item lacks it, no tag change in the list
+ *   touches it, and the item stays within its tag limit;
  * - a topic page is for a tag with enough items and none yet, and lists only items the tag has.
  *
- * The order is: tag merges, folds and renames, folders, moves, links, topic pages.
+ * The order is: tag merges, folds and renames, tags added to items, folders, moves, links,
+ * topic pages.
  */
 export function proposalsFromPlan(
   index: LibraryIndex,
@@ -170,6 +174,41 @@ export function proposalsFromPlan(
     const tag = index.tag(broad.tag);
     if (!tag) unknown += 1;
     else notices.push(`The tag "${tag.name}" may be too broad: ${reasonOf(broad.reason)}`);
+  }
+
+  // Tags added to items: existing tags only, each pair once. Tags a tag change touches are left
+  // out, so no addition depends on a merge or rename having happened first.
+  const added = new Set<string>();
+  const addedTo = new Map<string, number>();
+  for (const addition of plan.tagAdditions) {
+    const item = index.item(addition.item);
+    const tag = index.tag(addition.tag);
+    const reason = reasonOf(addition.reason);
+    if (!item || !tag) {
+      unknown += 1;
+      continue;
+    }
+    const pair = `${item.id}:${tag.id}`;
+    const count = item.tags.length + (addedTo.get(item.id) ?? 0);
+    if (
+      added.has(pair) ||
+      touched.has(tag.id) ||
+      item.tags.includes(tag.name) ||
+      count >= MAX_TAGS_PER_CLIPPING ||
+      !reason
+    ) {
+      setAside += 1;
+      continue;
+    }
+    added.add(pair);
+    addedTo.set(item.id, (addedTo.get(item.id) ?? 0) + 1);
+    proposals.push({
+      action: "add_tag",
+      clippingId: item.id,
+      tagId: tag.id,
+      reason,
+      confidence: addition.confidence,
+    });
   }
 
   // Folders: an existing folder is reused by name, a new one gets an id made from its name.

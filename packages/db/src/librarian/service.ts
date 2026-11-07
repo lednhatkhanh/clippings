@@ -4,12 +4,14 @@ import type pg from "pg";
 
 import { formatIsoUtc, type Folder, type LibraryChange } from "@clippings/shared";
 
+import { lockUser } from "../changes/lock-user.ts";
 import {
   ChangeConflictError,
   ChangeNotFoundError,
   ChangeNotUndoableError,
   createChangesService,
 } from "../changes/service.ts";
+import { dismissTagSuggestionNamed } from "../changes/tag-suggestions.ts";
 import type { Clock } from "../clippings/ports.ts";
 import { InvalidTagsError, TagNameTakenError } from "../clippings/service.ts";
 import { createDatabase } from "../database.ts";
@@ -20,7 +22,6 @@ import {
   effectiveAt,
   latestChangeAt,
   LibrarianInputError,
-  lockUser,
   ownedTargets,
   planChange,
   proposalOf,
@@ -406,7 +407,13 @@ export function createLibrarianService({ pool, clock }: LibrarianServiceDeps) {
       if (plan.waitingFor) throw new SuggestionStaleError(`it waits for ${plan.waitingFor}`);
 
       const at = effectiveAt(clock.now(), await latestChangeAt(tx, userId));
-      await plan.write(tx, { userId, actor, at });
+      try {
+        await plan.write(tx, { userId, actor, at });
+      } catch (error) {
+        // The write looks again under a lock: what the plan saw may have changed since.
+        if (!isRefusal(error)) throw error;
+        throw new SuggestionStaleError(error.message);
+      }
       const [applied] = await tx
         .update(libraryChanges)
         .set({ status: "applied", before: plan.before, after: plan.after, appliedAt: at })
@@ -416,28 +423,43 @@ export function createLibrarianService({ pool, clock }: LibrarianServiceDeps) {
     });
   }
 
-  /** Turns a suggestion down. The librarian won't propose the same change again. */
+  /**
+   * Turns a suggestion down. The librarian won't propose the same change again. Dismissing an
+   * `add_tag` suggestion also dismisses the clipping's own suggestion of that tag, so it is not
+   * offered again on the clipping.
+   */
   async function dismissSuggestion(userId: string, changeId: string): Promise<LibraryChange> {
     if (!isUuid(changeId)) throw new ChangeNotFoundError();
-    const [row] = await db
-      .select({ status: libraryChanges.status })
-      .from(libraryChanges)
-      .where(and(eq(libraryChanges.id, changeId), eq(libraryChanges.userId, userId)));
-    if (!row) throw new ChangeNotFoundError();
-    // The status check is in the update, so two decisions at once can't both succeed.
-    const [dismissed] = await db
-      .update(libraryChanges)
-      .set({ status: "dismissed" })
-      .where(
-        and(
-          eq(libraryChanges.id, changeId),
-          eq(libraryChanges.userId, userId),
-          eq(libraryChanges.status, "suggested"),
-        ),
-      )
-      .returning();
-    if (!dismissed) throw new ChangeNotSuggestedError();
-    return toChange(dismissed);
+    return db.transaction(async (tx) => {
+      const [row] = await tx
+        .select({ status: libraryChanges.status })
+        .from(libraryChanges)
+        .where(and(eq(libraryChanges.id, changeId), eq(libraryChanges.userId, userId)));
+      if (!row) throw new ChangeNotFoundError();
+      // The status check is in the update, so two decisions at once can't both succeed.
+      const [dismissed] = await tx
+        .update(libraryChanges)
+        .set({ status: "dismissed" })
+        .where(
+          and(
+            eq(libraryChanges.id, changeId),
+            eq(libraryChanges.userId, userId),
+            eq(libraryChanges.status, "suggested"),
+          ),
+        )
+        .returning();
+      if (!dismissed) throw new ChangeNotSuggestedError();
+      const [clippingId, tagId] = dismissed.targetIds;
+      if (dismissed.action === "add_tag" && clippingId && tagId) {
+        const [tag] = await tx
+          .select({ name: tags.name })
+          .from(tags)
+          .where(and(eq(tags.id, tagId), eq(tags.userId, userId)));
+        const name = tag?.name ?? (dismissed.after as { tag?: { name?: string } })?.tag?.name;
+        if (name) await dismissTagSuggestionNamed(tx, userId, clippingId, name, clock.now());
+      }
+      return toChange(dismissed);
+    });
   }
 
   /**
@@ -445,8 +467,8 @@ export function createLibrarianService({ pool, clock }: LibrarianServiceDeps) {
    * `ChangeNotFoundError` for a change that is not the user's, `ChangeNotUndoableError` for one
    * that was never applied or was undone already, and `ChangeConflictError`, changing nothing,
    * when a later applied change touched the same things (or the world has moved so that the old
-   * state can't come back, such as a name now taken). Undoing a merge recreates the tag, its
-   * color, folder and topic page, and puts it back on its clippings.
+   * state can't come back, such as a name now taken). Undoing a merge or a tag's deletion
+   * recreates the tag, its color, folder and topic page, and puts it back on its clippings.
    */
   async function undoChange(userId: string, changeId: string): Promise<LibraryChange> {
     if (!isUuid(changeId)) throw new ChangeNotFoundError();
@@ -456,7 +478,7 @@ export function createLibrarianService({ pool, clock }: LibrarianServiceDeps) {
       .where(and(eq(libraryChanges.id, changeId), eq(libraryChanges.userId, userId)));
     if (!peek) throw new ChangeNotFoundError();
     if (peek.action === "add_tag" || peek.action === "create_tag") {
-      // Tags put on a clipping by auto-tagging have their own, older way back.
+      // Tags put on a clipping by auto-tagging, and the librarian's add_tag, share one way back.
       await changes.undoChange(userId, changeId);
       return (await getChange(userId, changeId))!;
     }

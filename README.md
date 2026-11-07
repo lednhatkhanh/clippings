@@ -88,11 +88,12 @@ The MCP server is at `<BETTER_AUTH_URL>/mcp`. Every client gets
 `save_clipping`, `search_clippings`, `list_recent`, `list_clippings` and `related_clippings`; one
 that asks for the write scope also gets `save_note` (a text note with no URL, in Markdown),
 `get_clipping`, `update_clipping`, `tag_clippings`, `list_tags`, `rename_tag`, `merge_tag`,
+`delete_tag`, `list_tag_suggestions`, `accept_tag_suggestions`, `dismiss_tag_suggestions`,
 `delete_clipping` and `restore_clipping`, and the librarian's tools: `set_tag_color`,
 `list_folders`, `create_folder`, `move_to_folder`, `link_items`, `run_librarian` (a dry run by
 default: the changes the weekly job would make), `list_suggestions`, `apply_suggestion`,
 `dismiss_suggestion` and `undo_change`. Every change they make (and every
-`rename_tag` and `merge_tag`) is logged with the state it replaced, so `undo_change` reverses it;
+`rename_tag`, `merge_tag` and `delete_tag`) is logged with the state it replaced, so `undo_change` reverses it;
 the librarian itself applies only high-confidence changes and leaves the rest as suggestions, and
 nothing here deletes a clipping or note.
 

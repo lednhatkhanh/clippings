@@ -19,6 +19,19 @@ export type TagColor = (typeof TAG_COLORS)[number];
 export const isTagColor = (color: string): color is TagColor =>
   (TAG_COLORS as readonly string[]).includes(color);
 
+/**
+ * What a client sends in place of a color to give up the user's own choice: the tag then takes the
+ * color of its folder, or none, and the librarian may color it again.
+ */
+export const AUTOMATIC_TAG_COLOR = "auto" as const;
+
+/** A color for a tag, or `AUTOMATIC_TAG_COLOR` to hand the choice back. */
+export type TagColorChoice = TagColor | typeof AUTOMATIC_TAG_COLOR;
+
+/** Whether a name is one of `TAG_COLORS` or `AUTOMATIC_TAG_COLOR`. */
+export const isTagColorChoice = (color: string): color is TagColorChoice =>
+  color === AUTOMATIC_TAG_COLOR || isTagColor(color);
+
 /** Longest tag name, in characters. */
 export const MAX_TAG_LENGTH = 50;
 

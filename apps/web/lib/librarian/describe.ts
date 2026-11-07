@@ -19,6 +19,7 @@ export const ACTION_LABELS: Record<LibraryChangeAction, string> = {
   create_tag: "Tag created",
   merge_tag: "Tags merged",
   rename_tag: "Tag renamed",
+  delete_tag: "Tag deleted",
   fold_tag: "Tag folded",
   set_tag_color: "Tag colored",
   create_folder: "Folder created",

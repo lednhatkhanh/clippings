@@ -17,6 +17,7 @@ import {
   LibrarianInputError,
   MAX_BULK_CLIPPINGS,
   NoteBodyTooLongError,
+  NotANoteError,
   NoteTooLongError,
   SuggestionStaleError,
   TagNameTakenError,
@@ -30,6 +31,7 @@ import {
   type ResearchService,
 } from "@clippings/db";
 import {
+  AUTOMATIC_TAG_COLOR,
   CLIPPING_KINDS,
   CLIPPING_SOURCES,
   CLIPPING_STATUSES,
@@ -67,7 +69,11 @@ export type McpClippings = Pick<
   | "getClipping"
   | "getClippingText"
   | "updateClipping"
+  | "setPinned"
   | "tagClippings"
+  | "acceptTagSuggestions"
+  | "dismissTagSuggestions"
+  | "listClippingsWithSuggestions"
   | "listTagSummaries"
   | "findTagByName"
   | "deleteClipping"
@@ -152,6 +158,11 @@ function presentFull(clipping: Clipping, appOrigin: string) {
   };
 }
 
+/** `presentFull` with the tag suggestions that wait for the user's decision. */
+function presentWithSuggestions(clipping: Clipping, appOrigin: string) {
+  return { ...presentFull(clipping, appOrigin), suggestedTags: clipping.suggestedTags };
+}
+
 /** `present`, as the tools' output schemas describe it. */
 const clippingOutput = z.object({
   id: z.string(),
@@ -207,11 +218,21 @@ const fullClippingOutput = clippingOutput.extend({
   pageTitle: z.string().optional().describe("The page's own title, when the user renamed it."),
 });
 
+/** `presentWithSuggestions`, as the tools' output schemas describe it. */
+const suggestedClippingOutput = fullClippingOutput.extend({
+  suggestedTags: z
+    .array(z.string())
+    .describe(
+      "Tags Clippings suggested for it that the user hasn't accepted or dismissed; empty when none. accept_tag_suggestions adds them, dismiss_tag_suggestions turns them down.",
+    ),
+});
+
 const clippingsOutput = z.object({ clippings: z.array(clippingOutput) });
 const fullClippingResultOutput = z.object({ clipping: fullClippingOutput });
+const suggestedClippingResultOutput = z.object({ clipping: suggestedClippingOutput });
 /** `get_clipping`'s result: the clipping, and its research brief when it has one. */
 const clippingWithBriefOutput = z.object({
-  clipping: fullClippingOutput,
+  clipping: suggestedClippingOutput,
   brief: briefOutput.nullable(),
 });
 
@@ -508,7 +529,7 @@ export function registerClippingTools(
     {
       title: "Get a clipping",
       description:
-        "Read one of the user's clippings in full by id: its title, note, tags, summary and the excerpt Clippings kept from the page. When the user renamed it, pageTitle is the page's own title. When Clippings wrote a research brief for it, AI-written from web search, the brief comes with it, with its sources; otherwise brief is null.",
+        "Read one of the user's clippings in full by id: its title, note, tags, summary and the excerpt Clippings kept from the page. suggestedTags lists the tags Clippings suggested for it that wait for the user's decision (accept_tag_suggestions). When the user renamed it, pageTitle is the page's own title. When Clippings wrote a research brief for it, AI-written from web search, the brief comes with it, with its sources; otherwise brief is null.",
       inputSchema: z.object({ id: idSchema }),
       outputSchema: clippingWithBriefOutput,
       annotations: { readOnlyHint: true },
@@ -519,7 +540,7 @@ export function registerClippingTools(
       if (!clipping) return failure(NOT_FOUND);
       const brief = await research.getBrief(caller.userId, id);
       return result({
-        clipping: presentFull(clipping, appOrigin),
+        clipping: presentWithSuggestions(clipping, appOrigin),
         brief: brief ? presentBrief(brief) : null,
       });
     },
@@ -556,7 +577,7 @@ export function registerClippingTools(
     "update_clipping",
     {
       title: "Update a clipping",
-      description: `Change a clipping's title, note or tags; leave out what should stay as it is. tags is the clipping's complete list of tags, not additions: send every tag it should have, and the ones left out are removed (to add or remove tags on several clippings and keep the rest, use tag_clippings). Calling list_tags first and reusing the user's existing tags keeps their vocabulary consistent; only invent a new tag when none fits. An empty title goes back to the page's own title. An empty note clears the note.`,
+      description: `Change a clipping's title, note, tags, pin, or a note's text; leave out what should stay as it is. body replaces the Markdown text of a note (not of a saved page, which has none): its title follows the first line and its summary is read again. pinned true keeps it above the newest-first list, false takes it down. tags is the clipping's complete list of tags, not additions: send every tag it should have, and the ones left out are removed (to add or remove tags on several clippings and keep the rest, use tag_clippings). Calling list_tags first and reusing the user's existing tags keeps their vocabulary consistent; only invent a new tag when none fits. An empty title goes back to the page's own title. An empty note clears the note.`,
       inputSchema: z.object({
         id: idSchema,
         title: z
@@ -572,6 +593,18 @@ export function registerClippingTools(
           .max(MAX_NOTE_LENGTH)
           .optional()
           .describe("The user's note on why they keep it, replacing the old one."),
+        body: z
+          .string()
+          .min(1)
+          .max(MAX_NOTE_BODY_LENGTH)
+          .optional()
+          .describe(
+            `A note's new text as Markdown, replacing the old, at most ${MAX_NOTE_BODY_LENGTH} characters. Only for a note (kind "note").`,
+          ),
+        pinned: z
+          .boolean()
+          .optional()
+          .describe("True pins the clipping above the newest-first list; false unpins it."),
         tags: z
           .array(z.string().max(MAX_TAG_LENGTH))
           .max(MAX_TAGS_PER_CLIPPING)
@@ -583,21 +616,39 @@ export function registerClippingTools(
       outputSchema: fullClippingResultOutput,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     },
-    async ({ id, title, note, tags }, ctx) => {
+    async ({ id, title, note, body, pinned, tags }, ctx) => {
       const caller = callerFrom(ctx);
-      if (title === undefined && note === undefined && tags === undefined) {
-        return failure("Say what to change: a title, a note or tags.");
+      if (
+        title === undefined &&
+        note === undefined &&
+        body === undefined &&
+        pinned === undefined &&
+        tags === undefined
+      ) {
+        return failure("Say what to change: a title, a note, a note's text, the pin or tags.");
       }
       try {
-        const updated = await clippings.updateClipping(caller.userId, id, {
-          title,
-          note: note?.trim(),
-          tags,
-        });
+        // The edits are checked before anything is written; the pin follows them.
+        let updated =
+          title === undefined && note === undefined && body === undefined && tags === undefined
+            ? await clippings.getClipping(caller.userId, id, { suggestions: false })
+            : await clippings.updateClipping(caller.userId, id, {
+                title,
+                note: note?.trim(),
+                body,
+                tags,
+              });
+        if (updated && pinned !== undefined)
+          updated = await clippings.setPinned(caller.userId, id, pinned);
         return updated ? result({ clipping: presentFull(updated, appOrigin) }) : failure(NOT_FOUND);
       } catch (error) {
         if (error instanceof TitleTooLongError) return failure("That title is too long.");
         if (error instanceof NoteTooLongError) return failure("That note is too long.");
+        if (error instanceof EmptyNoteBodyError) return failure("A note needs some text.");
+        if (error instanceof NoteBodyTooLongError) return failure("That note's text is too long.");
+        if (error instanceof NotANoteError) {
+          return failure("Only a note has text to change; a saved page's text can't be edited.");
+        }
         if (error instanceof InvalidTagsError) return failure(`${error.message}.`);
         throw error;
       }
@@ -638,6 +689,111 @@ export function registerClippingTools(
         if (error instanceof TooManyClippingsError) return failure(`${error.message}.`);
         throw error;
       }
+    },
+  );
+
+  server.registerTool(
+    "list_tag_suggestions",
+    {
+      title: "List clippings with tag suggestions",
+      description: `List the user's clippings that have tags waiting for a decision, newest saved first, a page at a time: Clippings suggests tags when it reads a page and applies only the ones it is sure of. Each clipping comes with its current tags and suggestedTags. Accept the ones that fit with accept_tag_suggestions (names, or all when left out) and turn down the rest with dismiss_tag_suggestions. These are tags for a clipping, not the librarian's suggested changes (list_suggestions). When nextCursor is not null, pass it back as cursor for the next page.`,
+      inputSchema: z.object({
+        cursor: z.string().optional().describe("The nextCursor of the previous page."),
+        limit: limitSchema,
+      }),
+      outputSchema: z.object({
+        clippings: z.array(
+          clippingOutput.extend({
+            suggestedTags: z.array(z.string()).describe("The tags waiting for a decision."),
+          }),
+        ),
+        nextCursor: z
+          .string()
+          .nullable()
+          .describe("Pass back as cursor for the next page; null on the last page."),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ cursor, limit }, ctx) => {
+      const caller = callerFrom(ctx);
+      try {
+        const page = await clippings.listClippingsWithSuggestions(caller.userId, {
+          cursor,
+          limit: limit ?? DEFAULT_LIMIT,
+        });
+        return result({
+          clippings: page.items.map((clipping) => ({
+            ...present(clipping, appOrigin),
+            suggestedTags: clipping.suggestedTags,
+          })),
+          nextCursor: page.nextCursor,
+        });
+      } catch (error) {
+        if (error instanceof InvalidCursorError) {
+          return failure("That cursor isn't one list_tag_suggestions returned.");
+        }
+        throw error;
+      }
+    },
+  );
+
+  const suggestionNamesSchema = z
+    .array(z.string().max(MAX_TAG_LENGTH))
+    .max(MAX_TAGS_PER_CLIPPING)
+    .optional();
+
+  server.registerTool(
+    "accept_tag_suggestions",
+    {
+      title: "Accept tag suggestions",
+      description: `Put the tags Clippings suggested for one clipping on it: the names given, or all of its suggestedTags when names is left out. A name matches one of the user's tags ignoring case; a name that isn't a suggestion any more changes nothing. Returns the clipping with the suggestions still waiting. Fails, changing nothing, when the clipping would have more than ${MAX_TAGS_PER_CLIPPING} tags. Accept only what fits the clipping.`,
+      inputSchema: z.object({
+        id: idSchema,
+        names: suggestionNamesSchema.describe(
+          "The suggested tags to accept; leave out to accept all of them.",
+        ),
+      }),
+      outputSchema: suggestedClippingResultOutput,
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async ({ id, names }, ctx) => {
+      const caller = callerFrom(ctx);
+      try {
+        const updated = await clippings.acceptTagSuggestions(caller.userId, id, names);
+        return updated
+          ? result({ clipping: presentWithSuggestions(updated, appOrigin) })
+          : failure(NOT_FOUND);
+      } catch (error) {
+        if (error instanceof InvalidTagsError) return failure(`${error.message}.`);
+        throw error;
+      }
+    },
+  );
+
+  server.registerTool(
+    "dismiss_tag_suggestions",
+    {
+      title: "Dismiss tag suggestions",
+      description:
+        "Turn down the tags Clippings suggested for one clipping: the names given, or all of its suggestedTags when names is left out. A dismissed tag is not suggested for that clipping again. Returns the clipping with the suggestions still waiting.",
+      inputSchema: z.object({
+        id: idSchema,
+        names: suggestionNamesSchema.describe(
+          "The suggested tags to dismiss; leave out to dismiss all of them.",
+        ),
+      }),
+      outputSchema: suggestedClippingResultOutput,
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async ({ id, names }, ctx) => {
+      const caller = callerFrom(ctx);
+      if (!(await clippings.dismissTagSuggestions(caller.userId, id, names))) {
+        return failure(NOT_FOUND);
+      }
+      const updated = await clippings.getClipping(caller.userId, id);
+      return updated
+        ? result({ clipping: presentWithSuggestions(updated, appOrigin) })
+        : failure(NOT_FOUND);
     },
   );
 
@@ -758,6 +914,38 @@ export function registerClippingTools(
   );
 
   server.registerTool(
+    "delete_tag",
+    {
+      title: "Delete a tag",
+      description:
+        "Delete one of the user's tags: it comes off every clipping that carries it, and its topic page goes with it. The clippings themselves stay. Tags are found by name, ignoring case. The deletion is logged with everything needed to bring the tag back, so undo_change can reverse it (unless a later change touched the tag); still, only delete what the user asked you to. To keep the clippings tagged, merge_tag the tag into another instead.",
+      inputSchema: z.object({
+        tag: z.string().min(1).describe("The tag to delete, as list_tags shows it."),
+        reason: reasonSchema,
+        dryRun: dryRunSchema,
+      }),
+      outputSchema: proposalOutput,
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+    },
+    async ({ tag, reason, dryRun }, ctx) => {
+      const caller = callerFrom(ctx);
+      const found = await clippings.findTagByName(caller.userId, tag);
+      if (!found) return failure(unknownTag(tag));
+      try {
+        const outcome = await librarian.proposeChange(
+          caller.userId,
+          "user_via_mcp",
+          { action: "delete_tag", tagId: found.id, reason: reason?.trim() || USER_ASKED },
+          { dryRun },
+        );
+        return result(presentOutcome(outcome));
+      } catch (error) {
+        return librarianFailure(error) ?? rethrow(error);
+      }
+    },
+  );
+
+  server.registerTool(
     "delete_clipping",
     {
       title: "Delete a clipping",
@@ -827,6 +1015,8 @@ const reasonSchema = z
   );
 
 const colorSchema = z.enum(TAG_COLORS);
+
+const colorChoiceSchema = z.enum([...TAG_COLORS, AUTOMATIC_TAG_COLOR]);
 
 /** The ids a change keeps for undo, as a count: a merge's list of clippings can be long. */
 const COUNTED_LISTS: Record<string, string> = {
@@ -927,11 +1117,11 @@ function registerLibrarianTools(
     "set_tag_color",
     {
       title: "Set a tag's color",
-      description: `Give one of the user's tags a color. Tags are found by name, ignoring case. A color set here counts as the user's own choice: the librarian never changes it afterwards. "none" shows the tag without a color. The change is logged and undo_change can reverse it.`,
+      description: `Give one of the user's tags a color. Tags are found by name, ignoring case. A color set here counts as the user's own choice: the librarian never changes it afterwards. "none" is also the user's choice, of a tag without a color. "auto" gives the choice back: the tag takes the color of its folder (none outside a folder) and the librarian may color it again, so use it when the user wants the color to be automatic, never "none". The change is logged and undo_change can reverse it.`,
       inputSchema: z.object({
         tag: z.string().min(1).describe("The tag's name, as list_tags shows it."),
-        color: colorSchema.describe(
-          "A palette color name; the app renders each in the user's theme.",
+        color: colorChoiceSchema.describe(
+          `A palette color name (the app renders each in the user's theme), or "${AUTOMATIC_TAG_COLOR}" for the folder's color.`,
         ),
         reason: reasonSchema,
         dryRun: dryRunSchema,
@@ -1159,7 +1349,7 @@ function registerLibrarianTools(
     "run_librarian",
     {
       title: "Run the librarian",
-      description: `Have the librarian tidy the library the way its weekly job does: merge near-duplicate tags, fold tags used once, file every clipping, note and tag in one topic folder, link related items with a reason and write topic pages. It reads the whole library and plans with a model, so it takes a minute or more and costs the user a little of their daily budget. By default it is a dry run (dryRun true): it returns the list of changes it would make and writes nothing, so show the user that list first. With dryRun false it applies the changes it is sure of and stores the rest as suggestions (list_suggestions); everything is logged and undo_change reverses any one. The user's first run is always suggestions only, so they can judge it before it changes anything. It never deletes a clipping or note, and never changes a tag color the user chose. Stops quietly when the day's model budget is used up.`,
+      description: `Have the librarian tidy the library the way its weekly job does: merge near-duplicate tags, fold tags used once, file every clipping, note and tag in one topic folder, link related items with a reason, write topic pages and add the tags suggested for a clipping that fit it. It reads the whole library and plans with a model, so it takes a minute or more and costs the user a little of their daily budget. By default it is a dry run (dryRun true): it returns the list of changes it would make and writes nothing, so show the user that list first. With dryRun false it applies the changes it is sure of and stores the rest as suggestions (list_suggestions); everything is logged and undo_change reverses any one. The user's first run is always suggestions only, so they can judge it before it changes anything. It never deletes a clipping or note, and never changes a tag color the user chose. Stops quietly when the day's model budget is used up.`,
       inputSchema: z.object({
         dryRun: z
           .boolean()
@@ -1319,7 +1509,7 @@ function registerLibrarianTools(
     {
       title: "Undo a change",
       description:
-        "Reverse one logged change (a tag color, folder, move, link, topic page, rename or merge, or a tag added automatically) by putting back what it replaced; undoing a merge brings the removed tag back on its clippings. Refused, with nothing changed, when a later change touched the same things: undo that one first.",
+        "Reverse one logged change (a tag color, folder, move, link, topic page, rename, merge or deletion of a tag, or a tag added automatically) by putting back what it replaced; undoing a merge or a deletion brings the removed tag back with its clippings. Refused, with nothing changed, when a later change touched the same things: undo that one first.",
       inputSchema: z.object({ id: changeIdSchema }),
       outputSchema: z.object({ change: changeOutput }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },

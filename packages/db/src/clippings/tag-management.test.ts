@@ -131,25 +131,6 @@ describe.skipIf(!TEST_DATABASE_URL)("managing tags", () => {
     expect(await counts(bob)).toEqual(["home: 1"]);
   });
 
-  it("deletes a tag and keeps the clippings that carried it", async () => {
-    const ana = await fixture.createUser("ana");
-    const bob = await fixture.createUser("bob");
-    const tagged = await clip(ana, "https://example.com/a", ["reading", "work"]);
-    await clip(bob, "https://example.com/b", ["work"]);
-    const work = await tagNamed(ana, "work");
-    const bobsWork = await tagNamed(bob, "work");
-
-    expect(await fixture.service.deleteTag(bob, work.id)).toBe(false);
-    expect(await fixture.service.deleteTag(ana, work.id)).toBe(true);
-    expect(await fixture.service.deleteTag(ana, work.id)).toBe(false);
-
-    const kept = await fixture.service.getClipping(ana, tagged.id);
-    expect(kept?.url).toBe("https://example.com/a");
-    expect(names(kept)).toEqual(["reading"]);
-    expect(await counts(ana)).toEqual(["reading: 1"]);
-    expect(await fixture.service.listTags(bob)).toEqual([bobsWork]);
-  });
-
   it("sets a tag's color by name and rejects a name it doesn't know", async () => {
     const ana = await fixture.createUser("ana");
     const bob = await fixture.createUser("bob");

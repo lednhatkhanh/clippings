@@ -7,13 +7,15 @@ import { Button } from "@clippings/ui";
 
 /**
  * The tags enrichment suggests, as a quiet row under the tag editor: each chip shows a plus and
- * its name, one press adds it, and its own × dismisses it. Nothing is added unasked, and the
- * chips never look like the user's own tags (dashed, with no color).
+ * its name, one press adds it, and its own × dismisses it. With more than one on offer, "Add all"
+ * takes them all and "Dismiss all" turns them all down. Nothing is added unasked, and the chips
+ * never look like the user's own tags (dashed, with no color).
  */
 export function TagSuggestions({
   names,
   isDisabled,
   onAccept,
+  onAcceptAll,
   onDismiss,
   onDismissAll,
 }: {
@@ -21,6 +23,7 @@ export function TagSuggestions({
   names: readonly string[];
   isDisabled: boolean;
   onAccept: (name: string) => void;
+  onAcceptAll: () => void;
   onDismiss: (name: string) => void;
   onDismissAll: () => void;
 }) {
@@ -53,9 +56,14 @@ export function TagSuggestions({
         </span>
       ))}
       {names.length > 1 ? (
-        <Button variant="text" isDisabled={isDisabled} onPress={onDismissAll}>
-          Dismiss all
-        </Button>
+        <span className="flex items-center gap-2">
+          <Button variant="text" isDisabled={isDisabled} onPress={onAcceptAll}>
+            Add all
+          </Button>
+          <Button variant="text" isDisabled={isDisabled} onPress={onDismissAll}>
+            Dismiss all
+          </Button>
+        </span>
       ) : null}
     </div>
   );
