@@ -318,7 +318,7 @@ function librarianInput(payload, message) {
     tags: m[4] === "no tags" ? [] : m[4].split(", "),
   }));
   const folders = [...system.matchAll(/^F\d+ "(.*)" color/gm)].map((m) => m[1].toLowerCase());
-  const tool = payload.tool_choice.name;
+  const tool = toolAskedFor(payload, message);
 
   if (tool === "plan_tags") {
     const merges = tags.flatMap((tag) => {
@@ -573,10 +573,31 @@ async function handleBatches(request, response, payload) {
   json(200, results.map((result) => JSON.stringify(result)).join("\n"), "application/x-jsonl");
 }
 
+// Models that refuse a forced tool choice, as the real API does, with its 400.
+const NO_FORCED_TOOL = new Set(["claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-1"]);
+
+/** The tool a request wants called: the forced one, or the one its prompt names (`oneToolCall`). */
+const toolAskedFor = (payload, message) =>
+  payload.tool_choice?.name ?? /Answer by calling (\w+), once/.exec(message)?.[1];
+
 listen(ANTHROPIC_PORT, "fake anthropic", (request, response, body) => {
   const payload = JSON.parse(body || "{}");
   if (request.url?.startsWith("/v1/messages/batches")) {
     return handleBatches(request, response, payload);
+  }
+  if (NO_FORCED_TOOL.has(payload.model) && ["tool", "any"].includes(payload.tool_choice?.type)) {
+    console.log(`[anthropic] ${request.url} model=${payload.model} -> 400 forced tool_choice`);
+    response.writeHead(400, { "content-type": "application/json" });
+    return response.end(
+      JSON.stringify({
+        type: "error",
+        error: {
+          type: "invalid_request_error",
+          message: 'tool_choice: type "tool" and "any" are not supported for this model.',
+        },
+        request_id: "req_local",
+      }),
+    );
   }
   // The content is a string or a list of blocks (a PDF comes as a document block before the text).
   const content = payload.messages?.[0]?.content ?? "";
@@ -586,6 +607,7 @@ listen(ANTHROPIC_PORT, "fake anthropic", (request, response, body) => {
         .map((block) => block.text)
         .join("\n")
     : String(content);
+  const asked = toolAskedFor(payload, message);
   const failure = requestedError(message);
   if (failure) {
     const [status, type, text, retryAfter] = failure;
@@ -603,7 +625,7 @@ listen(ANTHROPIC_PORT, "fake anthropic", (request, response, body) => {
     response.writeHead(200, { "content-type": "application/json" });
     return response.end(JSON.stringify(briefReply(payload, message, body)));
   }
-  if (payload.tool_choice?.name === "write_lesson") {
+  if (asked === "write_lesson") {
     console.log(`[anthropic] ${request.url} model=${payload.model} lesson`);
     response.writeHead(200, { "content-type": "application/json" });
     return response.end(
@@ -626,10 +648,8 @@ listen(ANTHROPIC_PORT, "fake anthropic", (request, response, body) => {
       }),
     );
   }
-  if (LIBRARIAN_TOOLS.has(payload.tool_choice?.name)) {
-    console.log(
-      `[anthropic] ${request.url} model=${payload.model} librarian=${payload.tool_choice.name}`,
-    );
+  if (LIBRARIAN_TOOLS.has(asked)) {
+    console.log(`[anthropic] ${request.url} model=${payload.model} librarian=${asked}`);
     response.writeHead(200, { "content-type": "application/json" });
     return response.end(
       JSON.stringify({
@@ -643,7 +663,7 @@ listen(ANTHROPIC_PORT, "fake anthropic", (request, response, body) => {
           {
             type: "tool_use",
             id: "toolu_local",
-            name: payload.tool_choice.name,
+            name: asked,
             input: librarianInput(payload, message),
           },
         ],
@@ -673,7 +693,7 @@ listen(ANTHROPIC_PORT, "fake anthropic", (request, response, body) => {
           {
             type: "tool_use",
             id: "toolu_local",
-            name: payload.tool_choice?.name ?? "save_reading",
+            name: asked ?? "save_reading",
             input: {
               title: `Read: ${title ?? "Untitled"}`,
               summary: "A stand-in summary of the page. It says what the page is about.",

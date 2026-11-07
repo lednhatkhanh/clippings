@@ -37,6 +37,12 @@ const view: LibraryView = {
 };
 const index = indexLibrary(view, NOW);
 
+/** The last line of a request's user message. */
+const lastLine = (request: Anthropic.MessageCreateParamsNonStreaming) => {
+  const content = request.messages[0]?.content;
+  return typeof content === "string" ? content.split("\n").at(-1) : undefined;
+};
+
 type Reply = object | "cap";
 
 /** A gateway that answers each call with the next reply: tool input, or the cap. */
@@ -101,12 +107,15 @@ describe("the librarian planner", () => {
     ]);
     expect(result.plan.moves.map((move) => move.ref)).toEqual(["T1", "C1"]);
     expect(result.plan.pages).toHaveLength(1);
-    expect(requests.map((r) => [r.model, r.tool_choice])).toEqual([
-      [PLANNER_MODEL, { type: "tool", name: "plan_tags" }],
-      [PLANNER_MODEL, { type: "tool", name: "plan_folders" }],
-      [PLANNER_MODEL, { type: "tool", name: "plan_links" }],
-      [LINK_CHECK_MODEL, { type: "tool", name: "confirm_links" }],
-      [PLANNER_MODEL, { type: "tool", name: "plan_topic_pages" }],
+    // Sonnet 5.5 refuses a forced tool choice with a 400, so no call forces one: each is asked by
+    // name, whichever model it goes to.
+    const asked = { type: "auto", disable_parallel_tool_use: true };
+    expect(requests.map((r) => [r.model, r.tool_choice, lastLine(r)])).toEqual([
+      [PLANNER_MODEL, asked, "Answer by calling plan_tags, once, and write nothing else."],
+      [PLANNER_MODEL, asked, "Answer by calling plan_folders, once, and write nothing else."],
+      [PLANNER_MODEL, asked, "Answer by calling plan_links, once, and write nothing else."],
+      [LINK_CHECK_MODEL, asked, "Answer by calling confirm_links, once, and write nothing else."],
+      [PLANNER_MODEL, asked, "Answer by calling plan_topic_pages, once, and write nothing else."],
     ]);
   });
 

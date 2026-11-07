@@ -1,6 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 
 import type { Gateway } from "@/lib/gateway/gateway.ts";
+import { oneToolCall } from "@/lib/gateway/one-tool.ts";
 import {
   CapReachedError,
   type PageSummary,
@@ -291,15 +292,17 @@ export function summaryRequest(page: SummarizerInput): Anthropic.MessageCreatePa
         },
       ]
     : [{ type: "text", text }];
+  const ask = oneToolCall(SUMMARIZER_MODEL, "save_reading");
   return {
     model: SUMMARIZER_MODEL,
     max_tokens: 1024,
     system:
       (page.kind === "note" ? NOTE_SYSTEM : SYSTEM) +
       (userTags ? TAGS_SYSTEM : "") +
-      (research ? researchSystem(research.profile, research.domains) : ""),
+      (research ? researchSystem(research.profile, research.domains) : "") +
+      `\n\n${ask.instruction}`,
     tools: [readingTool({ tags: userTags !== undefined, research: research !== undefined })],
-    tool_choice: { type: "tool", name: "save_reading" },
+    ...ask.params,
     messages: [{ role: "user", content }],
   };
 }

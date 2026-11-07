@@ -133,8 +133,12 @@ describe("the lesson writer", () => {
     expect(prompt).toContain("C1 (link, saved 2026-11-05) Save 7");
     expect(requests[0]).toMatchObject({
       model: "claude-sonnet-5-5",
-      tool_choice: { type: "tool", name: "write_lesson" },
+      // Sonnet 5.5 refuses a forced tool choice with a 400: it is asked by name instead.
+      tool_choice: { type: "auto", disable_parallel_tool_use: true },
     });
+    expect(prompt.trimEnd()).toMatch(
+      /Answer by calling write_lesson, once, and write nothing else\.$/,
+    );
     expect(asText(requests[0]!.system)).toContain("A backend developer");
     // C2 is the second item the tag read gave; C9 is a reference the model made up.
     expect(completed).toEqual([

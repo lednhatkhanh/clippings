@@ -71,6 +71,9 @@ for going offline; a second build gets a new build id, so it triggers the update
   When the user has research domains it also gives the research verdict: worth researching when
   the save's text names one of the domains (the default ones are `shipping` and `logistics`), and
   `[fake-research no]` in the message forces not worth it.
+  Like the real API, it answers a forced `tool_choice` (`tool` or `any`) to Sonnet 5.5, Opus 5.5 or
+  Fable 5.1 with a 400; the app asks for its tool by name instead (`lib/gateway/one-tool.ts`), and
+  the fake reads which tool from that closing line.
   Every reply carries `usage` (input is the request's characters over four, output 10), which the
   model gateway prices into the ledger. Markers in the message text set it or make the call fail:
   `[fake-usage input=1000 output=200 cache_read=5000 cache_write=300 searches=2]`, and
