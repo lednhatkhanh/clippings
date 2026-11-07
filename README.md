@@ -89,8 +89,9 @@ The MCP server is at `<BETTER_AUTH_URL>/mcp`. Every client gets
 that asks for the write scope also gets `save_note` (a text note with no URL, in Markdown),
 `get_clipping`, `update_clipping`, `tag_clippings`, `list_tags`, `rename_tag`, `merge_tag`,
 `delete_clipping` and `restore_clipping`, and the librarian's tools: `set_tag_color`,
-`list_folders`, `create_folder`, `move_to_folder`, `link_items`, `list_suggestions`,
-`apply_suggestion`, `dismiss_suggestion` and `undo_change`. Every change they make (and every
+`list_folders`, `create_folder`, `move_to_folder`, `link_items`, `run_librarian` (a dry run by
+default: the changes the weekly job would make), `list_suggestions`, `apply_suggestion`,
+`dismiss_suggestion` and `undo_change`. Every change they make (and every
 `rename_tag` and `merge_tag`) is logged with the state it replaced, so `undo_change` reverses it;
 the librarian itself applies only high-confidence changes and leaves the rest as suggestions, and
 nothing here deletes a clipping or note.

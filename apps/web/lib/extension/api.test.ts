@@ -542,6 +542,11 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
       auth: setup.auth,
       clippings: fixture.service,
       librarian: fixture.librarian,
+      runner: {
+        run: () => {
+          throw new Error("This test doesn't run the librarian");
+        },
+      },
       connections,
       resource: mcpResourceUrl(appOrigin),
       allowedEmails: ALLOWED,

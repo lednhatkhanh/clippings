@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { handleLibrarianJob } from "@/lib/librarian/job-request.ts";
+import type { LibraryIndex } from "@/lib/librarian/library-index.ts";
+import { EMPTY_PLAN, type LibraryPlan } from "@/lib/librarian/plan.ts";
+import type { Planner } from "@/lib/librarian/planner.ts";
+import { createLibrarianRunner } from "@/lib/librarian/run.ts";
 import {
   createServiceFixture,
   TEST_DATABASE_URL,
@@ -32,6 +37,7 @@ const WRITE_TOOLS = [
   "move_to_folder",
   "rename_tag",
   "restore_clipping",
+  "run_librarian",
   "save_note",
   "set_tag_color",
   "tag_clippings",
@@ -66,12 +72,31 @@ describe.skipIf(!TEST_DATABASE_URL)("the MCP tools", () => {
   let handler: (request: Request) => Promise<Response>;
   let ada: McpCaller;
   let bob: McpCaller;
+  /** The user ids whose libraries the planner was given, in order. */
+  let planned: string[];
+  /** The plan the librarian's planner returns for a library. */
+  let planFor: (index: LibraryIndex) => LibraryPlan;
+  let runner: ReturnType<typeof createLibrarianRunner>;
 
   beforeEach(async () => {
     fixture = await createServiceFixture();
+    planned = [];
+    planFor = () => EMPTY_PLAN;
+    const planner: Planner = {
+      plan: async (userId, index) => {
+        planned.push(userId);
+        return { plan: planFor(index), capReached: false, notices: [], costMicros: 0 };
+      },
+    };
+    runner = createLibrarianRunner({
+      librarian: fixture.librarian,
+      planner,
+      now: () => fixture.clock.now(),
+    });
     handler = createClippingsMcpHandler({
       clippings: fixture.service,
       librarian: fixture.librarian,
+      runner,
       appOrigin: "https://clippings.test",
     });
     ada = { userId: await fixture.createUser("ada"), clientId: "https://claude.ai/oauth/mcp" };
@@ -1318,6 +1343,185 @@ describe.skipIf(!TEST_DATABASE_URL)("the MCP tools", () => {
         );
         expect(rows[0].live).toBe(2);
         expect(await logged(ada.userId)).toHaveLength(5);
+      });
+
+      describe("run_librarian", () => {
+        interface RunChange {
+          outcome: string;
+          action: string;
+          change: {
+            action: string;
+            targetIds: string[];
+            reason: string;
+            confidence: string;
+          } | null;
+          reason: string | null;
+        }
+        interface Run {
+          dryRun: boolean;
+          firstRun: boolean;
+          counts: Record<string, number>;
+          changes: RunChange[];
+        }
+
+        /** Two pages about css: merge "css layout" into "css", file the first under a new folder. */
+        async function seedLibrary(caller: McpCaller) {
+          const a = await save(caller, "https://example.com/a");
+          const b = await save(caller, "https://example.com/b");
+          await callTool(caller, "update_clipping", { id: a.id, tags: ["css", "css layout"] });
+          await callTool(caller, "update_clipping", { id: b.id, tags: ["css"] });
+          planFor = (index) => {
+            const tag = (name: string) =>
+              index.tagRef(index.view.tags.find((candidate) => candidate.name === name)!.id)!;
+            return {
+              ...EMPTY_PLAN,
+              merges: [
+                {
+                  source: tag("css layout"),
+                  target: tag("css"),
+                  reason: "The same topic",
+                  confidence: "high",
+                },
+              ],
+              folders: [
+                { name: "Frontend", color: "blue", reason: "Web styling", confidence: "high" },
+              ],
+              moves: [{ ref: index.itemRef(a.id)!, folder: "Frontend", confidence: "high" }],
+            };
+          };
+          return { a, b };
+        }
+
+        const run = async (caller: McpCaller, args: Record<string, unknown> = {}) =>
+          (await callTool(caller, "run_librarian", args)).structured as Run;
+
+        const changeCount = async (userId: string) =>
+          (
+            await fixture.pool.query(
+              `select count(*)::int as n from library_changes where user_id = $1`,
+              [userId],
+            )
+          ).rows[0].n as number;
+
+        /** What identifies a change in a list, whichever path made it. */
+        const shape = (changes: RunChange[]) =>
+          changes.map(({ action, change }) => ({
+            action,
+            targetIds: change?.targetIds,
+            reason: change?.reason,
+            confidence: change?.confidence,
+          }));
+
+        it("is a dry run by default: it lists the changes and writes nothing", async () => {
+          await seedLibrary(ada);
+          const before = await changeCount(ada.userId);
+
+          const result = await run(ada);
+
+          expect(result.dryRun).toBe(true);
+          expect(result.changes.map((entry) => entry.action)).toEqual([
+            "merge_tag",
+            "create_folder",
+            "move_to_folder",
+          ]);
+          expect(await changeCount(ada.userId)).toBe(before);
+          expect(await fixture.service.findTagByName(ada.userId, "css layout")).not.toBeNull();
+        });
+
+        it("gives the same change list as the weekly job for the same library", async () => {
+          await seedLibrary(ada);
+          const dry = await run(ada);
+
+          const job = await handleLibrarianJob(
+            new Request("https://clippings.test/api/jobs/librarian", {
+              method: "POST",
+              headers: { "Upstash-Signature": "signed" },
+              body: JSON.stringify({ userId: ada.userId }),
+            }),
+            {
+              url: "https://clippings.test/api/jobs/librarian",
+              receiver: { verify: async () => true },
+              runner,
+            },
+          );
+          const stored = (
+            await fixture.pool.query(
+              `select action, target_ids, reason, confidence, status from library_changes
+               where user_id = $1 order by created_at, id`,
+              [ada.userId],
+            )
+          ).rows as {
+            action: string;
+            target_ids: string[];
+            reason: string;
+            confidence: string;
+            status: string;
+          }[];
+
+          expect(job.status).toBe(200);
+          expect(dry.firstRun).toBe(true);
+          expect(dry.counts).toMatchObject({ wouldSuggest: 3, wouldApply: 0 });
+          expect(stored.map((row) => row.status)).toEqual(["suggested", "suggested", "suggested"]);
+          // The log holds them in the order they were made; a frozen clock gives them one time.
+          const byAction = <T extends { action: string }>(list: T[]) =>
+            list.toSorted((x, y) => x.action.localeCompare(y.action));
+          expect(
+            byAction(
+              stored.map(({ action, target_ids, reason, confidence }) => ({
+                action,
+                targetIds: target_ids,
+                reason,
+                confidence,
+              })),
+            ),
+          ).toEqual(byAction(shape(dry.changes)));
+        });
+
+        it("applies what the librarian is sure of after the first run, and a merge can be undone", async () => {
+          const { a } = await seedLibrary(ada);
+          // The first run has happened: the librarian has logged something for this user.
+          const css = await fixture.service.findTagByName(ada.userId, "css");
+          await fixture.librarian.proposeChange(ada.userId, "librarian", {
+            action: "set_tag_color",
+            tagId: css!.id,
+            color: "blue",
+            reason: "Styling is blue",
+            confidence: "low",
+          });
+          const dry = await run(ada);
+
+          const real = await run(ada, { dryRun: false });
+
+          expect(dry.firstRun).toBe(false);
+          expect(dry.counts).toMatchObject({ wouldApply: 3 });
+          expect(real.counts).toMatchObject({ applied: 3 });
+          expect(shape(real.changes)).toEqual(shape(dry.changes));
+          expect(await fixture.service.findTagByName(ada.userId, "css layout")).toBeNull();
+          expect(await tagNames(ada, a.id)).toEqual(["css"]);
+
+          const merge = real.changes.find((entry) => entry.action === "merge_tag")!;
+          const changeId = (merge.change as unknown as { id: string }).id;
+          const undone = await callTool(ada, "undo_change", { id: changeId });
+
+          expect(undone.isError).toBe(false);
+          expect(await fixture.service.findTagByName(ada.userId, "css layout")).not.toBeNull();
+          expect(await tagNames(ada, a.id)).toEqual(["css", "css layout"]);
+        });
+
+        it("plans from the caller's library only", async () => {
+          await seedLibrary(ada);
+          await save(bob, "https://example.com/bobs");
+
+          await run(bob);
+
+          expect(planned).toEqual([bob.userId]);
+          expect(await changeCount(ada.userId)).toBe(0);
+        });
+
+        it("is offered only with write access", async () => {
+          const names = (await toolsFor([])).map((tool) => tool.name);
+          expect(names).not.toContain("run_librarian");
+        });
       });
     });
   });

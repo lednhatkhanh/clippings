@@ -3,6 +3,7 @@ import type { CallToolResult, McpServer, ServerContext } from "@modelcontextprot
 import { addDays, addMilliseconds, isValid, parseISO } from "date-fns";
 import * as z from "zod";
 
+import type { LibrarianRunner } from "@/lib/librarian/run.ts";
 import {
   ChangeConflictError,
   ChangeNotFoundError,
@@ -82,6 +83,9 @@ export type McpLibrarian = Pick<
   | "listFolders"
   | "findFolderByName"
 >;
+
+/** What the `run_librarian` tool needs: the librarian's run, which the weekly job makes too. */
+export type McpLibrarianRunner = Pick<LibrarianRunner, "run">;
 
 const DEFAULT_LIMIT = 10;
 
@@ -220,8 +224,14 @@ export function registerClippingTools(
   {
     clippings,
     librarian,
+    runner,
     appOrigin,
-  }: { clippings: McpClippings; librarian: McpLibrarian; appOrigin: string },
+  }: {
+    clippings: McpClippings;
+    librarian: McpLibrarian;
+    runner: McpLibrarianRunner;
+    appOrigin: string;
+  },
   { write }: { write: boolean },
 ) {
   server.registerTool(
@@ -747,8 +757,11 @@ export function registerClippingTools(
     },
   );
 
-  registerLibrarianTools(server, { clippings, librarian });
+  registerLibrarianTools(server, { clippings, librarian, runner });
 }
+
+/** The most changes `run_librarian` lists; the counts cover them all. */
+const MAX_RUN_CHANGES = 200;
 
 /** The reason the log keeps for a change the user asked Claude for. */
 const USER_ASKED = "Asked for by the user in Claude";
@@ -857,7 +870,11 @@ function librarianFailure(error: unknown): CallToolResult | null {
  */
 function registerLibrarianTools(
   server: McpServer,
-  { clippings, librarian }: { clippings: McpClippings; librarian: McpLibrarian },
+  {
+    clippings,
+    librarian,
+    runner,
+  }: { clippings: McpClippings; librarian: McpLibrarian; runner: McpLibrarianRunner },
 ) {
   server.registerTool(
     "set_tag_color",
@@ -1088,6 +1105,78 @@ function registerLibrarianTools(
       } catch (error) {
         return librarianFailure(error) ?? rethrow(error);
       }
+    },
+  );
+
+  server.registerTool(
+    "run_librarian",
+    {
+      title: "Run the librarian",
+      description: `Have the librarian tidy the library the way its weekly job does: merge near-duplicate tags, fold tags used once, file every clipping, note and tag in one topic folder, link related items with a reason and write topic pages. It reads the whole library and plans with a model, so it takes a minute or more and costs the user a little of their daily budget. By default it is a dry run (dryRun true): it returns the list of changes it would make and writes nothing, so show the user that list first. With dryRun false it applies the changes it is sure of and stores the rest as suggestions (list_suggestions); everything is logged and undo_change reverses any one. The user's first run is always suggestions only, so they can judge it before it changes anything. It never deletes a clipping or note, and never changes a tag color the user chose. Stops quietly when the day's model budget is used up.`,
+      inputSchema: z.object({
+        dryRun: z
+          .boolean()
+          .optional()
+          .describe("True (the default): report the changes and write nothing."),
+      }),
+      outputSchema: z.object({
+        dryRun: z.boolean(),
+        firstRun: z
+          .boolean()
+          .describe("The user's first run: every change is a suggestion, none is applied."),
+        capReached: z
+          .boolean()
+          .describe("The day's model budget ran out; the changes are what was planned until then."),
+        counts: z.object({
+          applied: z.number().int(),
+          suggested: z.number().int(),
+          wouldApply: z.number().int(),
+          wouldSuggest: z.number().int(),
+          skipped: z.number().int(),
+        }),
+        changes: z.array(
+          z.object({
+            outcome: z.enum(["applied", "suggested", "would_apply", "would_suggest", "skipped"]),
+            change: changeOutput.nullable(),
+            action: z.string(),
+            reason: z.string().nullable().describe("Why nothing was done; null otherwise."),
+          }),
+        ),
+        moreChanges: z.number().int().describe("Changes left out of this list to keep it short."),
+        notices: z.array(z.string()).describe("Tags that may be too broad, and plans set aside."),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    },
+    async ({ dryRun = true }, ctx) => {
+      const caller = callerFrom(ctx);
+      const run = await runner.run(caller.userId, { dryRun });
+      const count = (outcome: string) =>
+        run.results.filter((entry) => entry.outcome === outcome).length;
+      const shown = run.results.slice(0, MAX_RUN_CHANGES);
+      return result({
+        dryRun: run.dryRun,
+        firstRun: run.firstRun,
+        capReached: run.capReached,
+        counts: {
+          applied: count("applied"),
+          suggested: count("suggested"),
+          wouldApply: count("would_apply"),
+          wouldSuggest: count("would_suggest"),
+          skipped: count("skipped"),
+        },
+        changes: shown.map((entry) =>
+          entry.outcome === "skipped"
+            ? { outcome: entry.outcome, change: null, action: entry.action, reason: entry.reason }
+            : {
+                outcome: entry.outcome,
+                change: presentChange(entry.change),
+                action: entry.change.action,
+                reason: null,
+              },
+        ),
+        moreChanges: run.results.length - shown.length,
+        notices: run.notices,
+      });
     },
   );
 

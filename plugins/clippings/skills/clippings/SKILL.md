@@ -12,7 +12,7 @@ granted.
 | Scope | Tools |
 | --- | --- |
 | Read | `save_clipping`, `search_clippings`, `list_recent`, `list_clippings`, `related_clippings` |
-| `clippings:write` | the read tools plus `save_note`, `get_clipping`, `get_page_text`, `update_clipping`, `list_tags`, `tag_clippings`, `rename_tag`, `merge_tag`, `delete_clipping`, `restore_clipping`, and the librarian's `set_tag_color`, `list_folders`, `create_folder`, `move_to_folder`, `link_items`, `list_suggestions`, `apply_suggestion`, `dismiss_suggestion`, `undo_change` |
+| `clippings:write` | the read tools plus `save_note`, `get_clipping`, `get_page_text`, `update_clipping`, `list_tags`, `tag_clippings`, `rename_tag`, `merge_tag`, `delete_clipping`, `restore_clipping`, and the librarian's `set_tag_color`, `list_folders`, `create_folder`, `move_to_folder`, `link_items`, `run_librarian`, `list_suggestions`, `apply_suggestion`, `dismiss_suggestion`, `undo_change` |
 
 `list_clippings` takes `tags`, `since`, `until`, `pinned` and `cursor`; follow `cursor` until the
 list ends. If a tool you need is missing, tell the user it needs the `clippings:write` scope.
@@ -64,6 +64,14 @@ you can do the same in chat. Every change goes through the same log, so none is 
 - `link_items` needs a one-line reason the user would find useful.
 - Use `dryRun: true` on `set_tag_color`, `create_folder`, `move_to_folder` and `link_items` to show
   the user what would change before doing it.
+- `run_librarian` does the whole tidy-up the weekly job does (merge near-duplicate tags, file
+  everything in topic folders, link related items, write topic pages). It reads the whole library
+  and plans with a model, so it takes a minute and spends a little of the user's daily budget: run
+  it only when asked. It is a dry run unless `dryRun` is false; show the user the `changes` first
+  (with `notices`, which flag tags that may be too broad), and only then run it for real. A real run
+  applies what the librarian is sure of and leaves the rest in `list_suggestions`. The user's first
+  run only ever makes suggestions (`firstRun`). If `capReached` is true the day's budget ran out
+  and the list is partial.
 - Nothing here deletes a clipping or note.
 
 ### Review suggestions

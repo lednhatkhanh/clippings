@@ -15,6 +15,7 @@ import { InvalidTagsError, TagNameTakenError } from "../clippings/service.ts";
 import { createDatabase } from "../database.ts";
 import { clippings, folders, libraryChanges, tags } from "../schema.ts";
 import { gateChange } from "./gate.ts";
+import { readLibraryView, type LibraryView } from "./library.ts";
 import {
   effectiveAt,
   latestChangeAt,
@@ -515,7 +516,41 @@ export function createLibrarianService({ pool, clock }: LibrarianServiceDeps) {
     return folder ?? null;
   }
 
+  /** The user's library in the compact form the librarian plans from. */
+  async function readLibrary(userId: string): Promise<LibraryView> {
+    return readLibraryView(db, userId);
+  }
+
+  /**
+   * Whether the librarian has ever logged a change for the user, applied or only suggested: the
+   * mark of a first run that has happened. A first run that proposes nothing leaves no mark.
+   */
+  async function hasLibrarianRun(userId: string): Promise<boolean> {
+    const [row] = await db
+      .select({ id: libraryChanges.id })
+      .from(libraryChanges)
+      .where(and(eq(libraryChanges.userId, userId), eq(libraryChanges.actor, "librarian")))
+      .limit(1);
+    return row !== undefined;
+  }
+
+  /**
+   * The users the weekly librarian job runs for: everyone with at least one clipping or note not
+   * deleted. The one query here across users; it returns ids only.
+   */
+  async function listUsersWithLibrary(): Promise<string[]> {
+    const rows = await db
+      .selectDistinct({ userId: clippings.userId })
+      .from(clippings)
+      .where(sql`${clippings.deletedAt} is null`)
+      .orderBy(clippings.userId);
+    return rows.map((row) => row.userId);
+  }
+
   return {
+    readLibrary,
+    hasLibrarianRun,
+    listUsersWithLibrary,
     proposeChange,
     proposeChanges,
     listSuggestions,

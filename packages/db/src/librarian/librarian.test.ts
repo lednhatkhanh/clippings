@@ -1090,4 +1090,94 @@ describe.skipIf(!TEST_DATABASE_URL)("the librarian", () => {
       expect(rows.every((row) => row.applied_at)).toBe(true);
     });
   });
+  describe("the library view", () => {
+    it("lists the user's live items with their tags and folder, and their tags with usage", async () => {
+      const first = await clip(ana, "a", ["css", "web"]);
+      await clip(ana, "b", ["css"]);
+      const gone = await clip(ana, "c", ["css"]);
+      await fixture.service.deleteClipping(ana, gone);
+      await note(ana, "Remember the grid");
+      const css = await tagId(ana, "css");
+      const folder = await asUser(ana, {
+        action: "create_folder",
+        name: "Frontend",
+        color: "blue",
+        reason: "Asked",
+      });
+      const folderId = folder.targetIds[0]!;
+      await asUser(ana, {
+        action: "move_to_folder",
+        itemKind: "clipping",
+        itemId: first,
+        folderId,
+        reason: "Asked",
+      });
+      await asUser(ana, {
+        action: "write_topic_page",
+        tagId: css,
+        body: "CSS notes",
+        reason: "Asked",
+      });
+
+      const view = await librarian().readLibrary(ana);
+
+      expect(view.totalItems).toBe(3);
+      expect(view.items).toHaveLength(3);
+      expect(view.items.find((item) => item.id === first)).toMatchObject({
+        kind: "link",
+        tags: ["css", "web"],
+        folderId,
+      });
+      expect(view.items.some((item) => item.id === gone)).toBe(false);
+      expect(view.items.find((item) => item.kind === "note")).toMatchObject({
+        summary: "Remember the grid",
+        tags: [],
+        folderId: null,
+      });
+      expect(view.tags).toMatchObject([
+        { name: "css", usage: 2, hasTopicPage: true },
+        { name: "web", usage: 1, hasTopicPage: false },
+      ]);
+      expect(view.folders).toEqual([{ id: folderId, name: "Frontend", color: "blue" }]);
+    });
+
+    it("keeps users apart", async () => {
+      await clip(ana, "a", ["css"]);
+      await clip(ben, "b", ["rust"]);
+      await asUser(ben, { action: "create_folder", name: "Systems", reason: "Asked" });
+
+      const view = await librarian().readLibrary(ana);
+
+      expect(view.items).toHaveLength(1);
+      expect(view.tags.map((tag) => tag.name)).toEqual(["css"]);
+      expect(view.folders).toEqual([]);
+    });
+  });
+
+  describe("running the librarian", () => {
+    it("knows a first run has happened once the librarian has logged a change, applied or suggested", async () => {
+      const t = await clip(ana, "a", ["css"]).then(() => tagId(ana, "css"));
+      expect(await librarian().hasLibrarianRun(ana)).toBe(false);
+
+      await asUser(ana, { action: "set_tag_color", tagId: t, color: "red", reason: "Asked" });
+      expect(await librarian().hasLibrarianRun(ana)).toBe(false);
+
+      await byLibrarian(ana, { ...low, action: "rename_tag", tagId: t, name: "styles" });
+
+      expect(await librarian().hasLibrarianRun(ana)).toBe(true);
+      expect(await librarian().hasLibrarianRun(ben)).toBe(false);
+    });
+
+    it("lists the users with a clipping or note not deleted", async () => {
+      const gone = await clip(ben, "b");
+      await fixture.service.deleteClipping(ben, gone);
+      const cleo = await fixture.createUser("cleo");
+      await note(cleo, "A thought");
+      await clip(ana, "a");
+
+      const users = await librarian().listUsersWithLibrary();
+
+      expect(users.toSorted()).toEqual([ana, cleo].toSorted());
+    });
+  });
 });
