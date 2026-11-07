@@ -257,6 +257,40 @@ describe.skipIf(!TEST_DATABASE_URL)("the librarian", () => {
       expect(await tagRow(t)).toMatchObject({ color: "red", color_overridden: true });
     });
 
+    it("keeps a color set through the tag service: the librarian neither recolors nor moves it away", async () => {
+      await clip(ana, "a", ["css"]);
+      const t = await tagId(ana, "css");
+      await fixture.service.setTagColor(ana, t, "red");
+      const folder = await asUser(ana, {
+        action: "create_folder",
+        name: "Web",
+        color: "teal",
+        reason: "x",
+      });
+      fixture.advanceClock(1000);
+
+      const recolor = await byLibrarian(ana, {
+        ...high,
+        action: "set_tag_color",
+        tagId: t,
+        color: "green",
+      });
+      await byLibrarian(ana, {
+        ...high,
+        action: "move_to_folder",
+        itemKind: "tag",
+        itemId: t,
+        folderId: folder.targetIds[0]!,
+      });
+
+      expect(recolor.outcome).toBe("skipped");
+      expect(await tagRow(t)).toMatchObject({
+        color: "red",
+        color_overridden: true,
+        folder_id: folder.targetIds[0],
+      });
+    });
+
     it("skips a duplicate folder name (ignoring case) and a move to where the item already is", async () => {
       const c = await clip(ana, "a");
       const folder = await asUser(ana, { action: "create_folder", name: "Web", reason: "x" });
@@ -708,6 +742,41 @@ describe.skipIf(!TEST_DATABASE_URL)("the librarian", () => {
       );
       expect(await fixture.service.findTagByName(ana, "css")).not.toBeNull();
     });
+
+    it("refuses to undo a merge whose new tags a later fold into the same tag relied on, until that fold is undone", async () => {
+      const x = await clip(ana, "x", ["a", "c"]);
+      const a = await tagId(ana, "a");
+      const c = await tagId(ana, "c");
+      const t = await clip(ana, "t", ["t"]).then(() => tagId(ana, "t"));
+      const mergeA = await asUser(ana, {
+        action: "merge_tag",
+        sourceId: a,
+        targetId: t,
+        reason: "x",
+      });
+      fixture.advanceClock(1000);
+      const foldC = await asUser(ana, {
+        action: "fold_tag",
+        sourceId: c,
+        targetId: t,
+        reason: "x",
+      });
+
+      await expect(librarian().undoChange(ana, mergeA.id)).rejects.toBeInstanceOf(
+        ChangeConflictError,
+      );
+      expect(await fixture.service.findTagByName(ana, "a")).toBeNull();
+      expect((await fixture.service.getClipping(ana, x))?.tags.map((tag) => tag.name)).toEqual([
+        "t",
+      ]);
+
+      await librarian().undoChange(ana, foldC.id);
+      await librarian().undoChange(ana, mergeA.id);
+      expect((await fixture.service.getClipping(ana, x))?.tags.map((tag) => tag.name)).toEqual([
+        "a",
+        "c",
+      ]);
+    });
   });
 
   describe("undo", () => {
@@ -1155,14 +1224,16 @@ describe.skipIf(!TEST_DATABASE_URL)("the librarian", () => {
   });
 
   describe("running the librarian", () => {
-    it("knows a first run has happened once the librarian has logged a change, applied or suggested", async () => {
+    it("knows a first run has finished only once it is marked, whatever the log holds", async () => {
       const t = await clip(ana, "a", ["css"]).then(() => tagId(ana, "css"));
       expect(await librarian().hasLibrarianRun(ana)).toBe(false);
 
-      await asUser(ana, { action: "set_tag_color", tagId: t, color: "red", reason: "Asked" });
+      // A first run cut off after it stored a suggestion is still a first run.
+      await byLibrarian(ana, { ...low, action: "rename_tag", tagId: t, name: "styles" });
       expect(await librarian().hasLibrarianRun(ana)).toBe(false);
 
-      await byLibrarian(ana, { ...low, action: "rename_tag", tagId: t, name: "styles" });
+      await librarian().markLibrarianRun(ana);
+      await librarian().markLibrarianRun(ana);
 
       expect(await librarian().hasLibrarianRun(ana)).toBe(true);
       expect(await librarian().hasLibrarianRun(ben)).toBe(false);

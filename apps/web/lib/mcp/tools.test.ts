@@ -1479,15 +1479,7 @@ describe.skipIf(!TEST_DATABASE_URL)("the MCP tools", () => {
 
         it("applies what the librarian is sure of after the first run, and a merge can be undone", async () => {
           const { a } = await seedLibrary(ada);
-          // The first run has happened: the librarian has logged something for this user.
-          const css = await fixture.service.findTagByName(ada.userId, "css");
-          await fixture.librarian.proposeChange(ada.userId, "librarian", {
-            action: "set_tag_color",
-            tagId: css!.id,
-            color: "blue",
-            reason: "Styling is blue",
-            confidence: "low",
-          });
+          await fixture.librarian.markLibrarianRun(ada.userId);
           const dry = await run(ada);
 
           const real = await run(ada, { dryRun: false });
@@ -1506,6 +1498,63 @@ describe.skipIf(!TEST_DATABASE_URL)("the MCP tools", () => {
           expect(undone.isError).toBe(false);
           expect(await fixture.service.findTagByName(ada.userId, "css layout")).not.toBeNull();
           expect(await tagNames(ada, a.id)).toEqual(["css", "css layout"]);
+        });
+
+        it("treats a first run cut off partway as a first run when QStash redelivers it", async () => {
+          await seedLibrary(ada);
+          const flaky = createLibrarianRunner({
+            librarian: {
+              ...fixture.librarian,
+              proposeChanges: async (userId, actor, proposals, options) => {
+                await fixture.librarian.proposeChanges(
+                  userId,
+                  actor,
+                  proposals.slice(0, 1),
+                  options,
+                );
+                throw new Error("cut off");
+              },
+            },
+            planner: {
+              plan: async (_userId, index) => ({
+                plan: planFor(index),
+                capReached: false,
+                notices: [],
+                costMicros: 0,
+              }),
+            },
+            now: () => fixture.clock.now(),
+          });
+          const deliver = (jobRunner: typeof runner) =>
+            handleLibrarianJob(
+              new Request("https://clippings.test/api/jobs/librarian", {
+                method: "POST",
+                headers: { "Upstash-Signature": "signed" },
+                body: JSON.stringify({ userId: ada.userId }),
+              }),
+              {
+                url: "https://clippings.test/api/jobs/librarian",
+                receiver: { verify: async () => true },
+                runner: jobRunner,
+              },
+            );
+          const statuses = async () =>
+            (
+              await fixture.pool.query(
+                `select distinct status from library_changes where user_id = $1`,
+                [ada.userId],
+              )
+            ).rows.map((row) => row.status);
+
+          expect((await deliver(flaky)).status).toBe(500);
+          const redelivered = await deliver(runner);
+
+          expect(redelivered.status).toBe(200);
+          expect(await redelivered.json()).toMatchObject({ firstRun: true, applied: 0 });
+          expect(await statuses()).toEqual(["suggested"]);
+          expect(await fixture.service.findTagByName(ada.userId, "css layout")).not.toBeNull();
+          // The finished run is the first one; the next may apply what it is sure of.
+          expect((await run(ada)).firstRun).toBe(false);
         });
 
         it("plans from the caller's library only", async () => {

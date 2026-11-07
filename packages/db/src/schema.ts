@@ -661,6 +661,9 @@ export const userSettings = pgTable(
     researchJobsPerDay: integer("research_jobs_per_day")
       .notNull()
       .default(AUTOMATION_DEFAULTS.researchJobsPerDay),
+    // When the user's first librarian run finished, which stored its suggestions for them to
+    // judge. Null until then, so a first run cut off partway and redelivered is still a first run.
+    librarianFirstRunAt: timestamptz("librarian_first_run_at"),
     // No default: the service stamps it from its clock.
     updatedAt: timestamptz("updated_at").notNull(),
   },

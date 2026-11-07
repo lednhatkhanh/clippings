@@ -215,6 +215,32 @@ describe.skipIf(!TEST_DATABASE_URL)("migrate", () => {
     });
   });
 
+  it("counts every tag color set before the migration as the user's choice", async () => {
+    const { folder, left } = foldersBefore("_bent_the_leader");
+    await migrate({ connectionString: database.url, migrationsFolder: folder });
+    await withClient(database.url, async (client) => {
+      await client.query(
+        `insert into "user" ("id", "name", "email", "emailVerified") values ('u1', 'U', 'u@example.com', true)`,
+      );
+      await client.query(
+        `insert into tags (user_id, name, color, created_at)
+         values ('u1', 'chosen', 'red', now()), ('u1', 'plain', 'none', now())`,
+      );
+    });
+
+    expect(await migrate({ connectionString: database.url })).toEqual(left);
+
+    await withClient(database.url, async (client) => {
+      const { rows } = await client.query(
+        `select name, color, color_overridden from tags order by name`,
+      );
+      expect(rows).toEqual([
+        { name: "chosen", color: "red", color_overridden: true },
+        { name: "plain", color: "none", color_overridden: false },
+      ]);
+    });
+  });
+
   it("lets a note have a body and no URL, and refuses any other mix of link and note", async () => {
     await migrate({ connectionString: database.url });
     await withClient(database.url, async (client) => {

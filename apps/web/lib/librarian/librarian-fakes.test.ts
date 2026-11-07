@@ -188,15 +188,7 @@ describe.skipIf(!TEST_DATABASE_URL)("the librarian run against the local Anthrop
 
   it("applies high-confidence changes, and a merge can be undone", async () => {
     await seed(ana);
-    // Mark the first run as done without proposing the ideas the fake will.
-    const tag = await fixture.service.findTagByName(ana, "Rust");
-    await fixture.librarian.proposeChange(ana, "librarian", {
-      action: "set_tag_color",
-      tagId: tag!.id,
-      color: "red",
-      reason: "Rust is red",
-      confidence: "low",
-    });
+    await fixture.librarian.markLibrarianRun(ana);
 
     const dry = await runner.run(ana, { dryRun: true });
     const real = await runner.run(ana, { dryRun: false });

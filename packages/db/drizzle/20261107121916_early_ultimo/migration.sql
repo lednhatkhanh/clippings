@@ -1,0 +1,1 @@
+ALTER TABLE "user_settings" ADD COLUMN "librarian_first_run_at" timestamp with time zone;

@@ -12,7 +12,8 @@ export interface LibrarianRun {
   dryRun: boolean;
   /**
    * The user's first run: every change is a suggestion, applied or reported as one, whatever the
-   * confidence says, so they can judge the librarian before it touches anything.
+   * confidence says, so they can judge the librarian before it touches anything. It stays the
+   * first run until one finishes, so a run cut off partway and redelivered only suggests too.
    */
   firstRun: boolean;
   /** The model gateway stopped the run (the day's cap): what was planned before is included. */
@@ -24,6 +25,9 @@ export interface LibrarianRun {
   notices: string[];
   costMicros: number;
 }
+
+const logged = (result: ProposalResult) =>
+  result.outcome === "applied" || result.outcome === "suggested";
 
 export type LibrarianRunner = ReturnType<typeof createLibrarianRunner>;
 
@@ -40,7 +44,10 @@ export function createLibrarianRunner({
   planner,
   now,
 }: {
-  librarian: Pick<LibrarianService, "readLibrary" | "hasLibrarianRun" | "proposeChanges">;
+  librarian: Pick<
+    LibrarianService,
+    "readLibrary" | "hasLibrarianRun" | "markLibrarianRun" | "proposeChanges"
+  >;
   planner: Planner;
   now: () => Date;
 }) {
@@ -70,6 +77,9 @@ export function createLibrarianRunner({
         dryRun,
         suggestOnly: firstRun,
       });
+      // Marked only once every change is written, and only when the run left something for the
+      // user to judge: a run the day's cap stopped before it planned anything is still the first.
+      if (firstRun && !dryRun && results.some(logged)) await librarian.markLibrarianRun(userId);
       return {
         dryRun,
         firstRun,

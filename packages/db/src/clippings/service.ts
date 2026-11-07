@@ -949,14 +949,15 @@ export function createClippingsService({
 
   /**
    * Gives the tag one of `TAG_COLORS`, by name. Returns the tag as it now stands, or null when
-   * the user has no such tag. Throws on a name that isn't a tag color.
+   * the user has no such tag. Throws on a name that isn't a tag color. A color set here is the
+   * user's choice, so the librarian leaves it alone.
    */
   async function setTagColor(userId: string, tagId: string, color: string): Promise<Tag | null> {
     if (!isTagColor(color)) throw new InvalidTagColorError(color);
     if (!UUID.test(tagId)) return null;
     const [updated] = await db
       .update(tags)
-      .set({ color })
+      .set({ color, colorOverridden: true })
       .where(and(eq(tags.id, tagId), eq(tags.userId, userId)))
       .returning(tagColumns);
     return updated ?? null;

@@ -36,6 +36,7 @@ CREATE TABLE "topic_pages" (
 ALTER TABLE "clippings" ADD COLUMN "folder_id" uuid;--> statement-breakpoint
 ALTER TABLE "library_changes" ADD COLUMN "applied_at" timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "tags" ADD COLUMN "color_overridden" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+UPDATE "tags" SET "color_overridden" = true WHERE "color" <> 'none';--> statement-breakpoint
 ALTER TABLE "tags" ADD COLUMN "folder_id" uuid;--> statement-breakpoint
 CREATE INDEX "clippings_folder_idx" ON "clippings" ("folder_id") WHERE "folder_id" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX "folders_user_id_name_key" ON "folders" ("user_id",lower("name"));--> statement-breakpoint

@@ -13,7 +13,7 @@ import {
 import type { Clock } from "../clippings/ports.ts";
 import { InvalidTagsError, TagNameTakenError } from "../clippings/service.ts";
 import { createDatabase } from "../database.ts";
-import { clippings, folders, libraryChanges, tags } from "../schema.ts";
+import { clippings, folders, libraryChanges, tags, userSettings } from "../schema.ts";
 import { gateChange } from "./gate.ts";
 import { readLibraryView, type LibraryView } from "./library-view.ts";
 import {
@@ -119,6 +119,44 @@ const toChange = (row: ChangeRow): LibraryChange => ({
   reason: row.reason,
   createdAt: formatIsoUtc(row.createdAt),
 });
+
+const isMergeAction = (action: string) => action === "merge_tag" || action === "fold_tag";
+
+/**
+ * Whether a merge or fold applied after `since` into the same tag carried a clipping that this
+ * merge only gave the tag. That later change saw the tag already on the clipping and added
+ * nothing, so it now depends on the tag staying there: taking it off would leave the clipping
+ * without what the later change folded in.
+ */
+async function laterMergeLeansOn(
+  tx: Transaction,
+  userId: string,
+  row: ChangeRow,
+  since: Date,
+): Promise<boolean> {
+  const targetId = row.targetIds[1];
+  const added = (row.before as { addedToTarget?: string[] } | null)?.addedToTarget ?? [];
+  if (!isMergeAction(row.action) || !targetId || added.length === 0) return false;
+  const later = await tx
+    .select({ before: libraryChanges.before })
+    .from(libraryChanges)
+    .where(
+      and(
+        eq(libraryChanges.userId, userId),
+        sql`${libraryChanges.id} <> ${row.id}::uuid`,
+        eq(libraryChanges.status, "applied"),
+        inArray(libraryChanges.action, ["merge_tag", "fold_tag"]),
+        sql`(${libraryChanges.targetIds})[2] = ${targetId}::uuid`,
+        sql`coalesce(${libraryChanges.appliedAt}, ${libraryChanges.createdAt}) > ${since}`,
+      ),
+    );
+  const addedSet = new Set(added);
+  return later.some((change) =>
+    ((change.before as { clippingIds?: string[] } | null)?.clippingIds ?? []).some((id) =>
+      addedSet.has(id),
+    ),
+  );
+}
 
 /**
  * The librarian: the one code path that reshapes a user's library (tag colors, folders, links,
@@ -463,6 +501,12 @@ export function createLibrarianService({ pool, clock }: LibrarianServiceDeps) {
         );
       }
 
+      if (await laterMergeLeansOn(tx, userId, row, since)) {
+        throw new ChangeConflictError(
+          "A later merge into the same tag relies on the clippings this one tagged, so this one can't be undone on its own",
+        );
+      }
+
       await undoEffect(tx, row);
       const [undone] = await tx
         .update(libraryChanges)
@@ -522,16 +566,31 @@ export function createLibrarianService({ pool, clock }: LibrarianServiceDeps) {
   }
 
   /**
-   * Whether the librarian has ever logged a change for the user, applied or only suggested: the
-   * mark of a first run that has happened. A first run that proposes nothing leaves no mark.
+   * Whether the user's first librarian run has finished (`markLibrarianRun`). The change log
+   * can't say: a first run cut off partway leaves rows behind, and its redelivery must still only
+   * suggest.
    */
   async function hasLibrarianRun(userId: string): Promise<boolean> {
     const [row] = await db
-      .select({ id: libraryChanges.id })
-      .from(libraryChanges)
-      .where(and(eq(libraryChanges.userId, userId), eq(libraryChanges.actor, "librarian")))
-      .limit(1);
-    return row !== undefined;
+      .select({ at: userSettings.librarianFirstRunAt })
+      .from(userSettings)
+      .where(eq(userSettings.userId, userId));
+    return row?.at != null;
+  }
+
+  /**
+   * Records that the user's first librarian run finished, so later runs may apply what they are
+   * sure of. Keeps the first time if called again.
+   */
+  async function markLibrarianRun(userId: string): Promise<void> {
+    const now = clock.now();
+    await db
+      .insert(userSettings)
+      .values({ userId, librarianFirstRunAt: now, updatedAt: now })
+      .onConflictDoUpdate({
+        target: userSettings.userId,
+        set: { librarianFirstRunAt: sql`coalesce(${userSettings.librarianFirstRunAt}, ${now})` },
+      });
   }
 
   /**
@@ -550,6 +609,7 @@ export function createLibrarianService({ pool, clock }: LibrarianServiceDeps) {
   return {
     readLibrary,
     hasLibrarianRun,
+    markLibrarianRun,
     listUsersWithLibrary,
     proposeChange,
     proposeChanges,
