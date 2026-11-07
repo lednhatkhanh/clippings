@@ -104,6 +104,8 @@ function PaletteCommands({
   const { tags } = useTags();
   // Set while a clipping's detail page is open.
   const clipping = useCurrentClipping();
+  // A note has no page to share or link to.
+  const pageUrl = clipping?.url ?? null;
   const canShare = useCanShare();
 
   return (
@@ -125,28 +127,30 @@ function PaletteCommands({
           >
             {clipping.pinned ? "Unpin clipping" : "Pin clipping"}
           </Command>
-          {canShare ? (
+          {pageUrl !== null && canShare ? (
             <Command
               id="clipping:share"
               icon={Share2}
               onAction={() => {
                 onNavigate();
-                void shareLinkWithToast({ title: clipping.title, url: clipping.url });
+                void shareLinkWithToast({ title: clipping.title, url: pageUrl });
               }}
             >
               Share clipping
             </Command>
           ) : null}
-          <Command
-            id="clipping:copy-link"
-            icon={Copy}
-            onAction={() => {
-              onNavigate();
-              void copyLinkWithToast(clipping.url);
-            }}
-          >
-            Copy link to the page
-          </Command>
+          {pageUrl !== null ? (
+            <Command
+              id="clipping:copy-link"
+              icon={Copy}
+              onAction={() => {
+                onNavigate();
+                void copyLinkWithToast(pageUrl);
+              }}
+            >
+              Copy link to the page
+            </Command>
+          ) : null}
         </CommandGroup>
       ) : null}
       {tags.length > 0 ? (

@@ -9,7 +9,9 @@ It costs nothing at this scale: 200M free tokens, then $0.06 per million
 ([embeddings](https://docs.voyageai.com/docs/embeddings)).
 
 We embed what the page is (title, summary, excerpt), not the user's note, so editing a note never
-has to call the provider. Keyword search still covers the note.
+has to call the provider. Keyword search still covers the note. (This is about a link's comment. A
+note-kind item's body is embedded, and embedded again when edited: see
+[ADR 0005](0005-notes-embed-their-body.md).)
 
 There is no ANN index: ordering one user's rows by exact cosine distance (`<=>`) is fast at a few
 thousand rows, and exact results need no recall tuning. Keyword and vector rankings merge in SQL by

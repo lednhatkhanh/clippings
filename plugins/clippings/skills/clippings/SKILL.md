@@ -12,7 +12,7 @@ granted.
 | Scope | Tools |
 | --- | --- |
 | Read | `save_clipping`, `search_clippings`, `list_recent`, `list_clippings`, `related_clippings` |
-| `clippings:write` | the read tools plus `get_clipping`, `get_page_text`, `update_clipping`, `list_tags`, `tag_clippings`, `rename_tag`, `merge_tag`, `delete_clipping`, `restore_clipping` |
+| `clippings:write` | the read tools plus `save_note`, `get_clipping`, `get_page_text`, `update_clipping`, `list_tags`, `tag_clippings`, `rename_tag`, `merge_tag`, `delete_clipping`, `restore_clipping` |
 
 `list_clippings` takes `tags`, `since`, `until`, `pinned` and `cursor`; follow `cursor` until the
 list ends. If a tool you need is missing, tell the user it needs the `clippings:write` scope.

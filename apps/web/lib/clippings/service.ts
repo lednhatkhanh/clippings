@@ -20,5 +20,6 @@ export function getClippings(): ClippingsService {
     fetcher: createPageFetcher(),
     summarizer: createSummarizer(getGateway()),
     embedder: createEmbedder(getGateway()),
+    budget: { canSpend: (userId, jobKind) => getGateway().canSpend(userId, jobKind) },
   }));
 }

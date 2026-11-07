@@ -407,6 +407,7 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
       "merge_tag",
       "rename_tag",
       "restore_clipping",
+      "save_note",
       "tag_clippings",
       "update_clipping",
     ];

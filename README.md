@@ -86,8 +86,9 @@ TEST_DATABASE_URL=postgres://postgres:postgres@localhost:55432/postgres pnpm tes
 
 The MCP server is at `<BETTER_AUTH_URL>/mcp`. Every client gets
 `save_clipping`, `search_clippings`, `list_recent`, `list_clippings` and `related_clippings`; one
-that asks for the write scope also gets `get_clipping`, `update_clipping`, `tag_clippings`,
-`list_tags`, `rename_tag`, `merge_tag`, `delete_clipping` and `restore_clipping`.
+that asks for the write scope also gets `save_note` (a text note with no URL, in Markdown),
+`get_clipping`, `update_clipping`, `tag_clippings`, `list_tags`, `rename_tag`, `merge_tag`,
+`delete_clipping` and `restore_clipping`.
 
 The app has no chat or digest of its own: to ask questions of your library or review the week, use
 Claude over this connector. The old `/ask` and `/digest` URLs redirect to the library.

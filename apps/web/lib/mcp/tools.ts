@@ -4,10 +4,12 @@ import { addDays, addMilliseconds, isValid, parseISO } from "date-fns";
 import * as z from "zod";
 
 import {
+  EmptyNoteBodyError,
   InvalidCursorError,
   InvalidTagsError,
   InvalidUrlError,
   MAX_BULK_CLIPPINGS,
+  NoteBodyTooLongError,
   NoteTooLongError,
   TagNameTakenError,
   TitleTooLongError,
@@ -15,8 +17,10 @@ import {
   type ClippingsService,
 } from "@clippings/db";
 import {
+  CLIPPING_KINDS,
   CLIPPING_SOURCES,
   CLIPPING_STATUSES,
+  MAX_NOTE_BODY_LENGTH,
   MAX_NOTE_LENGTH,
   MAX_QUERY_LENGTH,
   MAX_TAG_LENGTH,
@@ -36,6 +40,7 @@ export interface McpCaller {
 export type McpClippings = Pick<
   ClippingsService,
   | "saveClipping"
+  | "saveNote"
   | "searchClippings"
   | "listClippings"
   | "listSavedClippings"
@@ -84,6 +89,7 @@ export function callerFrom(ctx: ServerContext): McpCaller {
 function present(clipping: Clipping, appOrigin: string) {
   return {
     id: clipping.id,
+    kind: clipping.kind,
     url: clipping.url,
     title: clipping.title,
     note: clipping.note || null,
@@ -97,11 +103,15 @@ function present(clipping: Clipping, appOrigin: string) {
   };
 }
 
-/** One clipping in full, for `get_clipping` and the write tools: the page's excerpt and, when renamed, its own title. */
+/**
+ * One clipping in full, for `get_clipping` and the write tools: the page's excerpt, a note's
+ * text and, when renamed, its own title.
+ */
 function presentFull(clipping: Clipping, appOrigin: string) {
   return {
     ...present(clipping, appOrigin),
     excerpt: clipping.excerpt,
+    body: clipping.body,
     ...(clipping.titleEdited ? { pageTitle: clipping.pageTitle } : {}),
   };
 }
@@ -109,7 +119,8 @@ function presentFull(clipping: Clipping, appOrigin: string) {
 /** `present`, as the tools' output schemas describe it. */
 const clippingOutput = z.object({
   id: z.string(),
-  url: z.string(),
+  kind: z.enum(CLIPPING_KINDS).describe("A saved web page (link) or a text the user wrote (note)."),
+  url: z.string().nullable().describe("The page's address; null for a note, which has none."),
   title: z.string().describe("The title the user sees: their own when they renamed it."),
   note: z.string().nullable(),
   summary: z.string().nullable(),
@@ -124,6 +135,10 @@ const clippingOutput = z.object({
 /** `presentFull`, as the tools' output schemas describe it. */
 const fullClippingOutput = clippingOutput.extend({
   excerpt: z.string().nullable(),
+  body: z
+    .string()
+    .nullable()
+    .describe("A note's text, as the Markdown it was written in; null for a link."),
   pageTitle: z.string().optional().describe("The page's own title, when the user renamed it."),
 });
 
@@ -366,6 +381,47 @@ export function registerClippingTools(
   if (!write) return;
 
   server.registerTool(
+    "save_note",
+    {
+      title: "Save a note",
+      description: `Save a note to the user's Clippings: text with no web page, such as a thought, a plan or something worked out in this chat. Write the body in Markdown (headings, lists, tables, task lists and code blocks are shown formatted; raw HTML is shown as text, never run). Clippings titles the note from its first line, then reads it in the background to summarize it and find it again by meaning. A note is not deduplicated: saving the same text twice makes two notes. To save a web page use save_clipping. Calling list_tags first and reusing the user's tags keeps their vocabulary consistent.`,
+      inputSchema: z.object({
+        body: z
+          .string()
+          .min(1)
+          .max(MAX_NOTE_BODY_LENGTH)
+          .describe(
+            `The note's text as Markdown, at most ${MAX_NOTE_BODY_LENGTH} characters. Start with a line that works as its title.`,
+          ),
+        tags: z
+          .array(z.string().max(MAX_TAG_LENGTH))
+          .max(MAX_TAGS_PER_CLIPPING)
+          .optional()
+          .describe(`Tags to put on the note, at most ${MAX_TAGS_PER_CLIPPING}.`),
+      }),
+      outputSchema: fullClippingResultOutput,
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    },
+    async ({ body, tags }, ctx) => {
+      const caller = callerFrom(ctx);
+      try {
+        const saved = await clippings.saveNote(caller.userId, {
+          body,
+          tags,
+          source: "mcp",
+          clientId: caller.clientId,
+        });
+        return result({ clipping: presentFull(saved, appOrigin) });
+      } catch (error) {
+        if (error instanceof EmptyNoteBodyError) return failure("A note needs some text.");
+        if (error instanceof NoteBodyTooLongError) return failure("That note is too long.");
+        if (error instanceof InvalidTagsError) return failure(`${error.message}.`);
+        throw error;
+      }
+    },
+  );
+
+  server.registerTool(
     "get_clipping",
     {
       title: "Get a clipping",
@@ -590,7 +646,7 @@ export function registerClippingTools(
       outputSchema: z.object({
         deleted: z.boolean(),
         id: z.string(),
-        url: z.string(),
+        url: z.string().nullable(),
         title: z.string(),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },

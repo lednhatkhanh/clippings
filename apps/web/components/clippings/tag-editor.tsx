@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import {
   acceptTagSuggestionAction,
   dismissTagSuggestionsAction,
+  undoAutoTagAction,
   updateClippingTagsAction,
 } from "@/app/(app)/actions.ts";
 import { useOnline } from "@/components/online-status.tsx";
@@ -12,6 +13,7 @@ import { hrefWithTag, loadBrowseParams } from "@/lib/clippings/browse-params.ts"
 import { MAX_TAG_LENGTH, type Tag } from "@clippings/shared";
 import { TagPicker, toasts } from "@clippings/ui";
 
+import { AutoAppliedTags, type AutoAppliedTagItem } from "./auto-applied-tags.tsx";
 import { SaveStatus, type SaveState } from "./save-status.tsx";
 import { visibleSuggestions } from "./suggestions.ts";
 import { TagSuggestions } from "./tag-suggestions.tsx";
@@ -36,16 +38,21 @@ export function TagEditor({
   clippingId,
   tags: initialTags,
   suggestedTags = [],
+  autoApplied = [],
 }: {
   clippingId: string;
   tags: Tag[];
   suggestedTags?: readonly string[];
+  /** Tags auto-tagging added, which the user can take back. */
+  autoApplied?: readonly AutoAppliedTagItem[];
 }) {
   const [value, setValue] = useState(() => initialTags.map((tag) => tag.name));
   // Tags the clipping carried or gained here, for their colors before the rest load.
   const [carried, setCarried] = useState(initialTags);
   // Suggestions accepted or dismissed here, hidden before the server has answered.
   const [gone, setGone] = useState<string[]>([]);
+  // Automatic tags taken back here, hidden before the server has answered.
+  const [undone, setUndone] = useState<string[]>([]);
   const [state, setState] = useState<SaveState>("idle");
   const { tags, refresh } = useTags();
   const online = useOnline();
@@ -104,6 +111,26 @@ export function TagEditor({
     toasts.show({ message: "Couldn't dismiss the suggestions." });
   }
 
+  function undo(item: AutoAppliedTagItem) {
+    setUndone((current) => [...current, item.changeId]);
+    // Queued behind the tag saves, so a save in flight can't put the tag back.
+    queue.current = queue.current.then(async () => {
+      const outcome = await undoAutoTagAction(item.changeId).catch(() => null);
+      if (outcome?.status === "undone") {
+        refresh();
+        setCarried((current) => current.filter((tag) => tag.id !== outcome.tagId));
+        const gone = (name: string) => name.toLowerCase() !== item.name.toLowerCase();
+        setValue((current) => current.filter(gone));
+        latest.current = latest.current.filter(gone);
+        return;
+      }
+      setUndone((current) => current.filter((id) => id !== item.changeId));
+      toasts.show({ message: outcome?.message ?? "Couldn't undo that tag. Try again." });
+    });
+  }
+
+  const receipts = autoApplied.filter((item) => !undone.includes(item.changeId));
+
   return (
     <div className="flex flex-col gap-1">
       <TagPicker
@@ -122,6 +149,7 @@ export function TagEditor({
         onDismiss={(name) => void dismiss([name])}
         onDismissAll={() => void dismiss()}
       />
+      <AutoAppliedTags items={receipts} isDisabled={!online} onUndo={undo} />
       <SaveStatus state={state} text={STATUS_TEXT[state]} />
     </div>
   );

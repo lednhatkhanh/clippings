@@ -24,19 +24,23 @@ export {
   type SkipReason,
 } from "./bookmarks.ts";
 export {
+  CLIPPING_KINDS,
   CLIPPING_SOURCES,
   CLIPPING_STATUSES,
   clippingStatusIdsSchema,
+  MAX_NOTE_BODY_LENGTH,
   MAX_NOTE_LENGTH,
   MAX_PAGE_TEXT,
   MAX_STATUS_IDS,
   MAX_TITLE_LENGTH,
   type Clipping,
+  type ClippingKind,
   type ClippingSource,
   type ClippingStatus,
   type ClippingStatuses,
 } from "./clipping.ts";
 export { formatAbsoluteDate, formatIsoUtc } from "./dates.ts";
+export { isCodeFenceLine, noteLineText, noteTitleLineIndex } from "./note-text.ts";
 export {
   CLIPPINGS_EXTENSION_ID,
   EXTENSION_API_ERRORS,
@@ -89,6 +93,29 @@ export {
 } from "./tag.ts";
 export { extractSharedUrl, type SharedData, type SharedLink } from "./share.ts";
 export { parseWebUrl, type WebUrl } from "./url.ts";
+export {
+  checkCanonicalTagName,
+  type CanonicalTagVerdict,
+  type NotCanonicalReason,
+} from "./canonical-tag.ts";
+export {
+  AUTO_TAG_DEFAULT,
+  autoTagChangeSchema,
+  type AutoTagChange,
+  LIBRARY_CHANGE_ACTIONS,
+  LIBRARY_CHANGE_ACTORS,
+  LIBRARY_CHANGE_CONFIDENCES,
+  LIBRARY_CHANGE_STATUSES,
+  libraryChangeActionSchema,
+  libraryChangeActorSchema,
+  libraryChangeConfidenceSchema,
+  libraryChangeStatusSchema,
+  type LibraryChange,
+  type LibraryChangeAction,
+  type LibraryChangeActor,
+  type LibraryChangeConfidence,
+  type LibraryChangeStatus,
+} from "./library.ts";
 export {
   AUTOMATION_DEFAULTS,
   automationSettingsChangeSchema,

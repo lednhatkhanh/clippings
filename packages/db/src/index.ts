@@ -21,6 +21,7 @@ export {
 } from "./schema.ts";
 export {
   CapReachedError,
+  type BudgetGate,
   type Clock,
   type Embedder,
   type EmbeddingOwner,
@@ -31,9 +32,20 @@ export {
   type PageSummary,
   type Summarizer,
   type SummarizerInput,
+  type TagProposal,
 } from "./clippings/ports.ts";
 export {
+  ChangeConflictError,
+  ChangeNotFoundError,
+  ChangeNotUndoableError,
+  createChangesService,
+  type AutoAppliedTag,
+  type ChangesService,
+  type UndoResult,
+} from "./changes/service.ts";
+export {
   createClippingsService,
+  EmptyNoteBodyError,
   IMPORT_DAILY_BUDGET,
   IMPORT_SPREAD_SECONDS,
   InvalidCursorError,
@@ -41,6 +53,8 @@ export {
   InvalidTagsError,
   InvalidUrlError,
   MAX_BULK_CLIPPINGS,
+  NoteBodyTooLongError,
+  NotANoteError,
   NoteTooLongError,
   systemClock,
   TagNameTakenError,
@@ -62,6 +76,7 @@ export {
   type TagClippingsResult,
   type SaveClippingInput,
   type SaveClippingResult,
+  type SaveNoteInput,
   type SearchClippingsInput,
   type SearchResults,
   type UpdateClippingInput,

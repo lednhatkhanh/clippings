@@ -29,8 +29,8 @@ describe.skipIf(!TEST_DATABASE_URL)("pinning clippings", () => {
     return clipping.id;
   }
 
-  const urls = (clippings: { url: string }[]) =>
-    clippings.map((clipping) => clipping.url.replace("https://example.com/", ""));
+  const urls = (clippings: { url: string | null }[]) =>
+    clippings.map((clipping) => clipping.url!.replace("https://example.com/", ""));
 
   it("puts pinned clippings above the list, most recently pinned first, and doesn't repeat them", async () => {
     const ana = await fixture.createUser("ana");
@@ -69,7 +69,7 @@ describe.skipIf(!TEST_DATABASE_URL)("pinning clippings", () => {
     expect(urls(first.pinned)).toEqual(["old"]);
     expect(second.pinned).toEqual([]);
     expect(third.pinned).toEqual([]);
-    expect([...first.items, ...second.items, ...third.items].map((c) => c.url.slice(-1))).toEqual([
+    expect([...first.items, ...second.items, ...third.items].map((c) => c.url!.slice(-1))).toEqual([
       "5",
       "4",
       "3",

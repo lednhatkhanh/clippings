@@ -1,8 +1,10 @@
 import { addMilliseconds, parseISO } from "date-fns";
 import pg from "pg";
 
+import { createChangesService } from "../changes/service.ts";
 import {
   CapReachedError,
+  type BudgetGate,
   type Clock,
   type Embedder,
   type EmbeddingPurpose,
@@ -84,12 +86,29 @@ export async function createServiceFixture() {
   const summarizedPages: { url: string; title: string | null; text: string }[] = [];
   /** Whether the model gateway refuses calls, as it does for a user past their daily cap. */
   let capped = false;
+  /** What the summarizer makes of a note, by its body; a body not in it gets a reading of its own. */
+  const noteReadings = new Map<string, PageSummary>();
+  /** The body of each note the summarizer was asked to read, in order. */
+  const summarizedNotes: string[] = [];
+  /** Runs while the summarizer reads the note with this body, before it answers. */
+  const duringNoteReading = new Map<string, () => Promise<void>>();
   const summarizer: Summarizer = {
-    summarize: async ({ url, title, text, userTags }) => {
+    summarize: async ({ kind, url, title, text, userTags }) => {
       if (capped) throw new CapReachedError();
       summarizedWithTags.push(userTags);
-      summarizedPages.push({ url, title, text });
-      const entry = web.get(url);
+      if (kind === "note") {
+        summarizedNotes.push(text);
+        await duringNoteReading.get(text)?.();
+        return (
+          noteReadings.get(text) ?? {
+            title: "A title the model wrote",
+            summary: `About: ${text.slice(0, 40)}`,
+            excerpt: text.slice(0, 40),
+          }
+        );
+      }
+      summarizedPages.push({ url: url!, title, text });
+      const entry = web.get(url!);
       if (!entry?.summary) throw new Error(`Nothing to summarize at ${url}`);
       return entry.summary;
     },
@@ -102,6 +121,8 @@ export async function createServiceFixture() {
   const embeddedFor: { userId: string; jobKind: string }[] = [];
   /** The size of each `embedMany` call, in order. */
   const embeddedBatches: number[] = [];
+  /** Runs while a batched embedding call carrying this text is in flight, before it answers. */
+  const duringEmbedding = new Map<string, () => Promise<void>>();
   let embedding: "up" | "down" = "up";
   /** Whether only the embedder refuses (the summarizer still answers), and for whom. */
   let embeddingCapped = false;
@@ -119,6 +140,7 @@ export async function createServiceFixture() {
     embedMany: async (texts, purpose, owner) => {
       if (embedderRefuses(owner.userId)) throw new CapReachedError();
       if (embedding === "down") throw new Error("the embedder is unreachable");
+      for (const text of texts) await duringEmbedding.get(text)?.();
       embeddedBatches.push(texts.length);
       embeddedFor.push(owner);
       return texts.map((text) => {
@@ -128,7 +150,25 @@ export async function createServiceFixture() {
     },
   };
 
-  const service = createClippingsService({ pool, jobs, clock, fetcher, summarizer, embedder });
+  /** The users whose budget gate is shut, and what it was asked about. */
+  const shutBudgets = new Set<string>();
+  const budgetAsked: { userId: string; jobKind: string }[] = [];
+  const budget: BudgetGate = {
+    canSpend: async (userId, jobKind) => {
+      budgetAsked.push({ userId, jobKind });
+      return !shutBudgets.has(userId);
+    },
+  };
+
+  const service = createClippingsService({
+    pool,
+    jobs,
+    clock,
+    fetcher,
+    summarizer,
+    embedder,
+    budget,
+  });
 
   return {
     /** The throwaway database's URL, for code that opens its own pool (Better Auth in web tests). */
@@ -137,6 +177,7 @@ export async function createServiceFixture() {
     /** The clock the services read, for a service the test builds itself. */
     clock,
     settings: createSettingsService({ pool, clock }),
+    changes: createChangesService({ pool }),
     usage: createUsageService({ pool, clock }),
     connections: createConnectionsService({ pool, clock }),
     /** The fixture's pool, for tests that set up rows no service writes (Better Auth's). */
@@ -153,6 +194,12 @@ export async function createServiceFixture() {
     fetchedPages,
     /** The page each summarize call got, in order. */
     summarizedPages,
+    /** What the summarizer makes of a note, by its body. */
+    noteReadings,
+    /** The body of each note the summarizer read, in order. */
+    summarizedNotes,
+    /** Something to do while the summarizer reads the note with this body, before it answers. */
+    duringNoteReading,
     /** Every `requestEnrichments` call: the ids in order and the window they were spread over. */
     batchedEnrichmentRequests,
     /**
@@ -167,6 +214,8 @@ export async function createServiceFixture() {
     meanings,
     /** Every text the embedder was asked for, in order. */
     embedded,
+    /** Something to do while a batched embedding call carrying this text is in flight. */
+    duringEmbedding,
     /** Who each embedding call was made for, in order. */
     embeddedFor,
     /** Makes only the embedder refuse (or work again), as a reached spend cap does. */
@@ -177,6 +226,16 @@ export async function createServiceFixture() {
     capEmbeddingFor: (userId: string) => {
       cappedEmbeddingUsers.add(userId);
     },
+    /**
+     * Shuts (or opens) the budget gate for a user, as a spent cap does: `canSpend` says no, though
+     * the summarizer and embedder, which stand for the gateway's own check, still answer.
+     */
+    setBudgetShut: (userId: string, shut: boolean) => {
+      if (shut) shutBudgets.add(userId);
+      else shutBudgets.delete(userId);
+    },
+    /** Every `canSpend` question the service asked, in order. */
+    budgetAsked,
     /** Makes the summarizer and embedder refuse (or work again), as a reached spend cap does. */
     setCapReached: (reached: boolean) => {
       capped = reached;
