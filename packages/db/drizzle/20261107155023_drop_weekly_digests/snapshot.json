@@ -1,0 +1,51 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "c2b0d57a-eef3-4cff-8a2d-e69fc5d3aa59",
+  "prevIds": ["a046d7ef-1369-491a-b9ec-1138729bade9"],
+  "footprints": [
+    {
+      "statementType": "drop_table",
+      "statementTarget": ["table", "public", "weekly_digests"],
+      "writes": [
+        "s|tbl|public.weekly_digests",
+        "n|tbl|public.weekly_digests",
+        "e|tbl|public.weekly_digests",
+        "n|rel|public.weekly_digests",
+        "n|type|public.weekly_digests"
+      ],
+      "reads": ["n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "drop",
+      "key": "tables\u0000[\"public\",\"weekly_digests\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"weekly_digests\",\"user_id\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"weekly_digests\",\"week_start\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"weekly_digests\",\"digest\"]"
+    },
+    {
+      "op": "drop",
+      "key": "columns\u0000[\"public\",\"weekly_digests\",\"created_at\"]"
+    },
+    {
+      "op": "drop",
+      "key": "fks\u0000[\"public\",\"weekly_digests\",\"weekly_digests_user_id_user_id_fkey\"]"
+    },
+    {
+      "op": "drop",
+      "key": "pks\u0000[\"public\",\"weekly_digests\",\"weekly_digests_pkey\"]"
+    }
+  ]
+}
