@@ -1,5 +1,7 @@
 import * as z from "zod";
 
+import type { TagColor } from "./tag.ts";
+
 /**
  * Whether automation applies tags itself, for a user with no `user_settings` row. The column's
  * default is the same, so it holds for every user, those who existed before auto-tagging included.
@@ -71,4 +73,53 @@ export interface LibraryChange {
   reason: string;
   /** ISO 8601. */
   createdAt: string;
+}
+
+/** Longest folder name, in characters. Folder names are unique per user, ignoring case. */
+export const MAX_FOLDER_NAME_LENGTH = 60;
+
+/** Longest reason on a link between two clippings, in characters. */
+export const MAX_LINK_REASON_LENGTH = 300;
+
+/** Longest topic page body, in characters of Markdown. */
+export const MAX_TOPIC_PAGE_LENGTH = 8_000;
+
+/** Who made a link between two clippings. */
+export const ITEM_LINK_CREATORS = ["librarian", "user_via_mcp", "user"] as const;
+export type ItemLinkCreator = (typeof ITEM_LINK_CREATORS)[number];
+export const itemLinkCreatorSchema = z.enum(ITEM_LINK_CREATORS);
+
+/** Who wrote a topic page. Only the librarian does for now. */
+export const TOPIC_PAGE_SOURCES = ["ai"] as const;
+export type TopicPageSource = (typeof TOPIC_PAGE_SOURCES)[number];
+
+/**
+ * A folder a clipping or tag can sit in. The color is a `TAG_COLORS` name, rendered through each
+ * palette's tag tokens, never a hex value.
+ */
+export interface Folder {
+  id: string;
+  name: string;
+  color: TagColor;
+}
+
+/** A link between two clippings, with why they belong together. JSON-safe. */
+export interface ItemLink {
+  id: string;
+  fromId: string;
+  toId: string;
+  reason: string;
+  createdBy: ItemLinkCreator;
+  /** ISO 8601. */
+  createdAt: string;
+}
+
+/** The page the librarian writes for a tag. JSON-safe. */
+export interface TopicPage {
+  tagId: string;
+  /** Markdown. */
+  body: string;
+  source: TopicPageSource;
+  /** ISO 8601. */
+  updatedAt: string;
 }
