@@ -56,6 +56,7 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
     const mcp = createMcpRoute({
       auth,
       clippings: fixture.service,
+      librarian: fixture.librarian,
       connections,
       resource: RESOURCE,
       allowedEmails,
@@ -400,15 +401,24 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
       "search_clippings",
     ];
     const WRITE_TOOLS = [
+      "apply_suggestion",
+      "create_folder",
       "delete_clipping",
+      "dismiss_suggestion",
       "get_clipping",
       "get_page_text",
+      "link_items",
+      "list_folders",
+      "list_suggestions",
       "list_tags",
       "merge_tag",
+      "move_to_folder",
       "rename_tag",
       "restore_clipping",
       "save_note",
+      "set_tag_color",
       "tag_clippings",
+      "undo_change",
       "update_clipping",
     ];
 

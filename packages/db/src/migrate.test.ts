@@ -67,6 +67,20 @@ function foldersWithout(skipped: string) {
   return folder;
 }
 
+/** A copy of the shipped migrations before one of them, and the names that were left out. */
+function foldersBefore(first: string) {
+  const folder = mkdtempSync(join(tmpdir(), "clippings-migrations-"));
+  const left: string[] = [];
+  for (const name of readdirSync(SHIPPED).toSorted()) {
+    if (left.length > 0 || name.endsWith(first)) {
+      left.push(name);
+      continue;
+    }
+    cpSync(join(SHIPPED, name), join(folder, name), { recursive: true });
+  }
+  return { folder, left };
+}
+
 describe.skipIf(!TEST_DATABASE_URL)("migrate", () => {
   let database: TempDatabase;
 
@@ -171,10 +185,8 @@ describe.skipIf(!TEST_DATABASE_URL)("migrate", () => {
   });
 
   it("leaves auto-tagging on for every user, those who existed before the migration included", async () => {
-    await migrate({
-      connectionString: database.url,
-      migrationsFolder: foldersWithout("_light_the_watchers"),
-    });
+    const { folder, left } = foldersBefore("_light_the_watchers");
+    await migrate({ connectionString: database.url, migrationsFolder: folder });
     await withClient(database.url, async (client) => {
       await client.query(
         `insert into "user" ("id", "name", "email", "emailVerified") values ('with-row', 'with-row', 'with-row@example.com', true)`,
@@ -184,7 +196,7 @@ describe.skipIf(!TEST_DATABASE_URL)("migrate", () => {
       );
     });
 
-    expect(await migrate({ connectionString: database.url })).toHaveLength(1);
+    expect(await migrate({ connectionString: database.url })).toEqual(left);
 
     await withClient(database.url, async (client) => {
       await client.query(
@@ -237,6 +249,123 @@ describe.skipIf(!TEST_DATABASE_URL)("migrate", () => {
         `select kind from clippings where search_tsv @@ plainto_tsquery('simple', 'words') order by body`,
       );
       expect(rows).toEqual([{ kind: "note" }, { kind: "note" }]);
+    });
+  });
+
+  it("keeps folders, links and topic pages inside one user, and a deleted folder only unfiles", async () => {
+    await migrate({ connectionString: database.url });
+    await withClient(database.url, async (client) => {
+      for (const id of ["u1", "u2"]) {
+        await client.query(
+          `insert into "user" ("id", "name", "email", "emailVerified") values ($1, $1, $1 || '@example.com', true)`,
+          [id],
+        );
+      }
+      const one = async (text: string, values: unknown[]) =>
+        (await client.query<{ id: string }>(text, values)).rows[0]!.id;
+      const clipping = (user: string, url: string) =>
+        one(
+          `insert into clippings (user_id, url, url_normalized, title, source, created_at, updated_at)
+           values ($1, $2, $2, 't', 'web', now(), now()) returning id`,
+          [user, url],
+        );
+      const folder = (user: string, name: string, color = "none") =>
+        one(
+          `insert into folders (user_id, name, color, created_at, updated_at)
+           values ($1, $2, $3, now(), now()) returning id`,
+          [user, name, color],
+        );
+      const tag = (user: string, name: string) =>
+        one(`insert into tags (user_id, name, created_at) values ($1, $2, now()) returning id`, [
+          user,
+          name,
+        ]);
+      const link = (
+        user: string,
+        from: string,
+        to: string,
+        reason = "same topic",
+        by = "librarian",
+      ) =>
+        client.query(
+          `insert into item_links (user_id, from_id, to_id, reason, created_by, created_at)
+           values ($1, $2, $3, $4, $5, now())`,
+          [user, from, to, reason, by],
+        );
+
+      // Folders: names are unique per user ignoring case; colors are palette names.
+      const work = await folder("u1", "Work", "blue");
+      await folder("u2", "work");
+      await expect(folder("u1", "WORK")).rejects.toThrow(/folders_user_id_name_key/);
+      await expect(folder("u1", "Hex", "#ff0000")).rejects.toThrow(/folders_color_check/);
+      await expect(folder("u1", "")).rejects.toThrow(/folders_name_check/);
+      await expect(folder("u1", "x".repeat(61))).rejects.toThrow(/folders_name_check/);
+
+      // An item sits in its own user's folder only, and existing rows have none.
+      const a = await clipping("u1", "https://a.example");
+      const b = await clipping("u1", "https://b.example");
+      const other = await clipping("u2", "https://other.example");
+      const filed = await tag("u1", "filed");
+      await client.query(`update clippings set folder_id = $1 where id = $2`, [work, a]);
+      await client.query(`update tags set folder_id = $1 where id = $2`, [work, filed]);
+      await expect(
+        client.query(`update clippings set folder_id = $1 where id = $2`, [work, other]),
+      ).rejects.toThrow(/clippings_folder_fkey/);
+      const foreignTag = await tag("u2", "foreign");
+      await expect(
+        client.query(`update tags set folder_id = $1 where id = $2`, [work, foreignTag]),
+      ).rejects.toThrow(/tags_folder_fkey/);
+
+      // Deleting a folder unfiles its items and keeps them (and their owner).
+      await client.query(`delete from folders where id = $1`, [work]);
+      const left = await client.query(
+        `select (select folder_id from clippings where id = $1) as clipping_folder,
+                (select user_id from clippings where id = $1) as clipping_user,
+                (select folder_id from tags where id = $2) as tag_folder,
+                (select color_overridden from tags where id = $2) as overridden`,
+        [a, filed],
+      );
+      expect(left.rows).toEqual([
+        { clipping_folder: null, clipping_user: "u1", tag_folder: null, overridden: false },
+      ]);
+
+      // Links: one per unordered pair, no self-links, no cross-user links.
+      await link("u1", a, b);
+      await expect(link("u1", b, a)).rejects.toThrow(/item_links_user_pair_key/);
+      await expect(link("u1", a, b)).rejects.toThrow(/item_links_user_pair_key/);
+      await expect(link("u1", a, a)).rejects.toThrow(/item_links_no_self_check/);
+      await expect(link("u1", a, other)).rejects.toThrow(/item_links_to_fkey/);
+      await expect(link("u1", other, a)).rejects.toThrow(/item_links_from_fkey/);
+      await expect(link("u1", b, a, "")).rejects.toThrow(/item_links_reason_check/);
+      await expect(link("u1", b, a, "x".repeat(301))).rejects.toThrow(/item_links_reason_check/);
+      await expect(link("u1", b, a, "ok", "robot")).rejects.toThrow(/item_links_created_by_check/);
+      const c = await clipping("u1", "https://c.example");
+      await link("u1", c, a, "ok", "user_via_mcp");
+
+      // A link goes with either of its clippings.
+      await client.query(`delete from clippings where id = $1`, [c]);
+      const links = await client.query(`select count(*)::int as n from item_links`);
+      expect(links.rows).toEqual([{ n: 1 }]);
+
+      // Topic pages: one per tag, only on the owner's tag, and gone with the tag.
+      const insertPage = (user: string, tagId: string, body: string, source = "ai") =>
+        client.query(
+          `insert into topic_pages (tag_id, user_id, body, source, updated_at)
+           values ($1, $2, $3, $4, now())`,
+          [tagId, user, body, source],
+        );
+      await insertPage("u1", filed, "# Filed");
+      await expect(insertPage("u1", filed, "again")).rejects.toThrow(/topic_pages_pkey/);
+      await expect(insertPage("u1", foreignTag, "stolen")).rejects.toThrow(/topic_pages_tag_fkey/);
+      await expect(insertPage("u2", foreignTag, "x".repeat(8_001))).rejects.toThrow(
+        /topic_pages_body_check/,
+      );
+      await expect(insertPage("u2", foreignTag, "body", "user")).rejects.toThrow(
+        /topic_pages_source_check/,
+      );
+      await client.query(`delete from tags where id = $1`, [filed]);
+      const pages = await client.query(`select count(*)::int as n from topic_pages`);
+      expect(pages.rows).toEqual([{ n: 0 }]);
     });
   });
 });

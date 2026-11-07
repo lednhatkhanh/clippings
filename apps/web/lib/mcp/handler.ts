@@ -10,7 +10,7 @@ import type { createAuth } from "@/lib/auth/auth.ts";
 import type { ConnectionsService } from "@clippings/db";
 
 import { WRITE_SCOPE } from "./scopes.ts";
-import { registerClippingTools, type McpClippings } from "./tools.ts";
+import { registerClippingTools, type McpClippings, type McpLibrarian } from "./tools.ts";
 
 /** An access token's verified claims, as `requireMcpAuth` hands them over. */
 type AccessTokenClaims = Parameters<Parameters<typeof requireMcpAuth>[1]>[1];
@@ -18,7 +18,7 @@ type AccessTokenClaims = Parameters<Parameters<typeof requireMcpAuth>[1]>[1];
 const READ_INSTRUCTIONS =
   "Clippings is the user's private collection of saved web pages. Save a page they want to keep with save_clipping; find what they saved with search_clippings, list_recent or, filtered by tag, date or pin, list_clippings; related_clippings finds ones close in meaning to another.";
 
-const WRITE_INSTRUCTIONS = `${READ_INSTRUCTIONS} Save a text the user wants to keep that is not a web page (a thought, a plan, something worked out in the chat) with save_note, in Markdown; notes appear in every list and search next to pages, with kind "note" and no url. Read one clipping with get_clipping (a note's text is its body), and the page text Clippings saved for it with get_page_text. Change its title, note or tags with update_clipping; tag_clippings adds or removes tags on many at once, and rename_tag and merge_tag tidy the tags themselves. Call list_tags before tagging and reuse the user's tags. delete_clipping can be undone with restore_clipping for 24 hours. Change or delete only what the user asked you to.`;
+const WRITE_INSTRUCTIONS = `${READ_INSTRUCTIONS} Save a text the user wants to keep that is not a web page (a thought, a plan, something worked out in the chat) with save_note, in Markdown; notes appear in every list and search next to pages, with kind "note" and no url. Read one clipping with get_clipping (a note's text is its body), and the page text Clippings saved for it with get_page_text. Change its title, note or tags with update_clipping; tag_clippings adds or removes tags on many at once, and rename_tag and merge_tag tidy the tags themselves (both are logged and undo_change reverses them). Call list_tags before tagging and reuse the user's tags. To shape the library, set_tag_color, create_folder and move_to_folder (list_folders shows the folders; each clipping, note and tag sits in one) and link_items (two items, with a reason they belong together) make changes you can preview with dryRun; list_suggestions shows what the librarian proposed but was not sure of, apply_suggestion or dismiss_suggestion decides it, and undo_change reverses any logged change. Only change what the user asked for. delete_clipping can be undone with restore_clipping for 24 hours. Change or delete only what the user asked you to.`;
 
 /**
  * The MCP server behind `/mcp`: stateless, serving spec 2026-07-28 and falling back to stateless
@@ -30,7 +30,11 @@ const WRITE_INSTRUCTIONS = `${READ_INSTRUCTIONS} Save a text the user wants to k
  * token with `clippings:write` is offered the write tools in `tools/list`, and any other token
  * calling one gets the same "unknown tool" error as for a tool that doesn't exist.
  */
-export function createClippingsMcpHandler(deps: { clippings: McpClippings; appOrigin: string }) {
+export function createClippingsMcpHandler(deps: {
+  clippings: McpClippings;
+  librarian: McpLibrarian;
+  appOrigin: string;
+}) {
   const serverFor = (write: boolean) =>
     createMcpHandler((server) => registerClippingTools(server, deps, { write }), {
       serverInfo: { name: "clippings", version: "1.0.0" },
@@ -104,18 +108,24 @@ function revoked(resource: string): Response {
 export function createMcpRoute({
   auth,
   clippings,
+  librarian,
   connections,
   resource,
   allowedEmails,
 }: {
   auth: ReturnType<typeof createAuth>;
   clippings: McpClippings;
+  librarian: McpLibrarian;
   connections: Pick<ConnectionsService, "recordUse">;
   resource: string;
   allowedEmails: string | undefined;
 }) {
   const allowlist = parseAllowlist(allowedEmails);
-  const mcp = createClippingsMcpHandler({ clippings, appOrigin: new URL(resource).origin });
+  const mcp = createClippingsMcpHandler({
+    clippings,
+    librarian,
+    appOrigin: new URL(resource).origin,
+  });
 
   return requireMcpAuth(
     auth,

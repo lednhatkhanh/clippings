@@ -12,7 +12,7 @@ granted.
 | Scope | Tools |
 | --- | --- |
 | Read | `save_clipping`, `search_clippings`, `list_recent`, `list_clippings`, `related_clippings` |
-| `clippings:write` | the read tools plus `save_note`, `get_clipping`, `get_page_text`, `update_clipping`, `list_tags`, `tag_clippings`, `rename_tag`, `merge_tag`, `delete_clipping`, `restore_clipping` |
+| `clippings:write` | the read tools plus `save_note`, `get_clipping`, `get_page_text`, `update_clipping`, `list_tags`, `tag_clippings`, `rename_tag`, `merge_tag`, `delete_clipping`, `restore_clipping`, and the librarian's `set_tag_color`, `list_folders`, `create_folder`, `move_to_folder`, `link_items`, `list_suggestions`, `apply_suggestion`, `dismiss_suggestion`, `undo_change` |
 
 `list_clippings` takes `tags`, `since`, `until`, `pinned` and `cursor`; follow `cursor` until the
 list ends. If a tool you need is missing, tell the user it needs the `clippings:write` scope.
@@ -25,8 +25,10 @@ list ends. If a tool you need is missing, tell the user it needs the `clippings:
   nothing fits, propose the new tag to the user.
 - **Cite the `link` field.** Every clipping you mention in an answer carries its `link`, so the
   user can open it.
-- **Act on request.** `delete_clipping`, `rename_tag` and `merge_tag` run only when the user asked
-  for that exact change. After a `delete_clipping`, mention `restore_clipping`.
+- **Act on request.** `delete_clipping`, `rename_tag`, `merge_tag`, `set_tag_color`,
+  `create_folder`, `move_to_folder` and `link_items` run only when the user asked for that exact
+  change. After a `delete_clipping`, mention `restore_clipping`; after a tag change, a folder move
+  or a link, say that `undo_change` reverses it and give the `changeId`.
 - **Batch tag changes.** Use one `tag_clippings` call (bulk add or remove) where you would
   otherwise make many `update_clipping` calls.
 
@@ -49,3 +51,33 @@ Done when the user has answered every proposal and each approved change is appli
 3. Show the user a numbered list of proposals: `merge_tag` (source into target) or `rename_tag`
    (old to new), each with its clipping count.
 4. Apply only the proposals the user approves, then run `list_tags` and report the result.
+
+## Librarian
+
+Folders, colors and links give the library a shape; the weekly librarian job proposes them and
+you can do the same in chat. Every change goes through the same log, so none is a one-way door.
+
+- Each clipping, note and tag sits in at most one folder. Call `list_folders` first and reuse its
+  names; `create_folder` only when none fits.
+- A tag takes its folder's color unless the user chose one. A color set with `set_tag_color`
+  counts as the user's choice; the librarian never overrides it.
+- `link_items` needs a one-line reason the user would find useful.
+- Use `dryRun: true` on `set_tag_color`, `create_folder`, `move_to_folder` and `link_items` to show
+  the user what would change before doing it.
+- Nothing here deletes a clipping or note.
+
+### Review suggestions
+
+Done when the user has decided on every suggestion they wanted to see.
+
+1. `list_suggestions`; follow `nextCursor` to the end.
+2. Show a numbered list: each `summary`, its `reason` and its `confidence`.
+3. For each one the user approves, `apply_suggestion`; for each they reject, `dismiss_suggestion`
+   (the librarian then won't propose it again). A suggestion that no longer applies comes back as
+   an error: report it and offer to dismiss it.
+4. Report what was applied, with the `id` of each change so the user can `undo_change` it.
+
+### Undo
+
+`undo_change` takes the change `id` (from a tool result or `list_suggestions`). It is refused when
+a later change touched the same things: undo the later one first, with the user's agreement.

@@ -4,30 +4,45 @@ import { addDays, addMilliseconds, isValid, parseISO } from "date-fns";
 import * as z from "zod";
 
 import {
+  ChangeConflictError,
+  ChangeNotFoundError,
+  ChangeNotSuggestedError,
+  ChangeNotUndoableError,
   EmptyNoteBodyError,
   InvalidCursorError,
+  InvalidSuggestionCursorError,
   InvalidTagsError,
   InvalidUrlError,
+  LibrarianInputError,
   MAX_BULK_CLIPPINGS,
   NoteBodyTooLongError,
   NoteTooLongError,
+  SuggestionStaleError,
   TagNameTakenError,
   TitleTooLongError,
   TooManyClippingsError,
   type ClippingsService,
+  type LibrarianService,
+  type PlannedChange,
+  type ProposalResult,
+  type ProposedChange,
 } from "@clippings/db";
 import {
   CLIPPING_KINDS,
   CLIPPING_SOURCES,
   CLIPPING_STATUSES,
   MAX_NOTE_BODY_LENGTH,
+  MAX_FOLDER_NAME_LENGTH,
+  MAX_LINK_REASON_LENGTH,
   MAX_NOTE_LENGTH,
   MAX_QUERY_LENGTH,
   MAX_TAG_LENGTH,
   MAX_TAGS_PER_CLIPPING,
   MAX_TITLE_LENGTH,
   SEARCH_RESULT_LIMIT,
+  TAG_COLORS,
   type Clipping,
+  type LibraryChange,
 } from "@clippings/shared";
 
 /** Who is calling: the token's user and the OAuth client it was issued to. */
@@ -51,10 +66,21 @@ export type McpClippings = Pick<
   | "tagClippings"
   | "listTagSummaries"
   | "findTagByName"
-  | "renameTag"
-  | "mergeTag"
   | "deleteClipping"
   | "restoreClipping"
+>;
+
+/** What the tools need from the librarian service. */
+export type McpLibrarian = Pick<
+  LibrarianService,
+  | "proposeChange"
+  | "proposeChanges"
+  | "listSuggestions"
+  | "applySuggestion"
+  | "dismissSuggestion"
+  | "undoChange"
+  | "listFolders"
+  | "findFolderByName"
 >;
 
 const DEFAULT_LIMIT = 10;
@@ -191,7 +217,11 @@ const momentSchema = (bound: "since" | "until") =>
  */
 export function registerClippingTools(
   server: McpServer,
-  { clippings, appOrigin }: { clippings: McpClippings; appOrigin: string },
+  {
+    clippings,
+    librarian,
+    appOrigin,
+  }: { clippings: McpClippings; librarian: McpLibrarian; appOrigin: string },
   { write }: { write: boolean },
 ) {
   server.registerTool(
@@ -580,7 +610,7 @@ export function registerClippingTools(
     {
       title: "Rename a tag",
       description:
-        "Rename one of the user's tags, on every clipping that carries it. Tags are found by name, ignoring case. Fails when the user already has another tag with the new name: merge_tag combines two tags.",
+        "Rename one of the user's tags, on every clipping that carries it. Tags are found by name, ignoring case. Fails when the user already has another tag with the new name: merge_tag combines two tags. The rename is logged and undo_change can reverse it.",
       inputSchema: z.object({
         name: z.string().min(1).describe("The tag's current name, as list_tags shows it."),
         newName: z
@@ -589,7 +619,11 @@ export function registerClippingTools(
           .max(MAX_TAG_LENGTH)
           .describe(`The new name, at most ${MAX_TAG_LENGTH} characters.`),
       }),
-      outputSchema: z.object({ from: z.string(), to: z.string() }),
+      outputSchema: z.object({
+        from: z.string(),
+        to: z.string(),
+        changeId: z.string().describe("The change log entry, for undo_change."),
+      }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     },
     async ({ name, newName }, ctx) => {
@@ -597,13 +631,22 @@ export function registerClippingTools(
       const tag = await clippings.findTagByName(caller.userId, name);
       if (!tag) return failure(unknownTag(name));
       try {
-        const renamed = await clippings.renameTag(caller.userId, tag.id, newName);
-        return renamed ? result({ from: tag.name, to: renamed.name }) : failure(unknownTag(name));
+        const outcome = await librarian.proposeChange(caller.userId, "user_via_mcp", {
+          action: "rename_tag",
+          tagId: tag.id,
+          name: newName,
+          reason: USER_ASKED,
+        });
+        if (outcome.outcome === "skipped") return failure(`${outcome.reason}.`);
+        if (outcome.outcome !== "applied") throw new Error("A change by the user is applied");
+        const to = (outcome.change.after as { name: string }).name;
+        return result({ from: tag.name, to, changeId: outcome.change.id });
       } catch (error) {
         if (error instanceof TagNameTakenError) {
           return failure(`The user already has a tag named ${newName.trim()}.`);
         }
         if (error instanceof InvalidTagsError) return failure(`${error.message}.`);
+        if (error instanceof LibrarianInputError) return failure(`${error.message}.`);
         throw error;
       }
     },
@@ -614,12 +657,17 @@ export function registerClippingTools(
     {
       title: "Merge a tag into another",
       description:
-        "Move every clipping tagged `from` to the tag `into`, then remove the `from` tag. The clippings keep everything else, and one that had both ends up with `into` once. Tags are found by name, ignoring case. This can't be undone, so only merge what the user asked you to.",
+        "Move every clipping tagged `from` to the tag `into`, then remove the `from` tag. The clippings keep everything else, and one that had both ends up with `into` once. Tags are found by name, ignoring case. The merge is logged with everything needed to bring the `from` tag back, so undo_change can reverse it (unless a later change touched the `from` tag); still, only merge what the user asked you to.",
       inputSchema: z.object({
         from: z.string().min(1).describe("The tag to remove, as list_tags shows it."),
         into: z.string().min(1).describe("The tag that takes its clippings."),
       }),
-      outputSchema: z.object({ merged: z.boolean(), from: z.string(), into: z.string() }),
+      outputSchema: z.object({
+        merged: z.boolean(),
+        from: z.string(),
+        into: z.string(),
+        changeId: z.string().describe("The change log entry, for undo_change."),
+      }),
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     },
     async ({ from, into }, ctx) => {
@@ -629,10 +677,26 @@ export function registerClippingTools(
       const target = await clippings.findTagByName(caller.userId, into);
       if (!target) return failure(unknownTag(into));
       if (source.id === target.id) return failure("That is one tag: there is nothing to merge.");
-      if (!(await clippings.mergeTag(caller.userId, source.id, target.id))) {
-        return failure(`One of the tags ${from.trim()} and ${into.trim()} no longer exists.`);
+      try {
+        const outcome = await librarian.proposeChange(caller.userId, "user_via_mcp", {
+          action: "merge_tag",
+          sourceId: source.id,
+          targetId: target.id,
+          reason: USER_ASKED,
+        });
+        if (outcome.outcome !== "applied") throw new Error("A change by the user is applied");
+        return result({
+          merged: true,
+          from: source.name,
+          into: target.name,
+          changeId: outcome.change.id,
+        });
+      } catch (error) {
+        if (error instanceof LibrarianInputError) {
+          return failure(`One of the tags ${from.trim()} and ${into.trim()} no longer exists.`);
+        }
+        throw error;
       }
-      return result({ merged: true, from: source.name, into: target.name });
     },
   );
 
@@ -682,6 +746,466 @@ export function registerClippingTools(
       return restored ? result({ clipping: presentFull(restored, appOrigin) }) : failure(NOT_FOUND);
     },
   );
+
+  registerLibrarianTools(server, { clippings, librarian });
+}
+
+/** The reason the log keeps for a change the user asked Claude for. */
+const USER_ASKED = "Asked for by the user in Claude";
+
+const dryRunSchema = z
+  .boolean()
+  .optional()
+  .describe("True: report what would change and change nothing.");
+
+const reasonSchema = z
+  .string()
+  .max(MAX_LINK_REASON_LENGTH)
+  .optional()
+  .describe(
+    `One line on why, kept in the change log. Defaults to "${USER_ASKED}". At most ${MAX_LINK_REASON_LENGTH} characters.`,
+  );
+
+const colorSchema = z.enum(TAG_COLORS);
+
+/** The ids a change keeps for undo, as a count: a merge's list of clippings can be long. */
+const COUNTED_LISTS: Record<string, string> = {
+  clippingIds: "clippingCount",
+  addedToTarget: "movedClippingCount",
+};
+
+function compact(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(compact);
+  if (typeof value !== "object" || value === null) return value;
+  const entries: [string, unknown][] = [];
+  for (const [key, inner] of Object.entries(value)) {
+    const counted = COUNTED_LISTS[key];
+    if (counted && Array.isArray(inner)) entries.push([counted, inner.length]);
+    else entries.push([key, compact(inner)]);
+  }
+  return Object.fromEntries(entries);
+}
+
+const changeOutput = z.object({
+  id: z.string().nullable().describe("The change log entry's id; null in a dry run."),
+  action: z.string(),
+  status: z.enum(["applied", "suggested", "dismissed", "undone"]),
+  actor: z.string(),
+  confidence: z.enum(["high", "low"]).nullable(),
+  summary: z.string().describe("What the change does, in words."),
+  reason: z.string(),
+  targetIds: z.array(z.string()).describe("The ids (items, tags, folders) it touches."),
+  before: z.unknown().describe("What it replaced; enough to undo it."),
+  after: z.unknown().describe("What it wrote."),
+  createdAt: z.string().nullable(),
+});
+
+/** A logged change, or one a dry run planned, as a tool returns it. */
+function presentChange(change: LibraryChange | PlannedChange) {
+  const after = change.after as { summary?: string } | null;
+  return {
+    id: "id" in change ? change.id : null,
+    action: change.action,
+    status: change.status,
+    actor: change.actor,
+    confidence: change.confidence,
+    summary: after?.summary ?? change.action,
+    reason: change.reason,
+    targetIds: change.targetIds,
+    before: compact(change.before),
+    after: compact(change.after),
+    createdAt: "createdAt" in change ? change.createdAt : null,
+  };
+}
+
+const proposalOutput = z.object({
+  outcome: z
+    .enum(["applied", "would_apply", "skipped"])
+    .describe("Done, what a dry run says would be done, or not done and why."),
+  change: changeOutput.nullable(),
+  reason: z.string().nullable().describe("Why nothing was done; null otherwise."),
+});
+
+/** One proposal's outcome as a tool returns it. A change the user asked for is never a suggestion. */
+function presentOutcome(outcome: ProposalResult) {
+  if (outcome.outcome === "skipped") {
+    return { outcome: "skipped" as const, change: null, reason: outcome.reason };
+  }
+  const done = outcome.outcome === "applied" || outcome.outcome === "suggested";
+  return {
+    outcome: done ? ("applied" as const) : ("would_apply" as const),
+    change: presentChange(outcome.change),
+    reason: null,
+  };
+}
+
+function librarianFailure(error: unknown): CallToolResult | null {
+  if (
+    error instanceof LibrarianInputError ||
+    error instanceof TagNameTakenError ||
+    error instanceof InvalidTagsError
+  ) {
+    return failure(`${error.message}.`);
+  }
+  return null;
+}
+
+/**
+ * The librarian's tools: the user reshapes their library through the same service, change log and
+ * undo the weekly job uses. A change the user asks for here is applied (`dryRun` only reports
+ * it); nothing here deletes a clipping or note.
+ */
+function registerLibrarianTools(
+  server: McpServer,
+  { clippings, librarian }: { clippings: McpClippings; librarian: McpLibrarian },
+) {
+  server.registerTool(
+    "set_tag_color",
+    {
+      title: "Set a tag's color",
+      description: `Give one of the user's tags a color. Tags are found by name, ignoring case. A color set here counts as the user's own choice: the librarian never changes it afterwards. "none" shows the tag without a color. The change is logged and undo_change can reverse it.`,
+      inputSchema: z.object({
+        tag: z.string().min(1).describe("The tag's name, as list_tags shows it."),
+        color: colorSchema.describe(
+          "A palette color name; the app renders each in the user's theme.",
+        ),
+        reason: reasonSchema,
+        dryRun: dryRunSchema,
+      }),
+      outputSchema: proposalOutput,
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async ({ tag, color, reason, dryRun }, ctx) => {
+      const caller = callerFrom(ctx);
+      const found = await clippings.findTagByName(caller.userId, tag);
+      if (!found) return failure(unknownTag(tag));
+      try {
+        const outcome = await librarian.proposeChange(
+          caller.userId,
+          "user_via_mcp",
+          { action: "set_tag_color", tagId: found.id, color, reason: reason?.trim() || USER_ASKED },
+          { dryRun },
+        );
+        return result(presentOutcome(outcome));
+      } catch (error) {
+        return librarianFailure(error) ?? rethrow(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "list_folders",
+    {
+      title: "List folders",
+      description:
+        "List the user's folders, with how many clippings (and notes) and tags each holds. Every clipping, note and tag sits in at most one folder. Call this before create_folder or move_to_folder and reuse these names.",
+      inputSchema: z.object({}),
+      outputSchema: z.object({
+        folders: z.array(
+          z.object({
+            name: z.string(),
+            color: z.string(),
+            clippings: z.number().int(),
+            tags: z.number().int(),
+          }),
+        ),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async (_args, ctx) => {
+      const caller = callerFrom(ctx);
+      const folders = await librarian.listFolders(caller.userId);
+      return result({
+        folders: folders.map(({ name, color, clippingCount, tagCount }) => ({
+          name,
+          color,
+          clippings: clippingCount,
+          tags: tagCount,
+        })),
+      });
+    },
+  );
+
+  server.registerTool(
+    "create_folder",
+    {
+      title: "Create a folder",
+      description: `Create a folder, one per topic, for move_to_folder to file clippings, notes and tags in. Names are unique ignoring case; creating one that exists reports it skipped. The change is logged and undo_change can remove an empty folder.`,
+      inputSchema: z.object({
+        name: z.string().min(1).max(MAX_FOLDER_NAME_LENGTH).describe("The folder's name."),
+        color: colorSchema
+          .optional()
+          .describe(
+            "The color tags filed in it take unless the user colored them. Defaults to none.",
+          ),
+        reason: reasonSchema,
+        dryRun: dryRunSchema,
+      }),
+      outputSchema: proposalOutput,
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    },
+    async ({ name, color, reason, dryRun }, ctx) => {
+      const caller = callerFrom(ctx);
+      try {
+        const outcome = await librarian.proposeChange(
+          caller.userId,
+          "user_via_mcp",
+          { action: "create_folder", name, color, reason: reason?.trim() || USER_ASKED },
+          { dryRun },
+        );
+        return result(presentOutcome(outcome));
+      } catch (error) {
+        return librarianFailure(error) ?? rethrow(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "move_to_folder",
+    {
+      title: "Move to a folder",
+      description: `Put clippings, notes and tags in a folder (create_folder makes one). Each item is in one folder, so this takes it out of its old one. A tag takes its folder's color unless the user chose the tag's color. Give clipping ids (notes are clippings) and/or tag names, up to ${MAX_BULK_CLIPPINGS} ids at a time; each move is logged on its own and undo_change reverses it. Items already in the folder, and ids that aren't the user's, come back skipped.`,
+      inputSchema: z.object({
+        folder: z.string().min(1).describe("The folder's name, as list_folders shows it."),
+        clippingIds: z
+          .array(idSchema)
+          .max(MAX_BULK_CLIPPINGS)
+          .optional()
+          .describe("Clippings and notes to move."),
+        tags: z
+          .array(z.string().min(1))
+          .max(MAX_BULK_CLIPPINGS)
+          .optional()
+          .describe("Tags to move."),
+        reason: reasonSchema,
+        dryRun: dryRunSchema,
+      }),
+      outputSchema: z.object({
+        folder: z.string(),
+        results: z.array(
+          z.object({
+            item: z.string().describe("The clipping id or tag name."),
+            outcome: z.enum(["applied", "would_apply", "skipped"]),
+            changeId: z.string().nullable(),
+            reason: z.string().nullable(),
+          }),
+        ),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async ({ folder, clippingIds, tags, reason, dryRun }, ctx) => {
+      const caller = callerFrom(ctx);
+      if (!clippingIds?.length && !tags?.length)
+        return failure("Say which clippings or tags to move.");
+      const target = await librarian.findFolderByName(caller.userId, folder);
+      if (!target) {
+        return failure(
+          `The user has no folder named ${folder.trim()}. list_folders shows theirs; create_folder makes one.`,
+        );
+      }
+      const items: { item: string; proposal?: ProposedChange; skipped?: string }[] = [];
+      const why = reason?.trim() || USER_ASKED;
+      for (const id of clippingIds ?? []) {
+        items.push({
+          item: id,
+          proposal: {
+            action: "move_to_folder",
+            itemKind: "clipping",
+            itemId: id,
+            folderId: target.id,
+            reason: why,
+          },
+        });
+      }
+      for (const name of tags ?? []) {
+        const tag = await clippings.findTagByName(caller.userId, name);
+        items.push(
+          tag
+            ? {
+                item: tag.name,
+                proposal: {
+                  action: "move_to_folder",
+                  itemKind: "tag",
+                  itemId: tag.id,
+                  folderId: target.id,
+                  reason: why,
+                },
+              }
+            : { item: name.trim(), skipped: unknownTag(name) },
+        );
+      }
+      const proposals = items.flatMap((entry) => (entry.proposal ? [entry.proposal] : []));
+      const outcomes = await librarian.proposeChanges(caller.userId, "user_via_mcp", proposals, {
+        dryRun,
+      });
+      let next = 0;
+      return result({
+        folder: target.name,
+        results: items.map((entry) => {
+          if (!entry.proposal) {
+            return { item: entry.item, outcome: "skipped", changeId: null, reason: entry.skipped };
+          }
+          const shown = presentOutcome(outcomes[next++]!);
+          return {
+            item: entry.item,
+            outcome: shown.outcome,
+            changeId: shown.change?.id ?? null,
+            reason: shown.reason,
+          };
+        }),
+      });
+    },
+  );
+
+  server.registerTool(
+    "link_items",
+    {
+      title: "Link two items",
+      description: `Link two of the user's clippings or notes, with a one-line reason they belong together (shown to the user). A pair has one link whichever way round it is given. The link is logged and undo_change removes it.`,
+      inputSchema: z.object({
+        fromId: idSchema,
+        toId: z.string().min(1).describe("The other clipping's or note's id."),
+        reason: z
+          .string()
+          .min(1)
+          .max(MAX_LINK_REASON_LENGTH)
+          .describe(`Why they belong together, at most ${MAX_LINK_REASON_LENGTH} characters.`),
+        dryRun: dryRunSchema,
+      }),
+      outputSchema: proposalOutput,
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async ({ fromId, toId, reason, dryRun }, ctx) => {
+      const caller = callerFrom(ctx);
+      try {
+        const outcome = await librarian.proposeChange(
+          caller.userId,
+          "user_via_mcp",
+          { action: "link_items", fromId, toId, reason },
+          { dryRun },
+        );
+        return result(presentOutcome(outcome));
+      } catch (error) {
+        return librarianFailure(error) ?? rethrow(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "list_suggestions",
+    {
+      title: "List the librarian's suggestions",
+      description:
+        "List the changes the librarian proposed but was not sure enough to make, newest first, a page at a time. Each says what it would do (summary), why (reason) and how sure the librarian was. Show them to the user; apply_suggestion makes one, and dismiss_suggestion turns it down. When nextCursor is not null, pass it back as cursor for the next page.",
+      inputSchema: z.object({
+        cursor: z.string().optional().describe("The nextCursor of the previous page."),
+        limit: z.number().int().min(1).max(100).optional().describe("At most 100; defaults to 25."),
+      }),
+      outputSchema: z.object({
+        suggestions: z.array(changeOutput),
+        nextCursor: z.string().nullable(),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ cursor, limit }, ctx) => {
+      const caller = callerFrom(ctx);
+      try {
+        const page = await librarian.listSuggestions(caller.userId, { cursor, limit });
+        return result({
+          suggestions: page.items.map(presentChange),
+          nextCursor: page.nextCursor,
+        });
+      } catch (error) {
+        if (error instanceof InvalidSuggestionCursorError) {
+          return failure("That cursor isn't one list_suggestions returned.");
+        }
+        throw error;
+      }
+    },
+  );
+
+  const changeIdSchema = z
+    .string()
+    .min(1)
+    .describe("The change's id, from list_suggestions or a tool's changeId.");
+
+  server.registerTool(
+    "apply_suggestion",
+    {
+      title: "Apply a suggestion",
+      description:
+        "Make one of the librarian's suggested changes, once the user agrees. It is checked against the library as it is now: when something changed since (the tag was merged, the user chose a color), nothing is done and the suggestion stays for dismiss_suggestion. The applied change can be undone with undo_change.",
+      inputSchema: z.object({ id: changeIdSchema }),
+      outputSchema: z.object({ change: changeOutput }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async ({ id }, ctx) => {
+      const caller = callerFrom(ctx);
+      try {
+        return result({
+          change: presentChange(await librarian.applySuggestion(caller.userId, id)),
+        });
+      } catch (error) {
+        if (error instanceof ChangeNotFoundError) return failure(NO_CHANGE);
+        if (error instanceof ChangeNotSuggestedError) return failure(`${error.message}.`);
+        if (error instanceof SuggestionStaleError) return failure(`${error.message}.`);
+        throw error;
+      }
+    },
+  );
+
+  server.registerTool(
+    "dismiss_suggestion",
+    {
+      title: "Dismiss a suggestion",
+      description:
+        "Turn down one of the librarian's suggested changes. It leaves the list and the librarian does not propose the same change again.",
+      inputSchema: z.object({ id: changeIdSchema }),
+      outputSchema: z.object({ change: changeOutput }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async ({ id }, ctx) => {
+      const caller = callerFrom(ctx);
+      try {
+        return result({
+          change: presentChange(await librarian.dismissSuggestion(caller.userId, id)),
+        });
+      } catch (error) {
+        if (error instanceof ChangeNotFoundError) return failure(NO_CHANGE);
+        if (error instanceof ChangeNotSuggestedError) return failure(`${error.message}.`);
+        throw error;
+      }
+    },
+  );
+
+  server.registerTool(
+    "undo_change",
+    {
+      title: "Undo a change",
+      description:
+        "Reverse one logged change (a tag color, folder, move, link, topic page, rename or merge, or a tag added automatically) by putting back what it replaced; undoing a merge brings the removed tag back on its clippings. Refused, with nothing changed, when a later change touched the same things: undo that one first.",
+      inputSchema: z.object({ id: changeIdSchema }),
+      outputSchema: z.object({ change: changeOutput }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async ({ id }, ctx) => {
+      const caller = callerFrom(ctx);
+      try {
+        return result({ change: presentChange(await librarian.undoChange(caller.userId, id)) });
+      } catch (error) {
+        if (error instanceof ChangeNotFoundError) return failure(NO_CHANGE);
+        if (error instanceof ChangeNotUndoableError) return failure(`${error.message}.`);
+        if (error instanceof ChangeConflictError) return failure(`${error.message}.`);
+        throw error;
+      }
+    },
+  );
+}
+
+const NO_CHANGE = "The user has no change with that id.";
+
+function rethrow(error: unknown): never {
+  throw error;
 }
 
 const unknownTag = (name: string) =>

@@ -30,10 +30,10 @@ export class ChangeNotUndoableError extends Error {
   }
 }
 
-/** A later change touched the same clipping and tag, so undoing this one could undo that too. */
+/** A later change touched the same targets, so undoing this one could undo that too. */
 export class ChangeConflictError extends Error {
-  constructor() {
-    super("A later change touched this tag, so this one can't be undone on its own");
+  constructor(message = "A later change touched this tag, so this one can't be undone on its own") {
+    super(message);
     this.name = "ChangeConflictError";
   }
 }
@@ -150,7 +150,8 @@ export function createChangesService({ pool }: ChangesServiceDeps) {
             eq(libraryChanges.userId, userId),
             sql`${libraryChanges.id} <> ${changeId}::uuid`,
             eq(libraryChanges.status, "applied"),
-            sql`${libraryChanges.createdAt} >= ${change.createdAt}`,
+            // When it took effect: a suggestion applied later counts from then, not from its creation.
+            sql`coalesce(${libraryChanges.appliedAt}, ${libraryChanges.createdAt}) >= ${change.appliedAt ?? change.createdAt}`,
             sql`(
               ${libraryChanges.targetIds} @> array[${clippingId}, ${tagId}]::uuid[]
               or (
