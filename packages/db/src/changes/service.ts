@@ -115,7 +115,7 @@ export function createChangesService({ pool }: ChangesServiceDeps) {
    * is never put back by a later read of the page.
    *
    * Throws `ChangeNotFoundError` for a change that isn't the user's, `ChangeNotUndoableError` for
-   * one that isn't an applied auto-tag (or was undone already) and `ChangeConflictError` when a
+   * one that isn't an applied auto-tag or librarian `add_tag` (or was undone already) and `ChangeConflictError` when a
    * later applied change touched the same clipping and tag, or the tag itself (a rename or a
    * merge). Nothing is changed in any of these cases.
    */
@@ -132,13 +132,12 @@ export function createChangesService({ pool }: ChangesServiceDeps) {
         throw new ChangeNotUndoableError("That change was already undone");
       }
       const [clippingId, tagId] = change.targetIds;
-      if (
-        change.status !== "applied" ||
-        change.actor !== "auto_tag" ||
-        !TAG_ON_CLIPPING.some((action) => action === change.action) ||
-        !clippingId ||
-        !tagId
-      ) {
+      // Auto-tagging adds and creates tags; the librarian only adds existing ones.
+      const tagAdded =
+        change.actor === "auto_tag"
+          ? TAG_ON_CLIPPING.some((action) => action === change.action)
+          : change.actor === "librarian" && change.action === "add_tag";
+      if (change.status !== "applied" || !tagAdded || !clippingId || !tagId) {
         throw new ChangeNotUndoableError("Only a tag added automatically can be undone here");
       }
 

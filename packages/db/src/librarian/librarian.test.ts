@@ -1478,6 +1478,204 @@ describe.skipIf(!TEST_DATABASE_URL)("the librarian", () => {
     });
   });
 
+  describe("adding tags", () => {
+    /** Saves a page the model suggests `names` for, with suggestions on for the user. */
+    async function suggestedFor(
+      userId: string,
+      name: string,
+      names: string[],
+      tags: string[] = [],
+    ) {
+      await fixture.settings.setSuggestTags(userId, true);
+      const url = `https://example.com/${userId}/${name}`;
+      fixture.web.set(url, {
+        page: { title: name, text: "" },
+        summary: { title: name, summary: "", excerpt: "", suggestedTags: names },
+      });
+      const { clipping } = await fixture.service.saveClipping(userId, {
+        url,
+        tags,
+        source: "web",
+      });
+      await fixture.service.enrichClipping(clipping.id);
+      fixture.advanceClock(1000);
+      return clipping.id;
+    }
+
+    const add = (clippingId: string, tagId: string) =>
+      ({ action: "add_tag", clippingId, tagId }) as const;
+    const tagNames = async (userId: string, id: string) =>
+      (await fixture.service.getClipping(userId, id))!.tags.map((tag) => tag.name);
+    const waiting = async (userId: string, id: string) =>
+      (await fixture.service.getClipping(userId, id))!.suggestedTags;
+
+    it("applies a sure addition: the tag goes on, the suggestion goes, and the change records both tag lists", async () => {
+      await clip(ana, "vocab", ["css", "web"]);
+      const id = await suggestedFor(ana, "a", ["css", "layout"], ["web"]);
+      const css = await tagId(ana, "css");
+
+      const result = await byLibrarian(ana, { ...high, ...add(id, css) });
+
+      expect(result).toMatchObject({
+        outcome: "applied",
+        change: {
+          actor: "librarian",
+          action: "add_tag",
+          targetIds: [id, css],
+          before: { tags: ["web"] },
+          after: {
+            tags: ["web", "css"],
+            tag: { id: css, name: "css" },
+            summary: expect.stringContaining('"css"'),
+          },
+        },
+      });
+      expect(await tagNames(ana, id)).toEqual(["css", "web"]);
+      expect(await waiting(ana, id)).toEqual(["layout"]);
+    });
+
+    it("stores an unsure addition as a suggestion, and applying it later adds the tag and removes the tag suggestion", async () => {
+      await clip(ana, "vocab", ["css"]);
+      const id = await suggestedFor(ana, "a", ["css"]);
+      const css = await tagId(ana, "css");
+
+      const stored = await byLibrarian(ana, { ...low, ...add(id, css) });
+      if (stored.outcome !== "suggested") throw new Error("expected a suggestion");
+      expect(await tagNames(ana, id)).toEqual([]);
+      expect(await waiting(ana, id)).toEqual(["css"]);
+
+      const applied = await librarian().applySuggestion(ana, stored.change.id);
+
+      expect(applied).toMatchObject({ status: "applied", after: { tags: ["css"] } });
+      expect(await tagNames(ana, id)).toEqual(["css"]);
+      expect(await waiting(ana, id)).toEqual([]);
+    });
+
+    it("skips a tag the clipping carries and a clipping at the tag limit", async () => {
+      await clip(ana, "vocab", ["css"]);
+      const css = await tagId(ana, "css");
+      const carrying = await clip(ana, "b", ["css"]);
+      const full = await clip(
+        ana,
+        "c",
+        Array.from({ length: 20 }, (_, i) => `tag${String(i).padStart(2, "0")}`),
+      );
+
+      expect(await byLibrarian(ana, { ...high, ...add(carrying, css) })).toMatchObject({
+        outcome: "skipped",
+        reason: expect.stringContaining("already has"),
+      });
+      expect(await byLibrarian(ana, { ...high, ...add(full, css) })).toMatchObject({
+        outcome: "skipped",
+        reason: expect.stringContaining("20 tags"),
+      });
+      expect(await changeRows(ana)).toEqual([]);
+    });
+
+    it("leaves a tag the user dismissed as a suggestion, but adds it when the user asks through Claude", async () => {
+      await clip(ana, "vocab", ["css"]);
+      const id = await suggestedFor(ana, "a", ["css"]);
+      const css = await tagId(ana, "css");
+      await fixture.service.dismissTagSuggestions(ana, id, ["css"]);
+
+      expect(await byLibrarian(ana, { ...high, ...add(id, css) })).toMatchObject({
+        outcome: "skipped",
+        reason: expect.stringContaining("dismissed"),
+      });
+      expect(await tagNames(ana, id)).toEqual([]);
+
+      await asUser(ana, { ...add(id, css), reason: "Asked" });
+      expect(await tagNames(ana, id)).toEqual(["css"]);
+    });
+
+    it("leaves a tag the user took off, whether by Undo or by hand, whoever added it", async () => {
+      await clip(ana, "vocab", ["css", "web"]);
+      const first = await suggestedFor(ana, "a", ["css"]);
+      const second = await suggestedFor(ana, "b", ["css"]);
+      const css = await tagId(ana, "css");
+
+      const one = await byLibrarian(ana, { ...high, ...add(first, css) });
+      if (one.outcome !== "applied") throw new Error("expected it applied");
+      await librarian().undoChange(ana, one.change.id);
+      await byLibrarian(ana, { ...high, ...add(second, css) });
+      await fixture.service.updateClipping(ana, second, { tags: [] });
+
+      for (const id of [first, second]) {
+        expect(await byLibrarian(ana, { ...high, ...add(id, css) })).toMatchObject({
+          outcome: "skipped",
+          reason: expect.stringContaining("before"),
+        });
+        expect(await tagNames(ana, id)).toEqual([]);
+      }
+    });
+
+    it("undoes an applied addition by taking the tag off, and refuses once a later change touched the tag", async () => {
+      await clip(ana, "vocab", ["css"]);
+      const id = await suggestedFor(ana, "a", ["css"]);
+      const css = await tagId(ana, "css");
+      const added = await byLibrarian(ana, { ...high, ...add(id, css) });
+      if (added.outcome !== "applied") throw new Error("expected it applied");
+      const rename = await asUser(ana, {
+        action: "rename_tag",
+        tagId: css,
+        name: "styles",
+        reason: "Asked",
+      });
+
+      await expect(librarian().undoChange(ana, added.change.id)).rejects.toBeInstanceOf(
+        ChangeConflictError,
+      );
+      await librarian().undoChange(ana, rename.id);
+      const undone = await librarian().undoChange(ana, added.change.id);
+
+      expect(undone.status).toBe("undone");
+      expect(await tagNames(ana, id)).toEqual([]);
+      await expect(librarian().undoChange(ana, added.change.id)).rejects.toBeInstanceOf(
+        ChangeNotUndoableError,
+      );
+    });
+
+    it("refuses another user's clipping or tag, and writes nothing", async () => {
+      await clip(ana, "vocab", ["css"]);
+      const mine = await suggestedFor(ana, "a", ["css"]);
+      const theirs = await clip(ben, "b", ["rust"]);
+      const css = await tagId(ana, "css");
+      const rust = await tagId(ben, "rust");
+
+      await expect(byLibrarian(ben, { ...high, ...add(mine, rust) })).rejects.toBeInstanceOf(
+        LibrarianNotFoundError,
+      );
+      await expect(byLibrarian(ben, { ...high, ...add(theirs, css) })).rejects.toBeInstanceOf(
+        LibrarianNotFoundError,
+      );
+      expect(await changeRows(ben)).toEqual([]);
+      expect(await tagNames(ana, mine)).toEqual([]);
+      expect(await waiting(ana, mine)).toEqual(["css"]);
+    });
+
+    it("shows the planner each item's waiting suggestions, none dismissed, carried or deleted, and none with suggestions off", async () => {
+      await clip(ana, "vocab", ["css"]);
+      const id = await suggestedFor(ana, "a", ["css", "layout", "grid"], ["grid"]);
+      const dropped = await suggestedFor(ana, "b", ["layout"]);
+      await fixture.service.dismissTagSuggestions(ana, id, ["layout"]);
+      await fixture.service.deleteClipping(ana, dropped);
+      const forBen = await suggestedFor(ben, "c", ["rust"]);
+
+      const view = await librarian().readLibrary(ana);
+
+      expect(view.items.find((item) => item.id === id)?.suggestedTags).toEqual(["css"]);
+      expect(view.items.every((item) => item.id !== dropped)).toBe(true);
+      expect(
+        (await librarian().readLibrary(ben)).items.find((item) => item.id === forBen),
+      ).toMatchObject({ suggestedTags: ["rust"] });
+
+      await fixture.settings.setSuggestTags(ana, false);
+      expect(
+        (await librarian().readLibrary(ana)).items.flatMap((item) => item.suggestedTags),
+      ).toEqual([]);
+    });
+  });
+
   describe("running the librarian", () => {
     it("knows a first run has finished only once it is marked, whatever the log holds", async () => {
       const t = await clip(ana, "a", ["css"]).then(() => tagId(ana, "css"));

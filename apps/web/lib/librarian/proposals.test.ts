@@ -33,6 +33,7 @@ function item(n: number, tags: string[], extra: Partial<LibraryViewItem> = {}): 
     title: `Item ${n}`,
     summary: `About ${tags.join(" and ")}`,
     tags,
+    suggestedTags: [],
     folderId: null,
     savedAt: "2026-11-01T00:00:00Z",
     ...extra,
@@ -285,6 +286,82 @@ describe("proposalsFromPlan", () => {
         { userId: USER },
       );
       expect(proposals).toEqual([]);
+    });
+  });
+
+  describe("tags added to items", () => {
+    it("proposes an existing tag for an item that lacks it, once, and sets aside the rest", () => {
+      const { proposals, notices } = propose({
+        tagAdditions: [
+          { item: "C4", tag: "T1", reason: "About css too", confidence: high },
+          // The same pair again; an item that has the tag; a made-up reference; no reason.
+          { item: "C4", tag: "T1", reason: "Again", confidence: high },
+          { item: "C1", tag: "T1", reason: "Has it", confidence: high },
+          { item: "C4", tag: "T9", reason: "No such tag", confidence: high },
+          { item: "C5", tag: "T1", reason: " ", confidence: high },
+          { item: "C5", tag: "T3", reason: "Rust notes", confidence: "low" },
+        ],
+      });
+
+      expect(proposals).toEqual([
+        {
+          action: "add_tag",
+          clippingId: id(4),
+          tagId: id(101),
+          reason: "About css too",
+          confidence: high,
+        },
+        {
+          action: "add_tag",
+          clippingId: id(5),
+          tagId: id(103),
+          reason: "Rust notes",
+          confidence: "low",
+        },
+      ]);
+      expect(notices).toEqual([
+        expect.stringContaining("Ignored 1 planned change"),
+        expect.stringContaining("Set aside 3 planned changes"),
+      ]);
+    });
+
+    it("leaves out a tag a merge or rename in the same list touches, and an item at the tag limit", () => {
+      const crowded = Array.from({ length: 20 }, (_, i) => `tag${i}`);
+      const full = indexLibrary(
+        { ...view, items: [item(1, crowded), item(2, crowded.slice(0, 19)), item(3, [])] },
+        NOW,
+      );
+
+      const touched = propose({
+        merges: [{ source: "T2", target: "T1", reason: "Same topic", confidence: high }],
+        renames: [{ tag: "T3", name: "rust", reason: "Lowercase", confidence: high }],
+        tagAdditions: [
+          { item: "C5", tag: "T2", reason: "Merged away", confidence: high },
+          { item: "C5", tag: "T1", reason: "Merge target", confidence: high },
+          { item: "C5", tag: "T3", reason: "Renamed", confidence: high },
+          { item: "C5", tag: "T4", reason: "Fits", confidence: high },
+        ],
+      });
+      const limited = proposalsFromPlan(
+        full,
+        {
+          ...EMPTY_PLAN,
+          tagAdditions: [
+            { item: "C1", tag: "T4", reason: "Fits", confidence: high },
+            { item: "C2", tag: "T4", reason: "Fits", confidence: high },
+            { item: "C2", tag: "T5", reason: "Fits too", confidence: high },
+          ],
+        },
+        { userId: USER },
+      );
+
+      expect(touched.proposals.filter((p) => p.action === "add_tag")).toMatchObject([
+        { clippingId: id(5), tagId: id(104) },
+      ]);
+      // C2 has 19 tags: room for one more, not two.
+      expect(limited.proposals).toMatchObject([
+        { action: "add_tag", clippingId: id(2), tagId: id(104) },
+      ]);
     });
   });
 

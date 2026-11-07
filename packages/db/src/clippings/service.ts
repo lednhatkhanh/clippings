@@ -42,7 +42,6 @@ import {
   MAX_TAG_LENGTH,
   MAX_TAGS_PER_CLIPPING,
   isTagColor,
-  normalizeTagName,
   normalizeTagNames,
   parseWebUrl,
   tagNameKey,
@@ -1688,7 +1687,7 @@ export function createClippingsService({
     sql`exists (select 1 from ${userSettings} where ${userSettings.userId} = ${userId} and ${userSettings.suggestTags})`;
 
   /** The clipping doesn't carry a tag of this name, ignoring case. */
-  const notTaggedAs = (clippingId: string, userId: string, name: SQLWrapper) =>
+  const notTaggedAs = (clippingId: string | SQLWrapper, userId: string, name: SQLWrapper) =>
     sql`not exists (
       select 1 from ${clippingTags} inner join ${tags} on ${tags.id} = ${clippingTags.tagId}
       where ${clippingTags.clippingId} = ${clippingId} and ${clippingTags.userId} = ${userId}
@@ -1721,18 +1720,22 @@ export function createClippingsService({
   }
 
   /**
-   * Adds a suggested tag to the clipping and removes the suggestion. The name matches one of the
+   * Adds the named suggested tags to the clipping, or all of its pending suggestions when `names`
+   * is left out, and removes those suggestions, in one transaction. A name matches one of the
    * user's tags ignoring case, so accepting "CSS" files it under "css". A name that isn't a
-   * suggestion any more (dismissed, replaced by a re-read) changes nothing. Returns the clipping
-   * as the detail read has it, or null when the user has no such clipping. Throws
-   * `InvalidTagsError` when the clipping would have too many tags.
+   * suggestion any more (dismissed, replaced by a re-read) changes nothing. Leaving `names` out
+   * takes only what the detail read shows, so nothing happens while the user has suggestions
+   * off. Returns the clipping as the detail read has it, or null when the user has no such
+   * clipping. Throws `InvalidTagsError` when the clipping would have too many tags, changing
+   * nothing.
    */
-  async function acceptTagSuggestion(
+  async function acceptTagSuggestions(
     userId: string,
     clippingId: string,
-    name: string,
+    names?: readonly string[],
   ): Promise<Clipping | null> {
     if (!UUID.test(clippingId)) return null;
+    const named = names === undefined ? undefined : normalizeTagNames(names);
     const accepted = await db.transaction(async (tx) => {
       // Locked, so a concurrent edit of the tags can't be lost under the replace below. `no key
       // update` still excludes other lockers like this one, but not the key-share lock a tag
@@ -1743,17 +1746,21 @@ export function createClippingsService({
         .where(and(eq(clippings.id, clippingId), eq(clippings.userId, userId), live))
         .for("no key update");
       if (!row) return false;
+      if (named?.length === 0) return true;
       const suggestion = and(
         eq(clippingTagSuggestions.clippingId, clippingId),
         eq(clippingTagSuggestions.userId, userId),
         isNull(clippingTagSuggestions.dismissedAt),
-        sql`${tagKey(clippingTagSuggestions.name)} = lower(${normalizeTagName(name)})`,
+        named === undefined
+          ? suggestionsOn(userId)
+          : sql`${tagKey(clippingTagSuggestions.name)} in ${keysOf(named)}`,
       );
-      const [found] = await tx
+      const found = await tx
         .select({ name: clippingTagSuggestions.name })
         .from(clippingTagSuggestions)
-        .where(suggestion);
-      if (found) {
+        .where(suggestion)
+        .orderBy(clippingTagSuggestions.origin, tagKey(clippingTagSuggestions.name));
+      if (found.length > 0) {
         const current = await tx
           .select({ name: tags.name })
           .from(clippingTags)
@@ -1763,13 +1770,84 @@ export function createClippingsService({
           tx,
           userId,
           clippingId,
-          checkedTagNames([...current.map((tag) => tag.name), found.name]),
+          checkedTagNames([...current.map((tag) => tag.name), ...found.map((tag) => tag.name)]),
         );
         await tx.delete(clippingTagSuggestions).where(suggestion);
       }
       return true;
     });
     return accepted ? getClipping(userId, clippingId) : null;
+  }
+
+  /** `acceptTagSuggestions` for one name. */
+  const acceptTagSuggestion = (userId: string, clippingId: string, name: string) =>
+    acceptTagSuggestions(userId, clippingId, [name]);
+
+  /**
+   * The user's clippings that have tag suggestions waiting, newest saved first, each as the
+   * detail read has it (`suggestedTags` filled). A suggestion waits when it isn't dismissed and
+   * the clipping doesn't carry the tag; none count while the user has suggestions off.
+   */
+  async function listClippingsWithSuggestions(
+    userId: string,
+    { cursor, limit = 20 }: { cursor?: string; limit?: number } = {},
+  ): Promise<SavedClippingsPage> {
+    const after = cursor ? decodeCursor(cursor) : null;
+    const waiting = and(
+      eq(clippingTagSuggestions.userId, userId),
+      eq(clippingTagSuggestions.clippingId, clippings.id),
+      isNull(clippingTagSuggestions.dismissedAt),
+      notTaggedAs(clippings.id, userId, clippingTagSuggestions.name),
+    );
+    // One extra row says whether another page follows without a second query.
+    const rows = await db
+      .select(clippingColumns)
+      .from(clippings)
+      .where(
+        and(
+          eq(clippings.userId, userId),
+          live,
+          suggestionsOn(userId),
+          sql`exists (select 1 from ${clippingTagSuggestions} where ${waiting})`,
+          afterCursor(after),
+        ),
+      )
+      .orderBy(desc(clippings.createdAt), desc(clippings.id))
+      .limit(limit + 1);
+    const pageRows = rows.slice(0, limit);
+    const last = pageRows.at(-1);
+    const [items, suggested] = await Promise.all([
+      withTags(userId, pageRows),
+      pageRows.length === 0
+        ? []
+        : db
+            .select({
+              clippingId: clippingTagSuggestions.clippingId,
+              name: clippingTagSuggestions.name,
+            })
+            .from(clippingTagSuggestions)
+            .where(
+              and(
+                eq(clippingTagSuggestions.userId, userId),
+                inArray(
+                  clippingTagSuggestions.clippingId,
+                  pageRows.map((row) => row.id),
+                ),
+                isNull(clippingTagSuggestions.dismissedAt),
+                notTaggedAs(clippingTagSuggestions.clippingId, userId, clippingTagSuggestions.name),
+              ),
+            )
+            .orderBy(clippingTagSuggestions.origin, tagKey(clippingTagSuggestions.name)),
+    ]);
+    return {
+      items: items.map((item) => ({
+        ...item,
+        suggestedTags: suggested
+          .filter((suggestion) => suggestion.clippingId === item.id)
+          .map((suggestion) => suggestion.name),
+      })),
+      nextCursor: rows.length > limit && last ? encodeCursor(last) : null,
+    };
   }
 
   /**
@@ -2814,6 +2892,8 @@ export function createClippingsService({
     reEnrichClipping,
     setPinned,
     acceptTagSuggestion,
+    acceptTagSuggestions,
+    listClippingsWithSuggestions,
     dismissTagSuggestions,
     previewImport,
     importClippings,
