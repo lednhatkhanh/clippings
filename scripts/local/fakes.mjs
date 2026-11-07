@@ -8,6 +8,20 @@
 //   node scripts/local/fakes.mjs        QStash on :8080, Anthropic on :8081, Voyage AI on :8082
 //
 // `scripts/local/local.env` points the app at them. Local development only.
+//
+// A test that starts the fakes itself moves them with FAKE_QSTASH_PORT, FAKE_ANTHROPIC_PORT and
+// FAKE_VOYAGE_PORT, and skips the 4 s model delay with FAKE_MODEL_DELAY_MS=0.
+//
+// The Anthropic fake reports `usage` on every reply and fails on request. Put a marker in the
+// message text:
+//   [fake-usage input=1000 output=200 cache_read=5000 cache_write=300 searches=2]
+//       sets the reply's usage (fields left out are 0; with no marker, input is the request's
+//       characters over four and output is 10)
+//   [fake-error spend-limit]   HTTP 400, the workspace usage limit reached
+//   [fake-error credit]        HTTP 400, "credit balance is too low"
+//   [fake-error tier-cap]      HTTP 429 with no retry-after, an account's spend cap
+//   [fake-error rate-limit]    HTTP 429 with retry-after, an ordinary rate limit
+//   [fake-error overloaded]    HTTP 529
 import { createHash, createHmac } from "node:crypto";
 import http from "node:http";
 
@@ -15,7 +29,8 @@ import { constructNow, getTime, getUnixTime } from "date-fns";
 
 const SIGNING_KEY = "local-current-key"; // QSTASH_CURRENT_SIGNING_KEY in local.env
 const RETRY_AFTER_MS = 1000;
-const MODEL_DELAY_MS = 4000; // long enough to see the "Reading the page…" state
+// Long enough to see the "Reading the page…" state.
+const MODEL_DELAY_MS = Number(process.env.FAKE_MODEL_DELAY_MS ?? 4000);
 // QStash's real `Upstash-Delay` is honoured up to this, so an import backlog spread over a day
 // still drains visibly (all at once, after this long) instead of over hours.
 const MAX_DELAY_MS = 5000;
@@ -94,7 +109,7 @@ function accept(destination, headers, body) {
   return { messageId: messageId() };
 }
 
-listen(8080, "fake qstash", (request, response, body) => {
+listen(Number(process.env.FAKE_QSTASH_PORT ?? 8080), "fake qstash", (request, response, body) => {
   const publish = request.url?.match(/^\/v2\/publish\/(.+)$/);
   const batch = request.url === "/v2/batch";
   if (request.method !== "POST" || !(publish || batch)) return response.writeHead(404).end();
@@ -239,61 +254,116 @@ function streamAnswer(payload, response) {
   step();
 }
 
-listen(8081, "fake anthropic", (request, response, body) => {
-  const payload = JSON.parse(body || "{}");
-  const asked = payload.messages?.at(-1)?.content;
-  if (
-    payload.stream &&
-    Array.isArray(asked) &&
-    asked.some((block) => block.type === "search_result")
-  ) {
-    return streamAnswer(payload, response);
+// Error replies a `[fake-error name]` marker asks for: status, type, message, retry-after seconds.
+const ERROR_REPLIES = {
+  "spend-limit": [
+    400,
+    "invalid_request_error",
+    "You have reached your specified workspace API usage limits. You will regain access on 2026-12-01 at 00:00 UTC.",
+  ],
+  credit: [
+    400,
+    "invalid_request_error",
+    "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.",
+  ],
+  "tier-cap": [429, "rate_limit_error", "This request would exceed your account's spend limit."],
+  "rate-limit": [429, "rate_limit_error", "This request would exceed your rate limit.", 5],
+  overloaded: [529, "overloaded_error", "Overloaded"],
+};
+
+/** The error a `[fake-error …]` marker in the message asks for, or undefined. */
+function requestedError(message) {
+  const name = /\[fake-error ([\w-]+)\]/.exec(message)?.[1];
+  return name ? ERROR_REPLIES[name] : undefined;
+}
+
+/** The usage a reply reports: a `[fake-usage …]` marker's numbers, or a size from the request. */
+function replyUsage(message, requestBody) {
+  const marker = /\[fake-usage([^\]]*)\]/.exec(message)?.[1];
+  if (marker === undefined) {
+    return { input_tokens: Math.ceil(requestBody.length / 4), output_tokens: 10 };
   }
-  // The content is a string or a list of blocks (a PDF comes as a document block before the text).
-  const content = payload.messages?.[0]?.content ?? "";
-  const message = Array.isArray(content)
-    ? content
-        .filter((block) => block.type === "text")
-        .map((block) => block.text)
-        .join("\n")
-    : String(content);
-  const digests = payload.tool_choice?.name === "save_digest";
-  const title = /^Page title: (.*)$/m.exec(message)?.[1];
-  // Present when the tool asks for suggestions (tag suggestions are on for the user).
-  const suggests = Boolean(payload.tools?.[0]?.input_schema?.properties?.existing_tags);
-  console.log(
-    `[anthropic] ${request.url} model=${payload.model} title=${title} suggests=${suggests}`,
-  );
-  setTimeout(() => {
-    response.writeHead(200, { "content-type": "application/json" });
-    response.end(
-      JSON.stringify({
-        id: "msg_local",
-        type: "message",
-        role: "assistant",
-        model: payload.model,
-        stop_reason: "tool_use",
-        stop_sequence: null,
-        content: [
-          {
-            type: "tool_use",
-            id: "toolu_local",
-            name: payload.tool_choice?.name ?? "save_reading",
-            input: digests
-              ? weeklyDigest(message)
-              : {
-                  title: `Read: ${title ?? "Untitled"}`,
-                  summary: "A stand-in summary of the page. It says what the page is about.",
-                  excerpt: "A stand-in passage copied from the page.",
-                  ...(suggests ? suggestTags(message, title) : {}),
-                },
-          },
-        ],
-        usage: { input_tokens: 10, output_tokens: 10 },
-      }),
+  const count = (name) => Number(new RegExp(`${name}=(\\d+)`).exec(marker)?.[1] ?? 0);
+  return {
+    input_tokens: count("input"),
+    output_tokens: count("output"),
+    cache_read_input_tokens: count("cache_read"),
+    cache_creation_input_tokens: count("cache_write"),
+    server_tool_use: { web_search_requests: count("searches") },
+  };
+}
+
+listen(
+  Number(process.env.FAKE_ANTHROPIC_PORT ?? 8081),
+  "fake anthropic",
+  (request, response, body) => {
+    const payload = JSON.parse(body || "{}");
+    const asked = payload.messages?.at(-1)?.content;
+    if (
+      payload.stream &&
+      Array.isArray(asked) &&
+      asked.some((block) => block.type === "search_result")
+    ) {
+      return streamAnswer(payload, response);
+    }
+    // The content is a string or a list of blocks (a PDF comes as a document block before the text).
+    const content = payload.messages?.[0]?.content ?? "";
+    const message = Array.isArray(content)
+      ? content
+          .filter((block) => block.type === "text")
+          .map((block) => block.text)
+          .join("\n")
+      : String(content);
+    const failure = requestedError(message);
+    if (failure) {
+      const [status, type, text, retryAfter] = failure;
+      console.log(`[anthropic] ${request.url} model=${payload.model} -> ${status} ${type}`);
+      response.writeHead(status, {
+        "content-type": "application/json",
+        ...(retryAfter && { "retry-after": String(retryAfter) }),
+      });
+      return response.end(
+        JSON.stringify({ type: "error", error: { type, message: text }, request_id: "req_local" }),
+      );
+    }
+    const digests = payload.tool_choice?.name === "save_digest";
+    const title = /^Page title: (.*)$/m.exec(message)?.[1];
+    // Present when the tool asks for suggestions (tag suggestions are on for the user).
+    const suggests = Boolean(payload.tools?.[0]?.input_schema?.properties?.existing_tags);
+    console.log(
+      `[anthropic] ${request.url} model=${payload.model} title=${title} suggests=${suggests}`,
     );
-  }, MODEL_DELAY_MS);
-});
+    setTimeout(() => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          id: "msg_local",
+          type: "message",
+          role: "assistant",
+          model: payload.model,
+          stop_reason: "tool_use",
+          stop_sequence: null,
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_local",
+              name: payload.tool_choice?.name ?? "save_reading",
+              input: digests
+                ? weeklyDigest(message)
+                : {
+                    title: `Read: ${title ?? "Untitled"}`,
+                    summary: "A stand-in summary of the page. It says what the page is about.",
+                    excerpt: "A stand-in passage copied from the page.",
+                    ...(suggests ? suggestTags(message, title) : {}),
+                  },
+            },
+          ],
+          usage: replyUsage(message, body),
+        }),
+      );
+    }, MODEL_DELAY_MS);
+  },
+);
 
 const EMBEDDING_DIMENSIONS = 1024; // EMBEDDING_DIMENSIONS in @clippings/db
 
@@ -310,7 +380,7 @@ function embedWords(text) {
   return vector;
 }
 
-listen(8082, "fake voyage", (request, response, body) => {
+listen(Number(process.env.FAKE_VOYAGE_PORT ?? 8082), "fake voyage", (request, response, body) => {
   if (request.method !== "POST" || request.url !== "/v1/embeddings") {
     return response.writeHead(404).end();
   }
@@ -329,7 +399,8 @@ listen(8082, "fake voyage", (request, response, body) => {
         index,
       })),
       model: payload.model,
-      usage: { total_tokens: inputs.length },
+      // About four characters a token, like the Anthropic fake.
+      usage: { total_tokens: inputs.reduce((sum, text) => sum + Math.ceil(text.length / 4), 0) },
     }),
   );
 });

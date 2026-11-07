@@ -61,15 +61,17 @@ import {
   tags,
   userSettings,
 } from "../schema.ts";
-import type {
-  Clock,
-  Embedder,
-  EmbeddingPurpose,
-  FetchedPage,
-  JobPublisher,
-  PageFetcher,
-  PageSummary,
-  Summarizer,
+import {
+  CapReachedError,
+  type Clock,
+  type Embedder,
+  type EmbeddingOwner,
+  type EmbeddingPurpose,
+  type FetchedPage,
+  type JobPublisher,
+  type PageFetcher,
+  type PageSummary,
+  type Summarizer,
 } from "./ports.ts";
 import { isWorthEmbedding } from "./query-embedding.ts";
 
@@ -262,7 +264,12 @@ export type EnrichmentOutcome =
   /** The clipping was not pending (already read, failed, or gone), so nothing was done. */
   | "skipped"
   /** Reading failed on the last attempt, so the clipping is now failed. */
-  | "failed";
+  | "failed"
+  /**
+   * The model gateway refused the call: the user's daily cap is reached. The clipping stays
+   * pending, the job is done (no retry), and the daily sweep requests it again on a later day.
+   */
+  | "held";
 
 // Every column but `search_tsv` and `embedding`, which only search reads.
 const { searchTsv, embedding, ...clippingColumns } = getColumns(clippings);
@@ -645,14 +652,19 @@ export function createClippingsService({
   async function embed(
     text: string,
     purpose: EmbeddingPurpose,
+    owner: EmbeddingOwner,
     signal?: AbortSignal,
   ): Promise<number[]> {
-    return checkedVector(await embedder.embed(text, purpose, signal));
+    return checkedVector(await embedder.embed(text, purpose, owner, signal));
   }
 
   /** `embed` for several texts in one call: one vector each, in order. */
-  async function embedMany(texts: readonly string[], purpose: EmbeddingPurpose) {
-    const vectors = await embedder.embedMany(texts, purpose);
+  async function embedMany(
+    texts: readonly string[],
+    purpose: EmbeddingPurpose,
+    owner: EmbeddingOwner,
+  ) {
+    const vectors = await embedder.embedMany(texts, purpose, owner);
     if (vectors.length !== texts.length) {
       throw new Error(`Expected ${texts.length} embeddings, got ${vectors.length}`);
     }
@@ -1115,12 +1127,17 @@ export function createClippingsService({
     // A query still being typed may have no meaning to find yet: words alone.
     const queryVector =
       !typeahead || isWorthEmbedding(text)
-        ? await embed(text, "query", signal).catch((error: unknown) => {
-            // A cancelled search is not a failed embedding.
-            signal?.throwIfAborted();
-            console.error("Couldn't embed the search query; searching by words alone", error);
-            return null;
-          })
+        ? await embed(text, "query", { userId, jobKind: "search" }, signal).catch(
+            (error: unknown) => {
+              // A cancelled search is not a failed embedding.
+              signal?.throwIfAborted();
+              // A reached cap is expected: say nothing, search by words alone.
+              if (!(error instanceof CapReachedError)) {
+                console.error("Couldn't embed the search query; searching by words alone", error);
+              }
+              return null;
+            },
+          )
         : null;
     signal?.throwIfAborted();
 
@@ -1842,6 +1859,10 @@ export function createClippingsService({
    * when the fetch fails or finds no text (not a PDF), since a site that turns servers away is why
    * it was kept. Only a clipping with no usable text fails. The link verdict is reset only by a
    * reading that fetched the page: one from the browser's text says nothing about the link.
+   *
+   * When the model gateway refuses the reading (the user's daily cap is reached, or Anthropic's
+   * spend limit or credit), the clipping is held: it stays pending, nothing is thrown (so the
+   * queue doesn't retry) and no sweep attempt is spent. The daily sweep requests it again later.
    */
   async function enrichClipping(
     clippingId: string,
@@ -1903,16 +1924,24 @@ export function createClippingsService({
       pageText = page.text;
       read = await summarizer.summarize({
         url: row.url,
+        userId: row.userId,
         ...page,
         ...(userTags === undefined ? {} : { userTags }),
       });
       // The reading stands without an embedding: search finds the clipping by its words, and the
       // daily sweep embeds it later. A retry would only read the page and call Haiku again.
-      meaning = await embed(documentText(read), "document").catch((error: unknown) => {
-        console.error(`Couldn't embed clipping ${clippingId}; saving it without`, error);
+      meaning = await embed(documentText(read), "document", {
+        userId: row.userId,
+        jobKind: "enrich",
+      }).catch((error: unknown) => {
+        if (!(error instanceof CapReachedError)) {
+          console.error(`Couldn't embed clipping ${clippingId}; saving it without`, error);
+        }
         return null;
       });
     } catch (error) {
+      // The cap is not a failure: the clipping stays pending, and no retry or restart is spent.
+      if (error instanceof CapReachedError) return "held";
       if (!lastAttempt) throw error;
       const now = clock.now();
       await db
@@ -2026,7 +2055,9 @@ export function createClippingsService({
    * for more than an hour, starting failed ones over. Returns the ids it requested. A batch is
    * capped, so a backlog drains over several days instead of one long run. Imports waiting their
    * turn are pending on purpose: `drainImports` takes those. A failed clipping is started over at
-   * most `MAX_SWEEP_RESTARTS` times; after that it stays failed until the user retries it.
+   * most `MAX_SWEEP_RESTARTS` times; after that it stays failed until the user retries it. A
+   * clipping held by the spend cap is pending, so each day's request is free of that count and it
+   * is read as soon as the cap allows.
    *
    * The jobs go out as one batch. If the queue can't be reached the clippings stay pending, and
    * the next daily sweep takes them again.
@@ -2378,23 +2409,33 @@ export function createClippingsService({
       .where(and(eq(clippings.status, "ready"), isNull(embedding), live))
       .orderBy(desc(clippings.createdAt))
       .limit(EMBED_BATCH_SIZE);
+    // A call is billed to one user, so each call holds one user's clippings.
+    const byUser = new Map<string, (typeof missing)[number][]>();
+    for (const row of missing) byUser.set(row.userId, [...(byUser.get(row.userId) ?? []), row]);
     let count = 0;
-    for (const group of chunks(missing, EMBED_CALL_SIZE)) {
-      let vectors: number[][];
-      try {
-        vectors = await embedMany(group.map(documentText), "document");
-      } catch (error) {
-        console.error(`Couldn't embed ${group.length} clippings; stopping for today`, error);
-        break;
-      }
-      for (const [index, row] of group.entries()) {
-        // Only while still missing: enrichment may have written one in the meantime.
-        const [updated] = await db
-          .update(clippings)
-          .set({ embedding: vectors[index]! })
-          .where(and(eq(clippings.id, row.id), isNull(embedding)))
-          .returning({ id: clippings.id });
-        if (updated) count += 1;
+    for (const [userId, rows] of byUser) {
+      for (const group of chunks(rows, EMBED_CALL_SIZE)) {
+        let vectors: number[][];
+        try {
+          vectors = await embedMany(group.map(documentText), "document", {
+            userId,
+            jobKind: "enrich",
+          });
+        } catch (error) {
+          // A user at their cap waits for tomorrow; the others go on.
+          if (error instanceof CapReachedError) break;
+          console.error(`Couldn't embed ${group.length} clippings; stopping for today`, error);
+          return count;
+        }
+        for (const [index, row] of group.entries()) {
+          // Only while still missing: enrichment may have written one in the meantime.
+          const [updated] = await db
+            .update(clippings)
+            .set({ embedding: vectors[index]! })
+            .where(and(eq(clippings.id, row.id), isNull(embedding)))
+            .returning({ id: clippings.id });
+          if (updated) count += 1;
+        }
       }
     }
     return count;

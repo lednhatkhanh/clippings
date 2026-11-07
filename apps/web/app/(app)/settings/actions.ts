@@ -15,7 +15,12 @@ import {
   type ImportPreview,
 } from "@/lib/settings/import.ts";
 import { getSettings } from "@/lib/settings/service.ts";
-import { pickAppearance, type Appearance } from "@clippings/shared";
+import {
+  automationSettingsChangeSchema,
+  pickAppearance,
+  type Appearance,
+  type AutomationSettings,
+} from "@clippings/shared";
 
 /** Saves the appearance settings the user changed. Values the app doesn't know are dropped. */
 export async function saveAppearanceAction(changes: Partial<Appearance>): Promise<void> {
@@ -53,6 +58,28 @@ export async function setSuggestTagsAction(on: boolean): Promise<boolean> {
   const userId = await requireUserId();
   if (typeof on !== "boolean") throw new Error("Invalid setting");
   return getSettings().setSuggestTags(userId, on);
+}
+
+/** The outcome of saving the automation limits: what is now stored, or why nothing was. */
+export type AutomationActionResult =
+  | { ok: true; value: AutomationSettings }
+  | { ok: false; message: string };
+
+/**
+ * Saves the user's daily cap (micro-dollars) and/or research-job limit. The change is checked
+ * with the shared schema, so a client can't store a negative, fractional or absurd limit.
+ */
+export async function saveAutomationSettingsAction(
+  change: unknown,
+): Promise<AutomationActionResult> {
+  const userId = await requireUserId();
+  const parsed = automationSettingsChangeSchema.safeParse(change);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid setting" };
+  }
+  const value = await getSettings().updateAutomationSettings(userId, parsed.data);
+  revalidatePath("/settings");
+  return { ok: true, value };
 }
 
 /** The bookmarks file from the import form, or null when the form carries none. */
