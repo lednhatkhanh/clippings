@@ -33,9 +33,10 @@
 // [fake-batch expired] marker in a request's message gives that outcome for the request, and a
 // [fake-error spend-limit|credit|tier-cap] marker makes the create itself fail with that error.
 //
-// A librarian request (a forced plan_tags, plan_folders, plan_links, plan_topic_pages or
-// confirm_links tool) gets a deterministic plan read off the library in its system prompt: tags
-// "<x>" and "<x>s" merge, a tag with capitals is renamed to lowercase, items and tags go in a
+// A librarian request (a forced plan_tags, plan_tag_additions, plan_folders, plan_links,
+// plan_topic_pages or confirm_links tool) gets a deterministic plan read off the library in its
+// system prompt: tags "<x>" and "<x>s" merge, a tag with capitals is renamed to lowercase, every
+// suggested tag that names an existing tag is added to its item, items and tags go in a
 // folder named for their first tag (items with none in "Notes"), the first two items that share a
 // tag are linked, and each tag with 3+ items gets a topic page. Every change is "high" confidence
 // unless the library (a note's text, say) holds [fake-confidence low].
@@ -293,6 +294,7 @@ function lessonInput(message) {
 
 const LIBRARIAN_TOOLS = new Set([
   "plan_tags",
+  "plan_tag_additions",
   "plan_folders",
   "plan_links",
   "plan_topic_pages",
@@ -311,11 +313,15 @@ function librarianInput(payload, message) {
     (m) => ({ ref: m[1], name: m[2], usage: Number(m[3]) }),
   );
   const items = [
-    ...system.matchAll(/^(C\d+) (link|note) "(.*)" \[(.*)\] \((no folder|folder F\d+)\)/gm),
+    ...system.matchAll(/^(C\d+) (link|note) "(.*)" \[(.*)\] \((no folder|folder F\d+)\)(.*)$/gm),
   ].map((m) => ({
     ref: m[1],
     kind: m[2],
     tags: m[4] === "no tags" ? [] : m[4].split(", "),
+    // `suggested tags: T3 "css", T5 "react"` after the folder, when the item has some.
+    suggested: [
+      ...(/^ suggested tags: (.*?)(?: — |$)/.exec(m[6])?.[1] ?? "").matchAll(/(T\d+) "/g),
+    ].map((ref) => ref[1]),
   }));
   const folders = [...system.matchAll(/^F\d+ "(.*)" color/gm)].map((m) => m[1].toLowerCase());
   const tool = toolAskedFor(payload, message);
@@ -347,6 +353,18 @@ function librarianInput(payload, message) {
       .filter((tag) => tag.usage >= 10)
       .map((tag) => ({ tag: tag.ref, reason: `${tag.usage} items is a lot for one tag.` }));
     return { merges, renames, folds: [], too_broad };
+  }
+
+  if (tool === "plan_tag_additions") {
+    const additions = items.flatMap((item) =>
+      item.suggested.map((tag) => ({
+        item: item.ref,
+        tag,
+        reason: "It was suggested for this item and fits it.",
+        confidence,
+      })),
+    );
+    return { additions };
   }
 
   if (tool === "plan_folders") {

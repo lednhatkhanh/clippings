@@ -30,6 +30,14 @@ export const folderPlanSchema = z.object({
 });
 export type FolderPlan = z.infer<typeof folderPlanSchema>;
 
+/** What the model plans for the tags of the listed items: existing tags to put on them. */
+export const tagAdditionPlanSchema = z.object({
+  additions: z.array(
+    z.object({ item: z.string(), tag: z.string(), reason: z.string(), confidence }),
+  ),
+});
+export type TagAdditionPlan = z.infer<typeof tagAdditionPlanSchema>;
+
 export const linkPlanSchema = z.object({
   links: z.array(z.object({ a: z.string(), b: z.string(), reason: z.string(), confidence })),
 });
@@ -58,6 +66,8 @@ export interface LibraryPlan {
   renames: TagPlan["renames"];
   folds: TagPlan["folds"];
   tooBroad: TagPlan["too_broad"];
+  /** Only the items the planner was asked about. */
+  tagAdditions: TagAdditionPlan["additions"];
   folders: FolderPlan["folders"];
   moves: FolderPlan["moves"];
   /** Only the links Haiku kept. */
@@ -70,6 +80,7 @@ export const EMPTY_PLAN: LibraryPlan = {
   renames: [],
   folds: [],
   tooBroad: [],
+  tagAdditions: [],
   folders: [],
   moves: [],
   links: [],
@@ -110,13 +121,14 @@ function list(properties: Record<string, unknown>) {
 }
 
 export const PLAN_TAGS = "plan_tags";
+export const PLAN_TAG_ADDITIONS = "plan_tag_additions";
 export const PLAN_FOLDERS = "plan_folders";
 export const PLAN_LINKS = "plan_links";
 export const PLAN_TOPIC_PAGES = "plan_topic_pages";
 export const CONFIRM_LINKS = "confirm_links";
 
 /**
- * The planner's tools. Every planning call sends all four and asks for one (`oneToolCall`):
+ * The planner's tools. Every planning call sends all five and asks for one (`oneToolCall`):
  * the tool list is the first thing a prompt cache keys on, so identical tools let each stage read
  * the library block the first one wrote.
  */
@@ -129,6 +141,13 @@ export const PLANNER_TOOLS: Anthropic.Tool[] = [
       renames: list({ tag: STRING, name: STRING, reason: STRING, confidence: CONFIDENCE }),
       folds: list({ tag: STRING, into: STRING, reason: STRING, confidence: CONFIDENCE }),
       too_broad: list({ tag: STRING, reason: STRING }),
+    },
+  ),
+  strictTool(
+    PLAN_TAG_ADDITIONS,
+    "Plans existing tags to put on the listed items, each with a reason. Suggested tags that fit come first.",
+    {
+      additions: list({ item: STRING, tag: STRING, reason: STRING, confidence: CONFIDENCE }),
     },
   ),
   strictTool(

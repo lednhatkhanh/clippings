@@ -18,6 +18,7 @@ const view: LibraryView = {
     title: `Item ${name}`,
     summary: `About ${name}`,
     tags: ["css"],
+    suggestedTags: [],
     folderId: null,
     savedAt: "2026-11-01T00:00:00Z",
   })),
@@ -117,6 +118,39 @@ describe("the librarian planner", () => {
       [LINK_CHECK_MODEL, asked, "Answer by calling confirm_links, once, and write nothing else."],
       [PLANNER_MODEL, asked, "Answer by calling plan_topic_pages, once, and write nothing else."],
     ]);
+  });
+
+  it("asks for tag additions only for items with a suggested tag the user has, and keeps the ones for items it asked about", async () => {
+    const withSuggestions = indexLibrary(
+      {
+        ...view,
+        items: view.items.map((item, i) => ({
+          ...item,
+          tags: i === 0 ? ["css"] : [],
+          // C2 has one the user has; C3 only one they don't; C1 has it already.
+          suggestedTags: i === 0 ? ["css"] : i === 1 ? ["CSS"] : i === 2 ? ["rust"] : [],
+        })),
+      },
+      NOW,
+    );
+    const additions = {
+      additions: [
+        { item: "C2", tag: "T1", reason: "Fits", confidence: "high" },
+        { item: "C4", tag: "T1", reason: "Not asked about", confidence: "high" },
+      ],
+    };
+    const { planner: p, requests } = planner([tags, additions, folders, links, verdicts, pages]);
+
+    const result = await p.plan("u", withSuggestions, { budgetMs: 240_000 });
+
+    expect(withSuggestions.text).toContain(
+      '"Item b" [no tags] (no folder) suggested tags: T1 "css"',
+    );
+    expect(result.plan.tagAdditions).toEqual([additions.additions[0]]);
+    const asked = requests.map(lastLine);
+    expect(asked[1]).toBe("Answer by calling plan_tag_additions, once, and write nothing else.");
+    const content = requests[1]!.messages[0]!.content as string;
+    expect(content).toContain("these items: C2\n");
   });
 
   it("sends the same tools and system blocks on every planning call, with the library cached", async () => {

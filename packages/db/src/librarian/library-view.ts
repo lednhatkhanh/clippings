@@ -3,7 +3,15 @@ import { and, count, desc, eq, isNull, sql } from "drizzle-orm";
 import { formatIsoUtc, type Folder, type TagColor } from "@clippings/shared";
 
 import type { Database } from "../database.ts";
-import { clippings, clippingTags, folders, tags, topicPages } from "../schema.ts";
+import {
+  clippings,
+  clippingTags,
+  clippingTagSuggestions,
+  folders,
+  tags,
+  topicPages,
+  userSettings,
+} from "../schema.ts";
 
 /** Most clippings and notes the librarian's view of a library lists, newest first. */
 export const LIBRARY_VIEW_ITEM_LIMIT = 1_500;
@@ -20,6 +28,11 @@ export interface LibraryViewItem {
   /** The page's summary, or the start of a note's text; null before enrichment wrote one. */
   summary: string | null;
   tags: string[];
+  /**
+   * Tags enrichment suggested that wait for the user's decision, by name: not dismissed, not
+   * already on the item, and none while the user has suggestions off.
+   */
+  suggestedTags: string[];
   folderId: string | null;
   /** ISO 8601. */
   savedAt: string;
@@ -81,6 +94,26 @@ export async function readLibraryView(
     .innerJoin(clippings, eq(clippings.id, clippingTags.clippingId))
     .where(and(eq(clippingTags.userId, userId), isNull(clippings.deletedAt)));
 
+  const waiting = await db
+    .select({ clippingId: clippingTagSuggestions.clippingId, name: clippingTagSuggestions.name })
+    .from(clippingTagSuggestions)
+    .innerJoin(clippings, eq(clippings.id, clippingTagSuggestions.clippingId))
+    .where(
+      and(
+        eq(clippingTagSuggestions.userId, userId),
+        isNull(clippingTagSuggestions.dismissedAt),
+        isNull(clippings.deletedAt),
+        sql`exists (select 1 from ${userSettings} where ${userSettings.userId} = ${userId} and ${userSettings.suggestTags})`,
+        sql`not exists (
+          select 1 from ${clippingTags} inner join ${tags} on ${tags.id} = ${clippingTags.tagId}
+          where ${clippingTags.clippingId} = ${clippingTagSuggestions.clippingId}
+            and ${clippingTags.userId} = ${userId}
+            and lower(${tags.name}) = lower(${clippingTagSuggestions.name})
+        )`,
+      ),
+    )
+    .orderBy(clippingTagSuggestions.origin, sql`lower(${clippingTagSuggestions.name})`);
+
   const tagRows = await db
     .select({
       id: tags.id,
@@ -111,6 +144,11 @@ export async function readLibraryView(
     if (name !== undefined) tagNames.set(clippingId, [...(tagNames.get(clippingId) ?? []), name]);
   }
 
+  const suggestedNames = new Map<string, string[]>();
+  for (const { clippingId, name } of waiting) {
+    suggestedNames.set(clippingId, [...(suggestedNames.get(clippingId) ?? []), name]);
+  }
+
   return {
     totalItems: total?.n ?? 0,
     items: rows.map((row) => ({
@@ -119,6 +157,7 @@ export async function readLibraryView(
       title: row.title,
       summary: row.summary,
       tags: (tagNames.get(row.id) ?? []).toSorted((a, b) => a.localeCompare(b)),
+      suggestedTags: suggestedNames.get(row.id) ?? [],
       folderId: row.folderId,
       savedAt: formatIsoUtc(row.createdAt),
     })),

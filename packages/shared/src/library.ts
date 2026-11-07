@@ -34,6 +34,7 @@ export const LIBRARY_CHANGE_ACTIONS = [
   "create_tag",
   "merge_tag",
   "rename_tag",
+  "delete_tag",
   "fold_tag",
   "set_tag_color",
   "create_folder",

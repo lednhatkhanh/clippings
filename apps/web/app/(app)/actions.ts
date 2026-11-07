@@ -250,6 +250,25 @@ export async function acceptTagSuggestionAction(
 }
 
 /**
+ * Adds all of the pending tag suggestions of one of the user's clippings at once. Returns the
+ * clipping's tags as stored, or null when it isn't theirs or it would have too many tags.
+ */
+export async function acceptTagSuggestionsAction(clippingId: string): Promise<Tag[] | null> {
+  const userId = await requireUserId();
+  if (typeof clippingId !== "string") return null;
+
+  try {
+    const updated = await getClippings().acceptTagSuggestions(userId, clippingId);
+    revalidatePath("/");
+    revalidatePath(`/c/${clippingId}`);
+    return updated?.tags ?? null;
+  } catch (error) {
+    if (error instanceof InvalidTagsError) return null;
+    throw error;
+  }
+}
+
+/**
  * Dismisses the named suggestions on one of the user's clippings, or all of them when `names` is
  * left out. They stay gone, even after the page is read again. False if it isn't theirs.
  */

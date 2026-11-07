@@ -2,11 +2,14 @@ import { addMilliseconds, isAfter, parseISO } from "date-fns";
 import { and, count, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import {
+  AUTOMATIC_TAG_COLOR,
   formatIsoUtc,
   isTagColor,
+  isTagColorChoice,
   MAX_FOLDER_NAME_LENGTH,
   MAX_LINK_REASON_LENGTH,
   MAX_TAG_LENGTH,
+  MAX_TAGS_PER_CLIPPING,
   MAX_TOPIC_PAGE_LENGTH,
   normalizeTagName,
   tagNameKey,
@@ -15,6 +18,7 @@ import {
   type LibraryChangeActor,
   type LibraryChangeConfidence,
   type TagColor,
+  type TagColorChoice,
 } from "@clippings/shared";
 
 import { ChangeConflictError, ChangeNotUndoableError } from "../changes/service.ts";
@@ -23,6 +27,7 @@ import type { Database } from "../database.ts";
 import {
   clippings,
   clippingTags,
+  clippingTagSuggestions,
   folders,
   itemLinks,
   libraryChanges,
@@ -46,12 +51,14 @@ export type ProposedChange = {
   reason: string;
   confidence?: LibraryChangeConfidence | null;
 } & (
-  | { action: "set_tag_color"; tagId: string; color: TagColor }
+  | { action: "add_tag"; clippingId: string; tagId: string }
+  | { action: "set_tag_color"; tagId: string; color: TagColorChoice }
   | { action: "create_folder"; name: string; color?: TagColor; id?: string }
   | { action: "move_to_folder"; itemKind: "clipping" | "tag"; itemId: string; folderId: string }
   | { action: "link_items"; fromId: string; toId: string; id?: string }
   | { action: "write_topic_page"; tagId: string; body: string }
   | { action: "rename_tag"; tagId: string; name: string }
+  | { action: "delete_tag"; tagId: string }
   | { action: "merge_tag" | "fold_tag"; sourceId: string; targetId: string }
 );
 
@@ -120,13 +127,6 @@ export interface StoredChange {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Lets one user's librarian writes take turns, so a check and the write after it can't be split. */
-export async function lockUser(tx: Transaction, userId: string) {
-  await tx.execute(
-    sql`select pg_advisory_xact_lock(hashtextextended(${`librarian:${userId}`}, 0))`,
-  );
-}
-
 /** The latest moment a change of this user took effect, or null before the first. */
 export async function latestChangeAt(tx: Transaction, userId: string): Promise<Date | null> {
   const [row] = await tx
@@ -192,6 +192,8 @@ export async function planChange(
 ): Promise<PlanOutcome> {
   checkedReason(proposal.reason);
   switch (proposal.action) {
+    case "add_tag":
+      return planAddTag(tx, userId, actor, proposal);
     case "set_tag_color":
       return planColor(tx, userId, actor, proposal);
     case "create_folder":
@@ -204,10 +206,130 @@ export async function planChange(
       return planTopicPage(tx, userId, proposal);
     case "rename_tag":
       return planRename(tx, userId, proposal);
+    case "delete_tag":
+      return planDelete(tx, userId, actor, proposal);
     case "merge_tag":
     case "fold_tag":
       return planMerge(tx, userId, proposal);
   }
+}
+
+async function planAddTag(
+  tx: Transaction,
+  userId: string,
+  actor: ProposingActor,
+  proposal: Extract<ProposedChange, { action: "add_tag" }>,
+): Promise<PlanOutcome> {
+  const clipping = await loadLiveClipping(tx, userId, proposal.clippingId);
+  const tag = await loadTag(tx, userId, proposal.tagId);
+  const carried = await tx
+    .select({ id: tags.id, name: tags.name })
+    .from(clippingTags)
+    .innerJoin(tags, and(eq(tags.id, clippingTags.tagId), eq(tags.userId, clippingTags.userId)))
+    .where(and(eq(clippingTags.clippingId, clipping.id), eq(clippingTags.userId, userId)))
+    .orderBy(sql`lower(${tags.name})`, tags.name);
+  if (carried.some((other) => other.id === tag.id)) {
+    return { skip: `It already has the tag "${tag.name}"` };
+  }
+  if (carried.length >= MAX_TAGS_PER_CLIPPING) {
+    return { skip: `It already has ${MAX_TAGS_PER_CLIPPING} tags, the most a clipping can have` };
+  }
+
+  // The librarian doesn't put back a tag the user turned down: dismissed as a suggestion, or
+  // taken off after it was added (the link is gone now, so any earlier add, by anyone, was undone
+  // or removed by hand). The user asking through Claude overrides that.
+  if (actor === "librarian") {
+    const [dismissed] = await tx
+      .select({ name: clippingTagSuggestions.name })
+      .from(clippingTagSuggestions)
+      .where(
+        and(
+          eq(clippingTagSuggestions.clippingId, clipping.id),
+          eq(clippingTagSuggestions.userId, userId),
+          sql`${clippingTagSuggestions.dismissedAt} is not null`,
+          sql`lower(${clippingTagSuggestions.name}) = ${tagNameKey(tag.name)}`,
+        ),
+      );
+    if (dismissed) return { skip: "The user dismissed this tag for this clipping" };
+    const [taken] = await tx
+      .select({ id: libraryChanges.id })
+      .from(libraryChanges)
+      .where(
+        and(
+          eq(libraryChanges.userId, userId),
+          inArray(libraryChanges.action, ["add_tag", "create_tag"]),
+          inArray(libraryChanges.status, ["applied", "undone"]),
+          sql`${libraryChanges.targetIds}[1] = ${clipping.id}::uuid`,
+          sql`${libraryChanges.targetIds}[2] = ${tag.id}::uuid`,
+        ),
+      )
+      .limit(1);
+    if (taken) return { skip: "The user took this tag off this clipping before" };
+  }
+
+  const namesBefore = carried.map((other) => other.name);
+  return {
+    plan: {
+      action: "add_tag",
+      targetIds: [clipping.id, tag.id],
+      before: { tags: namesBefore },
+      after: {
+        tags: [...namesBefore, tag.name],
+        tag: { id: tag.id, name: tag.name },
+        summary: `Add the tag "${tag.name}" to "${clipping.title}"`,
+      },
+      waitingFor: null,
+      write: async (writer) => {
+        // The plan read the tags before a concurrent edit of this clipping could finish, and the
+        // user lock does not hold that edit back. Lock the clipping, as `acceptTagSuggestions`
+        // does (`no key update` excludes tag editors but not the key-share lock a tag link
+        // takes), and look again: the tag may be on it now, or the clipping full.
+        const [locked] = await writer
+          .select({ id: clippings.id })
+          .from(clippings)
+          .where(
+            and(
+              eq(clippings.id, clipping.id),
+              eq(clippings.userId, userId),
+              isNull(clippings.deletedAt),
+            ),
+          )
+          .for("no key update");
+        if (!locked) throw new LibrarianNotFoundError("clipping");
+        const nowCarried = await writer
+          .select({ tagId: clippingTags.tagId })
+          .from(clippingTags)
+          .where(and(eq(clippingTags.clippingId, clipping.id), eq(clippingTags.userId, userId)));
+        if (nowCarried.some((link) => link.tagId === tag.id)) {
+          throw new LibrarianInvalidError(`It already has the tag "${tag.name}"`);
+        }
+        if (nowCarried.length >= MAX_TAGS_PER_CLIPPING) {
+          throw new LibrarianInvalidError(
+            `It already has ${MAX_TAGS_PER_CLIPPING} tags, the most a clipping can have`,
+          );
+        }
+        // Nothing inserted would still log an applied change for a tag it did not add.
+        const linked = await writer
+          .insert(clippingTags)
+          .values({ clippingId: clipping.id, tagId: tag.id, userId })
+          .onConflictDoNothing()
+          .returning({ tagId: clippingTags.tagId });
+        if (linked.length === 0) {
+          throw new LibrarianInvalidError(`It already has the tag "${tag.name}"`);
+        }
+        // The tag no longer waits as a suggestion.
+        await writer
+          .delete(clippingTagSuggestions)
+          .where(
+            and(
+              eq(clippingTagSuggestions.clippingId, clipping.id),
+              eq(clippingTagSuggestions.userId, userId),
+              sql`lower(${clippingTagSuggestions.name}) = ${tagNameKey(tag.name)}`,
+            ),
+          );
+      },
+    },
+  };
 }
 
 async function planColor(
@@ -216,15 +338,17 @@ async function planColor(
   actor: ProposingActor,
   proposal: Extract<ProposedChange, { action: "set_tag_color" }>,
 ): Promise<PlanOutcome> {
-  if (!isTagColor(proposal.color)) throw new LibrarianInvalidError("Not a tag color");
+  if (!isTagColorChoice(proposal.color)) throw new LibrarianInvalidError("Not a tag color");
   const tag = await loadTag(tx, userId, proposal.tagId);
+  if (proposal.color === AUTOMATIC_TAG_COLOR) return planAutomaticColor(tx, userId, actor, tag);
+  const color = proposal.color;
   // A color the user chose stays: only the user, here through Claude, changes it again.
   if (actor === "librarian" && tag.colorOverridden) {
     return { skip: "The user chose this tag's color, so the librarian leaves it" };
   }
   const overridden = actor === "user_via_mcp" ? true : tag.colorOverridden;
-  if (tag.color === proposal.color && overridden === tag.colorOverridden) {
-    return { skip: `The tag is already ${proposal.color}` };
+  if (tag.color === color && overridden === tag.colorOverridden) {
+    return { skip: `The tag is already ${color}` };
   }
   return {
     plan: {
@@ -232,15 +356,60 @@ async function planColor(
       targetIds: [tag.id],
       before: { color: tag.color, colorOverridden: tag.colorOverridden },
       after: {
-        color: proposal.color,
+        color,
         colorOverridden: overridden,
-        summary: `Color the tag "${tag.name}" ${proposal.color}`,
+        summary: `Color the tag "${tag.name}" ${color}`,
       },
       waitingFor: null,
       write: async (writer) => {
         await writer
           .update(tags)
-          .set({ color: proposal.color, colorOverridden: overridden })
+          .set({ color, colorOverridden: overridden })
+          .where(and(eq(tags.id, tag.id), eq(tags.userId, userId)));
+      },
+    },
+  };
+}
+
+/**
+ * Hands a tag's color back: the user's own choice is dropped and the tag takes its folder's color,
+ * or none outside a folder, and the librarian may color it again.
+ */
+async function planAutomaticColor(
+  tx: Transaction,
+  userId: string,
+  actor: ProposingActor,
+  tag: typeof tags.$inferSelect,
+): Promise<PlanOutcome> {
+  if (actor !== "user_via_mcp") {
+    throw new LibrarianInvalidError("Only the user can give a tag back its automatic color");
+  }
+  let color: TagColor = "none";
+  if (tag.folderId) {
+    const [folder] = await tx
+      .select({ color: folders.color })
+      .from(folders)
+      .where(and(eq(folders.id, tag.folderId), eq(folders.userId, userId)));
+    color = folder?.color ?? "none";
+  }
+  if (!tag.colorOverridden && tag.color === color) {
+    return { skip: "The tag already has its automatic color" };
+  }
+  return {
+    plan: {
+      action: "set_tag_color",
+      targetIds: [tag.id],
+      before: { color: tag.color, colorOverridden: tag.colorOverridden },
+      after: {
+        color,
+        colorOverridden: false,
+        summary: `Give the tag "${tag.name}" its automatic color`,
+      },
+      waitingFor: null,
+      write: async (writer) => {
+        await writer
+          .update(tags)
+          .set({ color, colorOverridden: false })
           .where(and(eq(tags.id, tag.id), eq(tags.userId, userId)));
       },
     },
@@ -515,22 +684,92 @@ async function planRename(
   };
 }
 
-/** What a merge removes, kept so that undoing it can put it all back. */
-interface MergeBefore {
-  source: {
-    id: string;
-    name: string;
-    color: TagColor;
-    colorOverridden: boolean;
-    folderId: string | null;
-    createdAt: string;
-  };
-  target: { id: string; name: string };
-  /** Every clipping that carried the source tag. */
+/** A tag row as the log keeps it, enough to recreate the tag. */
+interface TagSnapshot {
+  id: string;
+  name: string;
+  color: TagColor;
+  colorOverridden: boolean;
+  folderId: string | null;
+  createdAt: string;
+}
+
+/** What goes with a tag when it is removed: its clippings and its topic page (both cascade). */
+interface TagContents {
+  /** Every clipping that carried the tag. */
   clippingIds: string[];
-  /** The ones among them that did not carry the target and so gained it. */
-  addedToTarget: string[];
   topicPage: { body: string; updatedAt: string } | null;
+}
+
+/** What a merge removes, kept so that undoing it can put it all back. */
+interface MergeBefore extends TagContents {
+  source: TagSnapshot;
+  target: { id: string; name: string };
+  /** The ones among the clippings that did not carry the target and so gained it. */
+  addedToTarget: string[];
+}
+
+/** What deleting a tag removes, kept so that undoing it can put it all back. */
+interface DeleteBefore extends TagContents {
+  tag: TagSnapshot;
+}
+
+const snapshotTag = (tag: typeof tags.$inferSelect): TagSnapshot => ({
+  id: tag.id,
+  name: tag.name,
+  color: tag.color,
+  colorOverridden: tag.colorOverridden,
+  folderId: tag.folderId,
+  createdAt: formatIsoUtc(tag.createdAt),
+});
+
+/** The clippings carrying the tag and its topic page: what removing the tag takes with it. */
+async function tagContents(tx: Transaction, userId: string, tagId: string): Promise<TagContents> {
+  const carriers = await tx
+    .select({ clippingId: clippingTags.clippingId })
+    .from(clippingTags)
+    .where(and(eq(clippingTags.tagId, tagId), eq(clippingTags.userId, userId)))
+    .orderBy(clippingTags.clippingId);
+  const [page] = await tx
+    .select({ body: topicPages.body, updatedAt: topicPages.updatedAt })
+    .from(topicPages)
+    .where(and(eq(topicPages.tagId, tagId), eq(topicPages.userId, userId)));
+  return {
+    clippingIds: carriers.map((row) => row.clippingId),
+    topicPage: page ? { body: page.body, updatedAt: formatIsoUtc(page.updatedAt) } : null,
+  };
+}
+
+async function planDelete(
+  tx: Transaction,
+  userId: string,
+  actor: ProposingActor,
+  proposal: Extract<ProposedChange, { action: "delete_tag" }>,
+): Promise<PlanOutcome> {
+  // Deleting a tag is the user's call, never a librarian suggestion.
+  if (actor !== "user_via_mcp") {
+    throw new LibrarianInvalidError("Only the user can delete a tag");
+  }
+  const tag = await loadTag(tx, userId, proposal.tagId);
+  const contents = await tagContents(tx, userId, tag.id);
+  const before: DeleteBefore = { tag: snapshotTag(tag), ...contents };
+  const n = contents.clippingIds.length;
+  return {
+    plan: {
+      action: "delete_tag",
+      targetIds: [tag.id],
+      before,
+      after: {
+        deleted: true,
+        summary: `Delete the tag "${tag.name}" from ${n} clipping${n === 1 ? "" : "s"}`,
+      },
+      waitingFor: null,
+      write: async (writer) => {
+        // The clippings' links and the topic page go with it: both cascade on the tag.
+        await writer.delete(tags).where(and(eq(tags.id, tag.id), eq(tags.userId, userId)));
+      },
+    },
+  };
 }
 
 async function planMerge(
@@ -543,12 +782,8 @@ async function planMerge(
   }
   const source = await loadTag(tx, userId, proposal.sourceId);
   const target = await loadTag(tx, userId, proposal.targetId);
-  const carriers = await tx
-    .select({ clippingId: clippingTags.clippingId })
-    .from(clippingTags)
-    .where(and(eq(clippingTags.tagId, source.id), eq(clippingTags.userId, userId)))
-    .orderBy(clippingTags.clippingId);
-  if (proposal.action === "fold_tag" && carriers.length > 1) {
+  const { clippingIds, topicPage } = await tagContents(tx, userId, source.id);
+  if (proposal.action === "fold_tag" && clippingIds.length > 1) {
     throw new LibrarianInvalidError("Only a tag used once can be folded into another");
   }
   const alreadyTarget = new Set(
@@ -559,24 +794,12 @@ async function planMerge(
         .where(and(eq(clippingTags.tagId, target.id), eq(clippingTags.userId, userId)))
     ).map((row) => row.clippingId),
   );
-  const clippingIds = carriers.map((row) => row.clippingId);
-  const [page] = await tx
-    .select({ body: topicPages.body, updatedAt: topicPages.updatedAt })
-    .from(topicPages)
-    .where(and(eq(topicPages.tagId, source.id), eq(topicPages.userId, userId)));
   const before: MergeBefore = {
-    source: {
-      id: source.id,
-      name: source.name,
-      color: source.color,
-      colorOverridden: source.colorOverridden,
-      folderId: source.folderId,
-      createdAt: formatIsoUtc(source.createdAt),
-    },
+    source: snapshotTag(source),
     target: { id: target.id, name: target.name },
     clippingIds,
     addedToTarget: clippingIds.filter((id) => !alreadyTarget.has(id)),
-    topicPage: page ? { body: page.body, updatedAt: formatIsoUtc(page.updatedAt) } : null,
+    topicPage,
   };
   return {
     plan: {
@@ -587,7 +810,7 @@ async function planMerge(
         targetId: target.id,
         targetName: target.name,
         moved: before.addedToTarget.length,
-        summary: `${proposal.action === "fold_tag" ? "Fold" : "Merge"} the tag "${source.name}" (${carriers.length} clipping${carriers.length === 1 ? "" : "s"}) into "${target.name}"`,
+        summary: `${proposal.action === "fold_tag" ? "Fold" : "Merge"} the tag "${source.name}" (${clippingIds.length} clipping${clippingIds.length === 1 ? "" : "s"}) into "${target.name}"`,
       },
       waitingFor: null,
       write: async (writer) => {
@@ -629,6 +852,8 @@ export function proposalOf(change: StoredChange): ProposedChange {
   const [first = "", second = ""] = change.targetIds;
   const common = { reason: change.reason, confidence: change.confidence };
   switch (change.action) {
+    case "add_tag":
+      return { ...common, action: "add_tag", clippingId: first, tagId: second };
     case "set_tag_color":
       return { ...common, action: "set_tag_color", tagId: first, color: after.color };
     case "create_folder":
@@ -656,6 +881,10 @@ export function proposalOf(change: StoredChange): ProposedChange {
     case "merge_tag":
     case "fold_tag":
       return { ...common, action: change.action, sourceId: first, targetId: second };
+    case "delete_tag":
+      // Only the user proposes it, and what the user proposes is applied: it is never stored as a
+      // suggestion, so nothing needs to plan it again.
+      throw new LibrarianInvalidError("A delete_tag change is never a suggestion");
     default:
       throw new LibrarianInvalidError(`Nothing here applies a ${change.action} change`);
   }
@@ -803,6 +1032,11 @@ export async function undoEffect(tx: Transaction, change: UndoableChange): Promi
       if (renamed.length === 0) throw gone("The tag");
       return;
     }
+    case "delete_tag": {
+      const { tag, clippingIds, topicPage } = change.before as DeleteBefore;
+      await restoreTag(tx, userId, tag, { clippingIds, topicPage });
+      return;
+    }
     case "merge_tag":
     case "fold_tag": {
       await undoMerge(tx, userId, change.before as MergeBefore);
@@ -820,48 +1054,8 @@ async function undoMerge(tx: Transaction, userId: string, before: MergeBefore) {
     .from(tags)
     .where(and(eq(tags.id, before.target.id), eq(tags.userId, userId)));
   if (!target) throw gone("The tag it was merged into");
-  const [clash] = await tx
-    .select({ id: tags.id })
-    .from(tags)
-    .where(
-      and(eq(tags.userId, userId), sql`lower(${tags.name}) = ${tagNameKey(before.source.name)}`),
-    );
-  if (clash) {
-    throw new ChangeConflictError(`The user has a tag named ${before.source.name} again`);
-  }
-  let folderId: string | null = null;
-  if (before.source.folderId) {
-    const [folder] = await tx
-      .select({ id: folders.id })
-      .from(folders)
-      .where(and(eq(folders.id, before.source.folderId), eq(folders.userId, userId)));
-    folderId = folder?.id ?? null;
-  }
-  await tx.insert(tags).values({
-    id: before.source.id,
-    userId,
-    name: before.source.name,
-    color: before.source.color,
-    colorOverridden: before.source.colorOverridden,
-    folderId,
-    createdAt: parseISO(before.source.createdAt),
-  });
-  if (before.clippingIds.length > 0) {
-    // Only clippings that still exist: one removed for good since has nothing to be tagged.
-    await tx
-      .insert(clippingTags)
-      .select(
-        tx
-          .select({
-            clippingId: clippings.id,
-            tagId: sql`${before.source.id}::uuid`.as("tag_id"),
-            userId: clippings.userId,
-          })
-          .from(clippings)
-          .where(and(eq(clippings.userId, userId), inArray(clippings.id, before.clippingIds))),
-      )
-      .onConflictDoNothing();
-  }
+  // The target comes off the clippings the merge gave it before the source goes back on, so a
+  // clipping that was full does not count both.
   if (before.addedToTarget.length > 0) {
     await tx
       .delete(clippingTags)
@@ -873,13 +1067,81 @@ async function undoMerge(tx: Transaction, userId: string, before: MergeBefore) {
         ),
       );
   }
-  if (before.topicPage) {
+  await restoreTag(tx, userId, before.source, before);
+}
+
+/**
+ * Recreates a removed tag under its old id, with its color, folder, topic page and clippings.
+ * Throws `ChangeConflictError` when the user has a tag of that name again, or when a clipping it
+ * would go back on has the most tags a clipping can have. A folder or clipping that has gone
+ * since is left out.
+ */
+async function restoreTag(
+  tx: Transaction,
+  userId: string,
+  tag: TagSnapshot,
+  { clippingIds, topicPage }: TagContents,
+) {
+  const [clash] = await tx
+    .select({ id: tags.id })
+    .from(tags)
+    .where(and(eq(tags.userId, userId), sql`lower(${tags.name}) = ${tagNameKey(tag.name)}`));
+  if (clash) throw new ChangeConflictError(`The user has a tag named ${tag.name} again`);
+  if (clippingIds.length > 0) {
+    // The links go back unchecked otherwise, past the limit the tag editors keep.
+    const [full] = await tx
+      .select({ clippingId: clippingTags.clippingId })
+      .from(clippingTags)
+      .where(and(eq(clippingTags.userId, userId), inArray(clippingTags.clippingId, clippingIds)))
+      .groupBy(clippingTags.clippingId)
+      .having(sql`count(*) >= ${MAX_TAGS_PER_CLIPPING}`)
+      .limit(1);
+    if (full) {
+      throw new ChangeConflictError(
+        `A clipping it was on has ${MAX_TAGS_PER_CLIPPING} tags now, the most a clipping can have`,
+      );
+    }
+  }
+  let folderId: string | null = null;
+  if (tag.folderId) {
+    const [folder] = await tx
+      .select({ id: folders.id })
+      .from(folders)
+      .where(and(eq(folders.id, tag.folderId), eq(folders.userId, userId)));
+    folderId = folder?.id ?? null;
+  }
+  await tx.insert(tags).values({
+    id: tag.id,
+    userId,
+    name: tag.name,
+    color: tag.color,
+    colorOverridden: tag.colorOverridden,
+    folderId,
+    createdAt: parseISO(tag.createdAt),
+  });
+  if (clippingIds.length > 0) {
+    // Only clippings that still exist: one removed for good since has nothing to be tagged.
+    await tx
+      .insert(clippingTags)
+      .select(
+        tx
+          .select({
+            clippingId: clippings.id,
+            tagId: sql`${tag.id}::uuid`.as("tag_id"),
+            userId: clippings.userId,
+          })
+          .from(clippings)
+          .where(and(eq(clippings.userId, userId), inArray(clippings.id, clippingIds))),
+      )
+      .onConflictDoNothing();
+  }
+  if (topicPage) {
     await tx.insert(topicPages).values({
-      tagId: before.source.id,
+      tagId: tag.id,
       userId,
-      body: before.topicPage.body,
+      body: topicPage.body,
       source: "ai",
-      updatedAt: parseISO(before.topicPage.updatedAt),
+      updatedAt: parseISO(topicPage.updatedAt),
     });
   }
 }
