@@ -143,13 +143,17 @@ listen(Number(process.env.FAKE_QSTASH_PORT ?? 8080), "fake qstash", (request, re
 
 /**
  * Tag suggestions, when asked for: the first two of the user's tags (listed in `<your_tags>`) and
- * one new tag, the first long word of the page's title.
+ * one new tag, the first long word of the page's title. Each is "low" confidence, so it stays a
+ * suggestion, unless a `[fake-confidence high]` marker in the message asks for "high", which
+ * auto-tagging applies.
  */
 function suggestTags(message, title) {
   const listed = /<your_tags>\n([\s\S]*?)\n<\/your_tags>/.exec(message)?.[1] ?? "";
   const mine = listed === "(none yet)" ? [] : listed.split("\n").filter(Boolean);
   const word = (title ?? "").toLowerCase().match(/\p{L}{4,}/u)?.[0] ?? "reading";
-  return { existing_tags: mine.slice(0, 2), new_tags: [word] };
+  const confidence = /\[fake-confidence high\]/.test(message) ? "high" : "low";
+  const tag = (name) => ({ name, confidence, reason: `The page is about ${name}.` });
+  return { existing_tags: mine.slice(0, 2).map(tag), new_tags: [tag(word)] };
 }
 
 // Error replies a `[fake-error name]` marker asks for: status, type, message, retry-after seconds.

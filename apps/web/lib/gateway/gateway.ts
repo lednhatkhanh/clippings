@@ -164,18 +164,16 @@ export function createGateway({ ledger, anthropic }: GatewayDeps) {
     if (!response.ok) {
       throw new Error(`Voyage AI answered ${response.status}: ${await response.text()}`);
     }
-    const body = (await response.json()) as {
+    // A 2xx was billed, whatever the body says: record it before the body is checked, so a reply
+    // that is malformed (or not JSON at all) still reaches the ledger.
+    const body = (await response.json().catch(() => null)) as {
       data?: { embedding?: unknown; index?: number }[];
       usage?: { total_tokens?: unknown };
-    };
-    const data = body.data;
-    if (!Array.isArray(data) || data.length !== texts.length) {
-      throw new Error("Voyage AI returned the wrong number of embeddings");
-    }
+    } | null;
 
     // Voyage AI reports the tokens it counted. Should a reply leave them out, price the text at
     // about four characters a token rather than record the call as free.
-    const reported = body.usage?.total_tokens;
+    const reported = body?.usage?.total_tokens;
     const tokens =
       typeof reported === "number" && Number.isFinite(reported)
         ? reported
@@ -193,6 +191,10 @@ export function createGateway({ ledger, anthropic }: GatewayDeps) {
       costMicros,
     });
 
+    const data = body?.data;
+    if (!Array.isArray(data) || data.length !== texts.length) {
+      throw new Error("Voyage AI returned the wrong number of embeddings");
+    }
     // The service checks the length and that every entry is a number.
     const vectors = data
       .toSorted((a, b) => (a.index ?? 0) - (b.index ?? 0))
@@ -203,7 +205,16 @@ export function createGateway({ ledger, anthropic }: GatewayDeps) {
     return { status: "ok", value: vectors, costMicros };
   }
 
-  return { message, embed };
+  /**
+   * Whether a call of this kind would be let through right now. A look ahead for work that is
+   * costly before the call (fetching a page): `message` and `embed` still check for themselves,
+   * and that check is the one that counts.
+   */
+  async function canSpend(userId: string, jobKind: ModelJobKind): Promise<boolean> {
+    return (await refusal(userId, jobKind)) === null;
+  }
+
+  return { message, embed, canSpend };
 }
 
 export type Gateway = ReturnType<typeof createGateway>;

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { APPEARANCE_DEFAULTS, AUTOMATION_DEFAULTS } from "@clippings/shared";
+import { APPEARANCE_DEFAULTS, AUTO_TAG_DEFAULT, AUTOMATION_DEFAULTS } from "@clippings/shared";
 
 import { createServiceFixture, type ServiceFixture } from "../test/service-fixture.ts";
 import { TEST_DATABASE_URL } from "../test/temp-database.ts";
@@ -166,6 +166,33 @@ describe.skipIf(!TEST_DATABASE_URL)("settings service", () => {
       });
 
       expect(await fixture.settings.getAutomationSettings(ben)).toEqual(AUTOMATION_DEFAULTS);
+    });
+  });
+
+  describe("auto-tagging", () => {
+    it("is on for a user who never chose, and a choice sticks without touching the other settings", async () => {
+      const ana = await fixture.createUser("ana");
+      expect(await fixture.settings.getAutoTag(ana)).toBe(AUTO_TAG_DEFAULT);
+      expect(AUTO_TAG_DEFAULT).toBe(true);
+
+      expect(await fixture.settings.setAutoTag(ana, false)).toBe(false);
+
+      expect(await fixture.settings.getAutoTag(ana)).toBe(false);
+      expect(await fixture.settings.getSuggestTags(ana)).toBe(false);
+      expect(await fixture.settings.getSettings(ana)).toEqual(APPEARANCE_DEFAULTS);
+      expect(await fixture.settings.getAutomationSettings(ana)).toEqual(AUTOMATION_DEFAULTS);
+    });
+
+    it("is not changed by saving suggestions or appearance, and keeps users apart", async () => {
+      const ana = await fixture.createUser("ana");
+      const ben = await fixture.createUser("ben");
+      await fixture.settings.setAutoTag(ana, false);
+
+      await fixture.settings.setSuggestTags(ana, true);
+      await fixture.settings.updateSettings(ana, { theme: "dark" });
+
+      expect(await fixture.settings.getAutoTag(ana)).toBe(false);
+      expect(await fixture.settings.getAutoTag(ben)).toBe(true);
     });
   });
 });

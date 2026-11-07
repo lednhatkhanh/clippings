@@ -132,6 +132,60 @@ describe("parseReading suggestions", () => {
     expect("suggestedTags" in parsed).toBe(false);
   });
 
+  describe("confidence", () => {
+    const tag = (name: string, confidence: unknown, reason: unknown = "Because.") => ({
+      name,
+      confidence,
+      reason,
+    });
+
+    it("carries each tag's confidence and reason, with existing tags in the user's spelling", () => {
+      const parsed = parse({
+        existing_tags: [tag("css", "high", "  A page on CSS. "), tag("RUST", "low")],
+        new_tags: [tag("grids", "high")],
+      });
+
+      expect(parsed.tagProposals).toEqual([
+        { name: "CSS", existing: true, confidence: "high", reason: "A page on CSS." },
+        { name: "Rust", existing: true, confidence: "low", reason: "Because." },
+        { name: "grids", existing: false, confidence: "high", reason: "Because." },
+      ]);
+      expect(parsed.suggestedTags).toEqual(["CSS", "Rust", "grids"]);
+    });
+
+    it.each([["medium"], [undefined], [null], [true], ["HIGH"]])(
+      "treats a confidence of %j as low",
+      (confidence) => {
+        const parsed = parse({ existing_tags: [tag("css", confidence)], new_tags: [] });
+        expect(parsed.tagProposals?.map((proposal) => proposal.confidence)).toEqual(["low"]);
+      },
+    );
+
+    it("treats a bare name as a low-confidence tag with no reason", () => {
+      expect(parse({ existing_tags: ["css"], new_tags: ["grids"] }).tagProposals).toEqual([
+        { name: "CSS", existing: true, confidence: "low", reason: "" },
+        { name: "grids", existing: false, confidence: "low", reason: "" },
+      ]);
+    });
+
+    it("cuts a long reason and ignores one that isn't text", () => {
+      const parsed = parse({
+        existing_tags: [tag("css", "high", "r".repeat(500)), tag("rust", "high", 7)],
+        new_tags: [],
+      });
+      expect(parsed.tagProposals?.map((proposal) => proposal.reason)).toEqual([
+        "r".repeat(200),
+        "",
+      ]);
+    });
+
+    it("drops the suggestions when a tag has no name", () => {
+      const parsed = parse({ existing_tags: [{ confidence: "high" }], new_tags: [] });
+      expect("tagProposals" in parsed).toBe(false);
+      expect("suggestedTags" in parsed).toBe(false);
+    });
+  });
+
   it("still refuses a reading with no summary when the suggestions are fine", () => {
     const { summary: _dropped, ...rest } = reading;
     expect(() => parseReading({ ...rest, existing_tags: [], new_tags: [] }, mine)).toThrow(

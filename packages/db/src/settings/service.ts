@@ -3,6 +3,7 @@ import type pg from "pg";
 
 import {
   APPEARANCE_DEFAULTS,
+  AUTO_TAG_DEFAULT,
   APPEARANCE_KEYS,
   AUTOMATION_DEFAULTS,
   automationSettingsChangeSchema,
@@ -93,6 +94,26 @@ export function createSettingsService({ pool, clock }: SettingsServiceDeps) {
     return saved!.on;
   }
 
+  /** Whether auto-tagging is on: the stored choice, or the default for a user with no settings. */
+  async function getAutoTag(userId: string): Promise<boolean> {
+    const [row] = await db
+      .select({ on: userSettings.autoTag })
+      .from(userSettings)
+      .where(eq(userSettings.userId, userId));
+    return row?.on ?? AUTO_TAG_DEFAULT;
+  }
+
+  /** Turns the user's auto-tagging on or off, and returns the setting as it now stands. */
+  async function setAutoTag(userId: string, on: boolean): Promise<boolean> {
+    const updatedAt = clock.now();
+    const [saved] = await db
+      .insert(userSettings)
+      .values({ userId, autoTag: on, updatedAt })
+      .onConflictDoUpdate({ target: userSettings.userId, set: { autoTag: on, updatedAt } })
+      .returning({ on: userSettings.autoTag });
+    return saved!.on;
+  }
+
   const automationColumns = {
     dailyCapMicros: userSettings.dailyCapMicros,
     researchJobsPerDay: userSettings.researchJobsPerDay,
@@ -134,6 +155,8 @@ export function createSettingsService({ pool, clock }: SettingsServiceDeps) {
     updateSettings,
     getSuggestTags,
     setSuggestTags,
+    getAutoTag,
+    setAutoTag,
     getAutomationSettings,
     updateAutomationSettings,
   };

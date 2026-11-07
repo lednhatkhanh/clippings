@@ -1,8 +1,10 @@
 import { addMilliseconds, parseISO } from "date-fns";
 import pg from "pg";
 
+import { createChangesService } from "../changes/service.ts";
 import {
   CapReachedError,
+  type BudgetGate,
   type Clock,
   type Embedder,
   type EmbeddingPurpose,
@@ -145,7 +147,25 @@ export async function createServiceFixture() {
     },
   };
 
-  const service = createClippingsService({ pool, jobs, clock, fetcher, summarizer, embedder });
+  /** The users whose budget gate is shut, and what it was asked about. */
+  const shutBudgets = new Set<string>();
+  const budgetAsked: { userId: string; jobKind: string }[] = [];
+  const budget: BudgetGate = {
+    canSpend: async (userId, jobKind) => {
+      budgetAsked.push({ userId, jobKind });
+      return !shutBudgets.has(userId);
+    },
+  };
+
+  const service = createClippingsService({
+    pool,
+    jobs,
+    clock,
+    fetcher,
+    summarizer,
+    embedder,
+    budget,
+  });
 
   return {
     /** The throwaway database's URL, for code that opens its own pool (Better Auth in web tests). */
@@ -154,6 +174,7 @@ export async function createServiceFixture() {
     /** The clock the services read, for a service the test builds itself. */
     clock,
     settings: createSettingsService({ pool, clock }),
+    changes: createChangesService({ pool }),
     usage: createUsageService({ pool, clock }),
     connections: createConnectionsService({ pool, clock }),
     /** The fixture's pool, for tests that set up rows no service writes (Better Auth's). */
@@ -200,6 +221,16 @@ export async function createServiceFixture() {
     capEmbeddingFor: (userId: string) => {
       cappedEmbeddingUsers.add(userId);
     },
+    /**
+     * Shuts (or opens) the budget gate for a user, as a spent cap does: `canSpend` says no, though
+     * the summarizer and embedder, which stand for the gateway's own check, still answer.
+     */
+    setBudgetShut: (userId: string, shut: boolean) => {
+      if (shut) shutBudgets.add(userId);
+      else shutBudgets.delete(userId);
+    },
+    /** Every `canSpend` question the service asked, in order. */
+    budgetAsked,
     /** Makes the summarizer and embedder refuse (or work again), as a reached spend cap does. */
     setCapReached: (reached: boolean) => {
       capped = reached;

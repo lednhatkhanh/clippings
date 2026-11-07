@@ -25,6 +25,7 @@ import {
   SkeletonTransition,
 } from "@/components/page-transition.tsx";
 import { getSession, signInRedirect } from "@/lib/auth/session.ts";
+import { getChanges } from "@/lib/changes/service.ts";
 import { domainOf } from "@/lib/clippings/rows.ts";
 import { getClippings } from "@/lib/clippings/service.ts";
 import { SOURCE_LABELS } from "@/lib/clippings/source-labels.ts";
@@ -75,13 +76,22 @@ function RawMetadata({ clipping }: { clipping: Clipping }) {
  */
 async function loadClipping(userId: string, clippingId: string) {
   const service = getClippings();
-  const clipping = await service.getClipping(userId, clippingId);
+  const [clipping, autoApplied] = await Promise.all([
+    service.getClipping(userId, clippingId),
+    getChanges().listAutoApplied(userId, clippingId),
+  ]);
   if (!clipping) return null;
   const now = constructNow(undefined);
   const savedText = clipping.linkDeadSince
     ? await service.getClippingText(userId, clippingId)
     : null;
-  return { clipping, now, savedOn: formatAbsoluteDate(clipping.createdAt, now), savedText };
+  return {
+    clipping,
+    autoApplied,
+    now,
+    savedOn: formatAbsoluteDate(clipping.createdAt, now),
+    savedText,
+  };
 }
 
 /** The clipping's text and actions, inside the sheet the page puts around it. */
@@ -98,7 +108,7 @@ async function ClippingDetail({ params }: Pick<PageProps<"/c/[id]">, "params">) 
     return <LoadError message="Couldn't load this clipping." />;
   }
   if (!loaded) notFound();
-  const { clipping, now, savedOn, savedText } = loaded;
+  const { clipping, autoApplied, now, savedOn, savedText } = loaded;
   const { url, body } = clipping;
 
   return (
@@ -182,6 +192,7 @@ async function ClippingDetail({ params }: Pick<PageProps<"/c/[id]">, "params">) 
         clippingId={clipping.id}
         tags={clipping.tags}
         suggestedTags={clipping.suggestedTags}
+        autoApplied={autoApplied.map(({ changeId, name, reason }) => ({ changeId, name, reason }))}
       />
 
       {/* A note's text is the note: the comment a link carries has no place on it. */}

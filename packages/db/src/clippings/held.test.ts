@@ -53,6 +53,34 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings held by the spend cap", () => {
     expect((await fixture.service.getClipping(ana, id))?.status).toBe("pending");
   });
 
+  it("holds a clipping before fetching its page when the budget has no room", async () => {
+    const ana = await fixture.createUser("ana");
+    const id = await save(ana);
+    fixture.setBudgetShut(ana, true);
+
+    const outcome = await fixture.service.enrichClipping(id, { lastAttempt: true });
+
+    expect(outcome).toBe("held");
+    expect(fixture.fetchedPages).toEqual([]);
+    expect(fixture.summarizedPages).toEqual([]);
+    expect(fixture.budgetAsked).toEqual([{ userId: ana, jobKind: "enrich" }]);
+    expect((await fixture.service.getClipping(ana, id))?.status).toBe("pending");
+    expect(await sweepAttempts(id)).toBe(0);
+  });
+
+  it("asks about the clipping's own user, so another user's spent budget holds nothing", async () => {
+    const ana = await fixture.createUser("ana");
+    const bob = await fixture.createUser("bob");
+    fixture.web.set("https://example.com/other", essay);
+    const anas = await save(ana);
+    const bobs = await save(bob, "https://example.com/other");
+    fixture.setBudgetShut(ana, true);
+
+    expect(await fixture.service.enrichClipping(anas)).toBe("held");
+    expect(await fixture.service.enrichClipping(bobs)).toBe("ready");
+    expect(fixture.fetchedPages).toEqual(["https://example.com/other"]);
+  });
+
   it("reads the clipping once the cap allows, on the next job", async () => {
     const ana = await fixture.createUser("ana");
     const id = await save(ana);

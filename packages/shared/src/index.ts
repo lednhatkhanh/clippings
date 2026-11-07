@@ -93,7 +93,14 @@ export {
 export { extractSharedUrl, type SharedData, type SharedLink } from "./share.ts";
 export { parseWebUrl, type WebUrl } from "./url.ts";
 export {
+  checkCanonicalTagName,
+  type CanonicalTagVerdict,
+  type NotCanonicalReason,
+} from "./canonical-tag.ts";
+export {
   AUTO_TAG_DEFAULT,
+  autoTagChangeSchema,
+  type AutoTagChange,
   LIBRARY_CHANGE_ACTIONS,
   LIBRARY_CHANGE_ACTORS,
   LIBRARY_CHANGE_CONFIDENCES,
