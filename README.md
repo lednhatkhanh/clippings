@@ -89,6 +89,9 @@ The MCP server is at `<BETTER_AUTH_URL>/mcp`. Every client gets
 that asks for the write scope also gets `get_clipping`, `update_clipping`, `tag_clippings`,
 `list_tags`, `rename_tag`, `merge_tag`, `delete_clipping` and `restore_clipping`.
 
+The app has no chat or digest of its own: to ask questions of your library or review the week, use
+Claude over this connector. The old `/ask` and `/digest` URLs redirect to the library.
+
 - **claude.ai**: Settings → Connectors → Add custom connector, with that URL.
 - **Claude Code**: `claude mcp add --transport http clippings <BETTER_AUTH_URL>/mcp`, then `/mcp`
   to sign in.
