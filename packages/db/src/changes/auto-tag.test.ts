@@ -384,6 +384,24 @@ describe.skipIf(!TEST_DATABASE_URL)("auto-tagging", () => {
       expect((await changeRows())[0]!.status).toBe("applied");
     });
 
+    it("is not blocked by a later color, folder or topic page for the tag", async () => {
+      const ana = await userWithTags("ana", ["css"]);
+      const id = await clip(ana, "https://example.com/a", [high("css", true)]);
+      const [applied] = await fixture.changes.listAutoApplied(ana, id);
+      fixture.advanceClock(1000);
+      for (const action of ["set_tag_color", "move_to_folder", "write_topic_page"]) {
+        await fixture.pool.query(
+          `insert into library_changes (user_id, actor, action, target_ids, status, created_at)
+           values ($1, 'librarian', $2, array[$3]::uuid[], 'applied', now() + interval '1 hour')`,
+          [ana, action, applied!.tagId],
+        );
+      }
+
+      await fixture.changes.undoChange(ana, applied!.changeId);
+
+      expect(await tagNamesOf(ana, id)).toEqual([]);
+    });
+
     it("is not blocked by the same tag added to another clipping", async () => {
       const ana = await userWithTags("ana", ["css"]);
       const first = await clip(ana, "https://example.com/a", [high("css", true)]);

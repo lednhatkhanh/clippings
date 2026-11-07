@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import type pg from "pg";
 
 import type { LibraryChangeConfidence } from "@clippings/shared";
@@ -14,6 +14,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Actions that put a tag on a clipping; their `targetIds` are `[clippingId, tagId]`. */
 const TAG_ON_CLIPPING = ["add_tag", "create_tag"] as const;
+
+/** Changes after which a tag is no longer the one a link was made with. */
+const TAG_IDENTITY_CHANGES = ["rename_tag", "merge_tag", "fold_tag", "delete_tag"] as const;
 
 export class ChangeNotFoundError extends Error {
   constructor() {
@@ -115,9 +118,10 @@ export function createChangesService({ pool }: ChangesServiceDeps) {
    * is never put back by a later read of the page.
    *
    * Throws `ChangeNotFoundError` for a change that isn't the user's, `ChangeNotUndoableError` for
-   * one that isn't an applied auto-tag or librarian `add_tag` (or was undone already) and `ChangeConflictError` when a
-   * later applied change touched the same clipping and tag, or the tag itself (a rename or a
-   * merge). Nothing is changed in any of these cases.
+   * one that isn't an applied auto-tag or librarian `add_tag` (or was undone already) and
+   * `ChangeConflictError` when a later applied change touched the same clipping and tag, or
+   * changed which tag it is (a rename, merge, fold or delete). Moving, coloring or writing a
+   * topic page for the tag doesn't block it. Nothing is changed in any of these cases.
    */
   async function undoChange(userId: string, changeId: string): Promise<UndoResult> {
     if (!UUID.test(changeId)) throw new ChangeNotFoundError();
@@ -151,13 +155,15 @@ export function createChangesService({ pool }: ChangesServiceDeps) {
             eq(libraryChanges.status, "applied"),
             // When it took effect: a suggestion applied later counts from then, not from its creation.
             sql`coalesce(${libraryChanges.appliedAt}, ${libraryChanges.createdAt}) >= ${change.appliedAt ?? change.createdAt}`,
-            sql`(
-              ${libraryChanges.targetIds} @> array[${clippingId}, ${tagId}]::uuid[]
-              or (
-                ${libraryChanges.action} not in ('add_tag', 'create_tag')
-                and ${libraryChanges.targetIds} @> array[${tagId}]::uuid[]
-              )
-            )`,
+            // Filing, coloring or writing the tag's page leaves the link alone: only a change of
+            // which tag this is (renamed, merged away, deleted) stands in the way.
+            or(
+              sql`${libraryChanges.targetIds} @> array[${clippingId}, ${tagId}]::uuid[]`,
+              and(
+                inArray(libraryChanges.action, [...TAG_IDENTITY_CHANGES]),
+                sql`${libraryChanges.targetIds} @> array[${tagId}]::uuid[]`,
+              ),
+            ),
           ),
         )
         .limit(1);

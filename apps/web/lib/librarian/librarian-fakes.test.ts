@@ -207,6 +207,44 @@ describe.skipIf(!TEST_DATABASE_URL)("the librarian run against the local Anthrop
     expect(await fixture.service.findTagByName(ana, "apis")).not.toBeNull();
   });
 
+  it("adds a waiting suggested tag that names one of the user's tags, and it can be undone", async () => {
+    await seed(ana);
+    const rust = await clip(ana, "rust-and-sql", ["Rust"]);
+    await fixture.pool.query(
+      `insert into user_settings (user_id, suggest_tags, updated_at) values ($1, true, now())
+         on conflict (user_id) do update set suggest_tags = true`,
+      [ana],
+    );
+    await fixture.pool.query(
+      `insert into clipping_tag_suggestions (clipping_id, user_id, name, origin, created_at)
+         values ($1, $2, 'db', 'model', now())`,
+      [rust, ana],
+    );
+    await fixture.librarian.markLibrarianRun(ana);
+
+    const run = await runner.run(ana, { dryRun: false });
+
+    const added = run.results.find(
+      (result) => result.outcome === "applied" && result.change.action === "add_tag",
+    );
+    if (added?.outcome !== "applied") throw new Error("No tag was added");
+    expect(added.change.targetIds[0]).toBe(rust);
+    expect((await fixture.service.getClipping(ana, rust))?.tags.map((tag) => tag.name)).toContain(
+      "db",
+    );
+    const waiting = await fixture.pool.query(
+      `select count(*)::int as n from clipping_tag_suggestions where clipping_id = $1`,
+      [rust],
+    );
+    expect(waiting.rows[0].n).toBe(0);
+
+    await fixture.librarian.undoChange(ana, added.change.id);
+
+    expect(
+      (await fixture.service.getClipping(ana, rust))?.tags.map((tag) => tag.name),
+    ).not.toContain("db");
+  });
+
   it("files only the library it is given, never another user's", async () => {
     await seed(ana);
     await seed(ben);
