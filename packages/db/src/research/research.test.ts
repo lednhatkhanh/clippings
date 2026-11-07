@@ -50,12 +50,24 @@ describe.skipIf(!TEST_DATABASE_URL)("research briefs", () => {
     return { id: clippingId, brief: brief!.id };
   }
 
-  /** A brief that went through the batch up to `submitted`. */
+  /** Claims every queued brief and puts the claimed ones in a batch, as the daily run does. */
+  async function sendBatch(batchId: string): Promise<string[]> {
+    const claims = await fixture.research.claimForBatch(fixture.clock.now());
+    const ids = claims.flatMap(({ briefs }) => briefs.map((brief) => brief.id));
+    await fixture.research.attachBatch(ids, batchId);
+    return ids;
+  }
+
+  /** A brief that went through the batch up to `submitted`; no other brief is queued. */
   async function submitted(userId: string, batchId = "batch_1") {
     const queued = await queue(userId);
-    await fixture.research.markSubmitted([queued.brief], batchId);
+    expect(await sendBatch(batchId)).toEqual([queued.brief]);
     return queued;
   }
+
+  const submissionRows = async (briefId: string) =>
+    (await fixture.pool.query(`select * from research_submissions where brief_id = $1`, [briefId]))
+      .rows;
 
   /** A brief being written for the user, asked for by hand. */
   async function writing(userId: string) {
@@ -250,7 +262,7 @@ describe.skipIf(!TEST_DATABASE_URL)("research briefs", () => {
       const ana = await fixture.createUser("ana");
       const queued = await submitted(ana);
       await fixture.research.failBrief(queued.brief, "the batch expired");
-      await fixture.research.markSubmitted([queued.brief], "batch_2");
+      await sendBatch("batch_2");
       await fixture.research.failBrief(queued.brief, "the batch expired");
       expect((await fixture.research.getBrief(ana, queued.id))?.status).toBe("dropped");
 
@@ -269,7 +281,7 @@ describe.skipIf(!TEST_DATABASE_URL)("research briefs", () => {
       async (status) => {
         const ana = await fixture.createUser("ana");
         const queued = await queue(ana);
-        if (status === "submitted") await fixture.research.markSubmitted([queued.brief], "batch_1");
+        if (status === "submitted") await sendBatch("batch_1");
         else {
           await fixture.research.requestBriefNow(ana, queued.id);
           if (status === "ready") {
@@ -303,8 +315,7 @@ describe.skipIf(!TEST_DATABASE_URL)("research briefs", () => {
     it("stops at the user's research jobs for the day, whatever started them", async () => {
       const ana = await fixture.createUser("ana");
       await fixture.settings.updateAutomationSettings(ana, { researchJobsPerDay: 3 });
-      const inBatch = await queue(ana);
-      await fixture.research.markSubmitted([inBatch.brief], "batch_1");
+      await submitted(ana);
       await writing(ana);
       await writing(ana);
       const fourth = await save(ana);
@@ -365,7 +376,7 @@ describe.skipIf(!TEST_DATABASE_URL)("research briefs", () => {
   });
 
   describe("claimForBatch", () => {
-    it("claims each user's oldest queued briefs, with what the writer needs, and changes nothing", async () => {
+    it("claims each user's oldest queued briefs, with what the writer needs, and submits them", async () => {
       const ana = await fixture.createUser("ana");
       const ben = await fixture.createUser("ben");
       await fixture.settings.updateResearchSettings(ana, { profile: "Backend dev at a shipper" });
@@ -387,7 +398,7 @@ describe.skipIf(!TEST_DATABASE_URL)("research briefs", () => {
         domain: "shipping",
         reason: "A note",
       });
-      const before = await row(first.brief);
+      fixture.advanceClock(HOUR);
 
       const claims = await fixture.research.claimForBatch(fixture.clock.now());
 
@@ -431,7 +442,19 @@ describe.skipIf(!TEST_DATABASE_URL)("research briefs", () => {
           pageText: null,
         }),
       ]);
-      expect(await row(first.brief)).toEqual(before);
+      // Claimed means submitted: one more attempt, a job of the day used, no batch yet.
+      expect(await row(first.brief)).toMatchObject({
+        status: "submitted",
+        mode: "batch",
+        attempts: 1,
+        batch_id: null,
+        submitted_at: fixture.clock.now(),
+      });
+      expect(await submissionRows(first.brief)).toHaveLength(1);
+      expect(await fixture.research.submissionsToday(ana)).toBe(2);
+      expect(await fixture.research.submissionsToday(ben)).toBe(1);
+      expect(await fixture.research.submittedBatchIds()).toEqual([]);
+      expect(await fixture.research.claimForBatch(fixture.clock.now())).toEqual([]);
     });
 
     it("takes the oldest first, up to what the user has left of the day's research jobs", async () => {
@@ -441,7 +464,7 @@ describe.skipIf(!TEST_DATABASE_URL)("research briefs", () => {
       const anaFirst = await queue(ana);
       const benOnly = await queue(ben);
       const anaSecond = await queue(ana);
-      await queue(ana);
+      const anaThird = await queue(ana);
 
       const claims = await fixture.research.claimForBatch(fixture.clock.now());
 
@@ -455,6 +478,7 @@ describe.skipIf(!TEST_DATABASE_URL)("research briefs", () => {
         },
         { userId: ben, briefs: [expect.objectContaining({ id: benOnly.brief })] },
       ]);
+      expect(await row(anaThird.brief)).toMatchObject({ status: "queued", attempts: 0 });
     });
 
     it("counts submissions made today by batch and by hand against the limit, per user", async () => {
@@ -513,10 +537,7 @@ describe.skipIf(!TEST_DATABASE_URL)("research briefs", () => {
 
       await fixture.service.restoreClipping(ana, gone.id);
       const restored = await fixture.research.claimForBatch(fixture.clock.now());
-      expect(restored.flatMap(({ briefs }) => briefs.map((b) => b.id))).toEqual([
-        gone.brief,
-        kept.brief,
-      ]);
+      expect(restored.flatMap(({ briefs }) => briefs.map((b) => b.id))).toEqual([gone.brief]);
     });
 
     it("a deleted clipping doesn't take one of the user's jobs for the day", async () => {
@@ -544,25 +565,95 @@ describe.skipIf(!TEST_DATABASE_URL)("research briefs", () => {
 
       expect(claims.flatMap(({ briefs }) => briefs.map((b) => b.id))).toEqual([queued.brief]);
     });
+
+    it("never gives the same brief to two overlapping claims, and keeps to the limit", async () => {
+      const ana = await fixture.createUser("ana");
+      const ben = await fixture.createUser("ben");
+      await fixture.settings.updateAutomationSettings(ana, { researchJobsPerDay: 3 });
+      const anas = [await queue(ana), await queue(ana), await queue(ana), await queue(ana)];
+      const bens = [await queue(ben), await queue(ben)];
+
+      const runs = await Promise.all(
+        Array.from({ length: 4 }, () => fixture.research.claimForBatch(fixture.clock.now())),
+      );
+
+      const claimed = runs.flatMap((claims) =>
+        claims.flatMap(({ briefs }) => briefs.map((b) => b.id)),
+      );
+      expect(new Set(claimed).size).toBe(claimed.length);
+      const byUser = (userId: string) =>
+        runs.flatMap((claims) =>
+          claims.filter((claim) => claim.userId === userId).flatMap(({ briefs }) => briefs),
+        );
+      expect(byUser(ana)).toHaveLength(3);
+      expect(byUser(ana).map((b) => b.id)).toEqual(
+        expect.arrayContaining(anas.slice(0, 3).map((q) => q.brief)),
+      );
+      expect(
+        byUser(ben)
+          .map((b) => b.id)
+          .toSorted(),
+      ).toEqual(bens.map((q) => q.brief).toSorted());
+      expect(await fixture.research.submissionsToday(ana)).toBe(3);
+    });
+
+    it("can't be raced by a write-now: a claimed brief is busy, and a taken one isn't claimed", async () => {
+      const ana = await fixture.createUser("ana");
+      const claimedFirst = await queue(ana);
+      await fixture.research.claimForBatch(fixture.clock.now());
+
+      expect(await fixture.research.requestBriefNow(ana, claimedFirst.id)).toEqual({
+        status: "busy",
+      });
+      expect(await row(claimedFirst.brief)).toMatchObject({ status: "submitted", attempts: 1 });
+
+      const raced = await queue(ana);
+      const [claims, request] = await Promise.all([
+        fixture.research.claimForBatch(fixture.clock.now()),
+        fixture.research.requestBriefNow(ana, raced.id),
+      ]);
+
+      const claimed = claims.flatMap(({ briefs }) => briefs.map((b) => b.id));
+      expect(claimed.length + (request.status === "started" ? 1 : 0)).toBe(1);
+      expect(await row(raced.brief)).toMatchObject({
+        status: claimed.length === 1 ? "submitted" : "writing",
+        attempts: 1,
+      });
+      expect(await submissionRows(raced.brief)).toHaveLength(1);
+    });
+
+    it("leaves a user with no research domains their queued briefs from a verdict, and sends the ones asked for by hand", async () => {
+      const ana = await fixture.createUser("ana");
+      const ben = await fixture.createUser("ben");
+      await fixture.settings.updateResearchSettings(ben, { domains: [] });
+      const anaVerdict = await queue(ana);
+      const benVerdict = await queue(ben);
+      const benByHand = await writing(ben);
+      await fixture.research.failBrief(benByHand.brief, "the model refused");
+
+      const claims = await fixture.research.claimForBatch(fixture.clock.now());
+
+      expect(claims.map(({ userId, briefs }) => [userId, briefs.map((b) => b.id)])).toEqual([
+        [ana, [anaVerdict.brief]],
+        [ben, [benByHand.brief]],
+      ]);
+      expect(await row(benVerdict.brief)).toMatchObject({ status: "queued", attempts: 0 });
+      expect(await fixture.research.submissionsToday(ben)).toBe(2);
+    });
   });
 
-  describe("submitting and collecting a batch", () => {
-    it("marks the briefs submitted, counts the go and the day's job, and lists the batch", async () => {
+  describe("attachBatch", () => {
+    it("names the batch of the claimed briefs, and lists it with their owners", async () => {
       const ana = await fixture.createUser("ana");
       const one = await queue(ana);
       const two = await queue(ana);
       fixture.advanceClock(HOUR);
+      await fixture.research.claimForBatch(fixture.clock.now());
 
-      const moved = await fixture.research.markSubmitted([one.brief, two.brief], "batch_a");
+      const moved = await fixture.research.attachBatch([one.brief, two.brief], "batch_a");
 
       expect(moved).toBe(2);
-      expect(await row(one.brief)).toMatchObject({
-        status: "submitted",
-        batch_id: "batch_a",
-        attempts: 1,
-        submitted_at: fixture.clock.now(),
-      });
-      expect(await fixture.research.submissionsToday(ana)).toBe(2);
+      expect(await row(one.brief)).toMatchObject({ status: "submitted", batch_id: "batch_a" });
       expect(await fixture.research.submittedBatchIds()).toEqual(["batch_a"]);
       expect(await fixture.research.briefsInBatch("batch_a")).toEqual([
         { id: one.brief, userId: ana },
@@ -570,17 +661,22 @@ describe.skipIf(!TEST_DATABASE_URL)("research briefs", () => {
       ]);
     });
 
-    it("moves only queued briefs", async () => {
+    it("moves only a submitted brief that has no batch yet", async () => {
       const ana = await fixture.createUser("ana");
       const inBatch = await submitted(ana, "batch_a");
       const ready = await writing(ana);
       await fixture.research.completeBrief(ready.brief, { body: "Done", sources: [] });
+      const waiting = await queue(ana);
 
-      const moved = await fixture.research.markSubmitted([inBatch.brief, ready.brief], "batch_b");
+      const moved = await fixture.research.attachBatch(
+        [inBatch.brief, ready.brief, waiting.brief],
+        "batch_b",
+      );
 
       expect(moved).toBe(0);
       expect(await row(inBatch.brief)).toMatchObject({ batch_id: "batch_a", attempts: 1 });
       expect(await row(ready.brief)).toMatchObject({ status: "ready", batch_id: null });
+      expect(await row(waiting.brief)).toMatchObject({ status: "queued", batch_id: null });
     });
 
     it("lists each batch with briefs in flight once, and its briefs with their owners", async () => {
@@ -682,7 +778,7 @@ describe.skipIf(!TEST_DATABASE_URL)("research briefs", () => {
       const queued = await submitted(ana);
       await fixture.research.failBrief(queued.brief, "the batch expired");
       fixture.advanceClock(HOUR);
-      await fixture.research.markSubmitted([queued.brief], "batch_2");
+      expect(await sendBatch("batch_2")).toEqual([queued.brief]);
       expect(await row(queued.brief)).toMatchObject({ attempts: 2, note: null });
       fixture.advanceClock(HOUR);
 
@@ -703,9 +799,7 @@ describe.skipIf(!TEST_DATABASE_URL)("research briefs", () => {
 
       expect(await fixture.research.failBrief(asked.brief, "the model refused")).toBe("queued");
 
-      const claims = await fixture.research.claimForBatch(fixture.clock.now());
-      expect(claims.flatMap(({ briefs }) => briefs.map((b) => b.id))).toEqual([asked.brief]);
-      await fixture.research.markSubmitted([asked.brief], "batch_1");
+      expect(await sendBatch("batch_1")).toEqual([asked.brief]);
       expect(await fixture.research.failBrief(asked.brief, "the model refused")).toBe("dropped");
     });
 
@@ -751,8 +845,7 @@ describe.skipIf(!TEST_DATABASE_URL)("research briefs", () => {
       const ana = await fixture.createUser("ana");
       const stuck = await writing(ana);
       await fixture.research.failBrief(stuck.brief, "the model refused");
-      const again = await fixture.research.markSubmitted([stuck.brief], "batch_1");
-      expect(again).toBe(1);
+      expect(await sendBatch("batch_1")).toEqual([stuck.brief]);
       // Dropped after two submissions; a request by hand starts a third go, which then dies.
       await fixture.research.failBrief(stuck.brief, "the batch expired");
       expect(await row(stuck.brief)).toMatchObject({ status: "dropped" });
@@ -766,6 +859,112 @@ describe.skipIf(!TEST_DATABASE_URL)("research briefs", () => {
         note: "Dropped after 2 tries: the writer stopped partway",
         completed_at: fixture.clock.now(),
       });
+    });
+  });
+
+  describe("failUnstartedBatch", () => {
+    it("fails the briefs claimed before the cut-off that never got a batch, and only those", async () => {
+      const ana = await fixture.createUser("ana");
+      const lost = await queue(ana);
+      await fixture.research.claimForBatch(fixture.clock.now());
+      const attached = await submitted(ana, "batch_a");
+      fixture.advanceClock(HOUR + MINUTE);
+      const fresh = await queue(ana);
+      await fixture.research.claimForBatch(fixture.clock.now());
+      const cutOff = subHours(fixture.clock.now(), 1);
+
+      const failed = await fixture.research.failUnstartedBatch(cutOff);
+
+      expect(failed).toBe(1);
+      expect(await row(lost.brief)).toMatchObject({
+        status: "queued",
+        note: "Retrying after the batch never started",
+        attempts: 1,
+      });
+      expect(await row(attached.brief)).toMatchObject({ status: "submitted" });
+      expect(await row(fresh.brief)).toMatchObject({ status: "submitted", note: null });
+    });
+  });
+
+  describe("failUnfinishedBatch", () => {
+    it("fails the briefs whose batch has been out since before the cut-off, and only those", async () => {
+      const ana = await fixture.createUser("ana");
+      const ben = await fixture.createUser("ben");
+      await fixture.settings.updateAutomationSettings(ana, { researchJobsPerDay: 10 });
+      const old = await submitted(ana, "batch_old");
+      const oldBen = await submitted(ben, "batch_old");
+      fixture.advanceClock(3 * 24 * HOUR);
+      const recent = await submitted(ana, "batch_new");
+      const cutOff = subHours(fixture.clock.now(), 3 * 24);
+
+      const failed = await fixture.research.failUnfinishedBatch(cutOff);
+
+      expect(failed).toBe(2);
+      for (const lost of [old, oldBen]) {
+        expect(await row(lost.brief)).toMatchObject({
+          status: "queued",
+          batch_id: null,
+          note: "Retrying after the batch never finished",
+        });
+      }
+      expect(await row(recent.brief)).toMatchObject({ status: "submitted", batch_id: "batch_new" });
+      expect(await fixture.research.submittedBatchIds()).toEqual(["batch_new"]);
+    });
+  });
+
+  describe("claimWriter", () => {
+    it("lets the first job take up a brief being written, and turns a second one away", async () => {
+      const ana = await fixture.createUser("ana");
+      const asked = await writing(ana);
+
+      expect(await fixture.research.claimWriter(ana, asked.brief)).toBe(true);
+      expect(await row(asked.brief)).toMatchObject({ writer_started_at: fixture.clock.now() });
+      expect(await fixture.research.claimWriter(ana, asked.brief)).toBe(false);
+    });
+
+    it("lets exactly one of several jobs delivered at once take it", async () => {
+      const ana = await fixture.createUser("ana");
+      const asked = await writing(ana);
+
+      const taken = await Promise.all(
+        Array.from({ length: 5 }, () => fixture.research.claimWriter(ana, asked.brief)),
+      );
+
+      expect(taken.filter(Boolean)).toHaveLength(1);
+    });
+
+    it("lets the next writer in once the brief changes state", async () => {
+      const ana = await fixture.createUser("ana");
+      const asked = await writing(ana);
+      await fixture.research.claimWriter(ana, asked.brief);
+
+      // The job failed: the brief is queued, then asked for again.
+      await fixture.research.failBrief(asked.brief, "the request failed");
+      expect(await row(asked.brief)).toMatchObject({ writer_started_at: null });
+      await fixture.research.requestBriefNow(ana, asked.id);
+      expect(await fixture.research.claimWriter(ana, asked.brief)).toBe(true);
+
+      // A job that lost its writer: the stuck brief is failed (its second go, so dropped) and can
+      // be asked for again.
+      fixture.advanceClock(2 * HOUR);
+      await fixture.research.failStuckWriting(subHours(fixture.clock.now(), 1));
+      expect(await row(asked.brief)).toMatchObject({ status: "dropped", writer_started_at: null });
+      await fixture.research.requestBriefNow(ana, asked.id);
+      expect(await fixture.research.claimWriter(ana, asked.brief)).toBe(true);
+      await fixture.research.completeBrief(asked.brief, { body: "Done", sources: [] });
+      expect(await row(asked.brief)).toMatchObject({ writer_started_at: null });
+    });
+
+    it("refuses a brief that isn't being written, another user's, and an id that isn't one", async () => {
+      const ana = await fixture.createUser("ana");
+      const ben = await fixture.createUser("ben");
+      const queued = await queue(ana);
+      const asked = await writing(ana);
+
+      expect(await fixture.research.claimWriter(ana, queued.brief)).toBe(false);
+      expect(await fixture.research.claimWriter(ben, asked.brief)).toBe(false);
+      expect(await fixture.research.claimWriter(ana, "nope")).toBe(false);
+      expect(await row(asked.brief)).toMatchObject({ writer_started_at: null });
     });
   });
 
@@ -785,8 +984,29 @@ describe.skipIf(!TEST_DATABASE_URL)("research briefs", () => {
         mode: "batch",
         note: "Held: today's spending cap was reached",
       });
-      expect(await row(asked.brief)).toMatchObject({ attempts: 0, submitted_at: null });
+      expect(await row(asked.brief)).toMatchObject({
+        attempts: 0,
+        submitted_at: null,
+        writer_started_at: null,
+      });
+      expect(await submissionRows(asked.brief)).toEqual([]);
       expect(await fixture.research.submissionsToday(ana)).toBe(0);
+    });
+
+    it("puts a claimed brief back the same way, and only the held go's job comes back", async () => {
+      const ana = await fixture.createUser("ana");
+      const queued = await queue(ana);
+      await fixture.research.claimForBatch(fixture.clock.now());
+      await fixture.research.failBrief(queued.brief, "the batch expired");
+      fixture.advanceClock(MINUTE);
+      await fixture.research.claimForBatch(fixture.clock.now());
+      expect(await submissionRows(queued.brief)).toHaveLength(2);
+
+      expect(await fixture.research.holdBrief(queued.brief, "Held")).toBe(true);
+
+      expect(await row(queued.brief)).toMatchObject({ status: "queued", attempts: 1 });
+      expect(await submissionRows(queued.brief)).toHaveLength(1);
+      expect(await fixture.research.submissionsToday(ana)).toBe(1);
     });
 
     it("does nothing to a brief that is not in flight", async () => {
@@ -795,6 +1015,54 @@ describe.skipIf(!TEST_DATABASE_URL)("research briefs", () => {
 
       expect(await fixture.research.holdBrief(queued.brief, "Held")).toBe(false);
       expect(await row(queued.brief)).toMatchObject({ note: null });
+    });
+
+    it("keeps users apart: holdBriefFor puts back only the user's own brief", async () => {
+      const ana = await fixture.createUser("ana");
+      const ben = await fixture.createUser("ben");
+      const asked = await writing(ana);
+
+      expect(await fixture.research.holdBriefFor(ben, asked.brief, "Held")).toBe(false);
+      expect(await row(asked.brief)).toMatchObject({ status: "writing", attempts: 1 });
+      expect(await fixture.research.submissionsToday(ana)).toBe(1);
+
+      expect(await fixture.research.holdBriefFor(ana, asked.brief, "Couldn't start it")).toBe(true);
+      expect(await row(asked.brief)).toMatchObject({
+        status: "queued",
+        note: "Couldn't start it",
+        attempts: 0,
+      });
+      expect(await fixture.research.submissionsToday(ana)).toBe(0);
+    });
+  });
+
+  describe("submissions", () => {
+    it("are counted per user for the UTC day, whatever the brief's later fate", async () => {
+      const ana = await fixture.createUser("ana");
+      const ben = await fixture.createUser("ben");
+      const batched = await submitted(ana);
+      await fixture.research.failBrief(batched.brief, "the batch expired");
+      await writing(ben);
+
+      expect(await fixture.research.submissionsToday(ana)).toBe(1);
+      expect(await fixture.research.submissionsToday(ben)).toBe(1);
+      expect(await fixture.research.submissionsToday("someone-else")).toBe(0);
+
+      fixture.advanceClock(15 * HOUR);
+      expect(await fixture.research.submissionsToday(ana)).toBe(0);
+    });
+
+    it("go with the brief and with the user", async () => {
+      const ana = await fixture.createUser("ana");
+      const first = await submitted(ana);
+      const second = await writing(ana);
+
+      await fixture.pool.query(`delete from clippings where id = $1`, [first.id]);
+      expect(await submissionRows(first.brief)).toEqual([]);
+      expect(await submissionRows(second.brief)).toHaveLength(1);
+
+      await fixture.deleteUser(ana);
+      expect(await submissionRows(second.brief)).toEqual([]);
     });
   });
 

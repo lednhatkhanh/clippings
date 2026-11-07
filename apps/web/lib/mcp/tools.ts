@@ -27,6 +27,7 @@ import {
   type PlannedChange,
   type ProposalResult,
   type ProposedChange,
+  type ResearchService,
 } from "@clippings/db";
 import {
   CLIPPING_KINDS,
@@ -40,8 +41,10 @@ import {
   MAX_TAG_LENGTH,
   MAX_TAGS_PER_CLIPPING,
   MAX_TITLE_LENGTH,
+  BRIEF_STATUSES,
   SEARCH_RESULT_LIMIT,
   TAG_COLORS,
+  type Brief,
   type Clipping,
   type LibraryChange,
 } from "@clippings/shared";
@@ -83,6 +86,9 @@ export type McpLibrarian = Pick<
   | "listFolders"
   | "findFolderByName"
 >;
+
+/** What `get_clipping` needs from the research service: the clipping's brief. */
+export type McpResearch = Pick<ResearchService, "getBrief">;
 
 /** What the `run_librarian` tool needs: the librarian's run, which the weekly job makes too. */
 export type McpLibrarianRunner = Pick<LibrarianRunner, "run">;
@@ -162,6 +168,35 @@ const clippingOutput = z.object({
   link: z.string().describe("Where the user opens it in Clippings."),
 });
 
+/** A research brief as `get_clipping` returns it. */
+function presentBrief(brief: Brief) {
+  return {
+    status: brief.status,
+    domain: brief.domain,
+    body: brief.body,
+    sources: brief.sources.map(({ url, title }) => ({ url, title })),
+    updatedAt: brief.updatedAt,
+  };
+}
+
+const briefOutput = z
+  .object({
+    status: z
+      .enum(BRIEF_STATUSES)
+      .describe(
+        "queued (waits for tonight's batch), submitted or writing (being written), ready, or dropped.",
+      ),
+    domain: z
+      .string()
+      .describe("The research domain the save is in; empty when asked for by hand."),
+    body: z.string().nullable().describe("The brief as Markdown; null until it is ready."),
+    sources: z.array(z.object({ url: z.string(), title: z.string() })),
+    updatedAt: z.string().describe("As an ISO 8601 UTC time."),
+  })
+  .describe(
+    "The research brief Clippings wrote for this clipping with a model and web search, AI-written and possibly wrong: cite its sources, not the brief.",
+  );
+
 /** `presentFull`, as the tools' output schemas describe it. */
 const fullClippingOutput = clippingOutput.extend({
   excerpt: z.string().nullable(),
@@ -174,6 +209,11 @@ const fullClippingOutput = clippingOutput.extend({
 
 const clippingsOutput = z.object({ clippings: z.array(clippingOutput) });
 const fullClippingResultOutput = z.object({ clipping: fullClippingOutput });
+/** `get_clipping`'s result: the clipping, and its research brief when it has one. */
+const clippingWithBriefOutput = z.object({
+  clipping: fullClippingOutput,
+  brief: briefOutput.nullable(),
+});
 
 const NOT_FOUND = "The user has no clipping with that id.";
 
@@ -224,11 +264,13 @@ export function registerClippingTools(
   {
     clippings,
     librarian,
+    research,
     runner,
     appOrigin,
   }: {
     clippings: McpClippings;
     librarian: McpLibrarian;
+    research: McpResearch;
     runner: McpLibrarianRunner;
     appOrigin: string;
   },
@@ -466,15 +508,20 @@ export function registerClippingTools(
     {
       title: "Get a clipping",
       description:
-        "Read one of the user's clippings in full by id: its title, note, tags, summary and the excerpt Clippings kept from the page. When the user renamed it, pageTitle is the page's own title.",
+        "Read one of the user's clippings in full by id: its title, note, tags, summary and the excerpt Clippings kept from the page. When the user renamed it, pageTitle is the page's own title. When Clippings wrote a research brief for it, AI-written from web search, the brief comes with it, with its sources; otherwise brief is null.",
       inputSchema: z.object({ id: idSchema }),
-      outputSchema: fullClippingResultOutput,
+      outputSchema: clippingWithBriefOutput,
       annotations: { readOnlyHint: true },
     },
     async ({ id }, ctx) => {
       const caller = callerFrom(ctx);
       const clipping = await clippings.getClipping(caller.userId, id);
-      return clipping ? result({ clipping: presentFull(clipping, appOrigin) }) : failure(NOT_FOUND);
+      if (!clipping) return failure(NOT_FOUND);
+      const brief = await research.getBrief(caller.userId, id);
+      return result({
+        clipping: presentFull(clipping, appOrigin),
+        brief: brief ? presentBrief(brief) : null,
+      });
     },
   );
 

@@ -68,6 +68,9 @@ for going offline; a second build gets a new build id, so it triggers the update
   suggestions, it suggests the user's first two tags and one new tag, the first long word of the
   page title, each with `low` confidence (a suggestion). A `[fake-confidence high]` marker in the
   message makes them `high`, which auto-tagging (on by default for every user) applies and logs.
+  When the user has research domains it also gives the research verdict: worth researching when
+  the save's text names one of the domains (the default ones are `shipping` and `logistics`), and
+  `[fake-research no]` in the message forces not worth it.
   Every reply carries `usage` (input is the request's characters over four, output 10), which the
   model gateway prices into the ledger. Markers in the message text set it or make the call fail:
   `[fake-usage input=1000 output=200 cache_read=5000 cache_write=300 searches=2]`, and
@@ -77,6 +80,15 @@ for going offline; a second build gets a new build id, so it triggers the update
   `FAKE_QSTASH_PORT`; `FAKE_MODEL_DELAY_MS=0` skips the four seconds). To see the cap locally, set
   the daily cap in Settings → Automation to `0.00` (or `UPDATE user_settings SET daily_cap_micros =
   0`) and save a link: it stays pending and the QStash log shows a 200.
+- **Research briefs and batches**: a request that carries the `web_search_20260209` tool gets a
+  short brief at once: text with two citations (`https://example.com/fake-source-1` and `-2`) and
+  usage of two web searches. The Batches API (`/v1/messages/batches`) accepts a create as
+  `in_progress`, reports `ended` once `FAKE_BATCH_DELAY_MS` (default 0) has passed, and serves
+  JSONL results, each request answered as a normal call. `[fake-batch errored]` or `[fake-batch
+  expired]` in a request's message gives that outcome, and `[fake-error spend-limit]` makes the
+  create fail. Run the daily batch by hand with `curl -H "Authorization: Bearer $CRON_SECRET"
+  http://localhost:3100/api/cron/briefs`: the first call submits the queued briefs, the next
+  collects them (the research jobs per day, 3 by default, cap what a user submits).
 - **The librarian**: a request for the librarian's forced tools (`plan_tags`, `plan_folders`,
   `plan_links`, `plan_topic_pages`, and Haiku's `confirm_links`) gets a deterministic plan read off
   the library in its system prompt: tags `x` and `xs` merge, a tag with capitals is renamed to

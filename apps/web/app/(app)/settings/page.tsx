@@ -17,6 +17,7 @@ import {
 import { ImportSettings } from "@/components/settings/import-settings.tsx";
 import { KeyboardSettings } from "@/components/settings/keyboard-settings.tsx";
 import { LibraryReviewSettings } from "@/components/settings/library-review-settings.tsx";
+import { ResearchSettings } from "@/components/settings/research-settings.tsx";
 import { SuggestTagsSettings } from "@/components/settings/suggest-tags-settings.tsx";
 import { clientDisplayName, getConnections } from "@/lib/auth/connections.ts";
 import { getSession, signInRedirect } from "@/lib/auth/session.ts";
@@ -28,10 +29,16 @@ import {
   getAppearance,
   getAutomation,
   getAutoTag,
+  getResearchSettings,
   getSuggestTags,
 } from "@/lib/settings/service.ts";
 import { formatIsoUtc } from "@clippings/shared";
-import type { Appearance, AutomationSettings as Automation, SpendSummary } from "@clippings/shared";
+import type {
+  Appearance,
+  AutomationSettings as Automation,
+  ResearchSettings as Research,
+  SpendSummary,
+} from "@clippings/shared";
 import { Tab, TabList, TabPanel, TabPanels, Tabs } from "@clippings/ui";
 
 export const metadata: Metadata = { title: "Settings · Clippings" };
@@ -48,9 +55,10 @@ async function SettingsTabs() {
   let automation: Automation;
   let spend: SpendSummary;
   let waitingSuggestions: number;
+  let research: Research;
   try {
-    const [settings, connected, suggest, auto, pending, limits, spent, waiting] = await Promise.all(
-      [
+    const [settings, connected, suggest, auto, pending, limits, spent, waiting, researching] =
+      await Promise.all([
         getAppearance(session.user.id),
         getConnections().listConnections(session.user.id),
         getSuggestTags(session.user.id),
@@ -59,9 +67,10 @@ async function SettingsTabs() {
         getAutomation(session.user.id),
         getUsage().getSpend(session.user.id),
         getLibrary().countSuggestions(session.user.id),
-      ],
-    );
+        getResearchSettings(session.user.id),
+      ]);
     waitingSuggestions = waiting;
+    research = researching;
     appearance = settings;
     suggestTags = suggest;
     autoTag = auto;
@@ -105,6 +114,7 @@ async function SettingsTabs() {
         <TabPanel id="automation">
           <div className="flex flex-col gap-4">
             <AutoTagSettings initial={autoTag} />
+            <ResearchSettings initial={research} />
             <AutomationSettings spend={spend} initial={automation} />
           </div>
         </TabPanel>

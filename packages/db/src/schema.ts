@@ -745,12 +745,18 @@ export const modelUsage = pgTable(
     cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
     webSearches: integer("web_searches").notNull().default(0),
     costMicros: bigint("cost_micros", { mode: "number" }).notNull(),
+    // Names the request a row was written for, so recording it twice (a batch collected again)
+    // writes one row. Null for a call that is recorded once by construction.
+    requestKey: text("request_key"),
     // No default: the service stamps it from its clock.
     createdAt: timestamptz("created_at").notNull(),
   },
   (table) => [
     // "Spend by user since the start of a UTC day or month".
     index("model_usage_user_created_idx").on(table.userId, table.createdAt),
+    uniqueIndex("model_usage_request_key_uidx")
+      .on(table.requestKey)
+      .where(sql`${table.requestKey} is not null`),
     check("model_usage_cost_check", sql`${table.costMicros} >= 0`),
   ],
 );
@@ -956,8 +962,12 @@ export const researchBriefs = pgTable(
     // No default: the service stamps all of these from its clock.
     createdAt: timestamptz("created_at").notNull(),
     updatedAt: timestamptz("updated_at").notNull(),
-    // The last submission; counts toward the user's research jobs for that UTC day.
+    // The last submission; when a `submitted` brief never got a batch, or a `writing` one lost its
+    // job, this is what the daily run measures the wait from.
     submittedAt: timestamptz("submitted_at"),
+    // When a job took up a `writing` brief; a job delivered twice finds it set and stands down.
+    // Null in every other state.
+    writerStartedAt: timestamptz("writer_started_at"),
     completedAt: timestamptz("completed_at"),
   },
   (table) => [
@@ -979,5 +989,30 @@ export const researchBriefs = pgTable(
       "research_briefs_body_check",
       sql`char_length(${table.body}) <= ${sql.raw(String(MAX_BRIEF_LENGTH))}`,
     ),
+  ],
+);
+
+/**
+ * One row per submission of a brief to the model (the daily batch or "write it now"), which is
+ * what the research-job limit counts: a user's rows since 00:00 UTC. A submission the gateway
+ * turned away is removed again. Deleting the brief deletes its rows.
+ */
+export const researchSubmissions = pgTable(
+  "research_submissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    briefId: uuid("brief_id")
+      .notNull()
+      .references(() => researchBriefs.id, { onDelete: "cascade" }),
+    // No default: the service stamps it from its clock.
+    submittedAt: timestamptz("submitted_at").notNull(),
+  },
+  (table) => [
+    // "A user's submissions since the start of a UTC day".
+    index("research_submissions_user_submitted_idx").on(table.userId, table.submittedAt),
+    index("research_submissions_brief_idx").on(table.briefId),
   ],
 );

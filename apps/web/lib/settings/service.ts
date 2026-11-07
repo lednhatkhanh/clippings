@@ -24,3 +24,8 @@ export const getAutoTag = cache((userId: string) => getSettings().getAutoTag(use
 
 /** The user's daily spend cap and research-job limit. Deduplicated per request. */
 export const getAutomation = cache((userId: string) => getSettings().getAutomationSettings(userId));
+
+/** The user's "About me" text and research domains. Deduplicated per request. */
+export const getResearchSettings = cache((userId: string) =>
+  getSettings().getResearchSettings(userId),
+);

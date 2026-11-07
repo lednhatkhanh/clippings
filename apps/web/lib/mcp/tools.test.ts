@@ -96,6 +96,7 @@ describe.skipIf(!TEST_DATABASE_URL)("the MCP tools", () => {
     handler = createClippingsMcpHandler({
       clippings: fixture.service,
       librarian: fixture.librarian,
+      research: fixture.research,
       runner,
       appOrigin: "https://clippings.test",
     });
@@ -616,6 +617,42 @@ describe.skipIf(!TEST_DATABASE_URL)("the MCP tools", () => {
         title: "Garden plan",
         pageTitle: "An essay about gardening",
       });
+    });
+
+    it("returns the research brief with the clipping, only to its owner", async () => {
+      const { id } = await save(ada, "https://example.com/shipping");
+      type WithBrief = {
+        brief: {
+          status: string;
+          domain: string;
+          body: string | null;
+          sources: { url: string; title: string }[];
+          updatedAt: string;
+        } | null;
+      };
+      const briefOf = async (caller: McpCaller) =>
+        ((await callTool(caller, "get_clipping", { id })).json() as WithBrief).brief;
+
+      expect(await briefOf(ada)).toBeNull();
+
+      const started = await fixture.research.requestBriefNow(ada.userId, id);
+      if (started.status !== "started") throw new Error(`Not started: ${started.status}`);
+      expect(await briefOf(ada)).toMatchObject({ status: "writing", body: null, sources: [] });
+
+      fixture.advanceClock(60_000);
+      await fixture.research.completeBrief(started.brief.id, {
+        body: "Port congestion is easing.",
+        sources: [{ url: "https://example.com/source", title: "A source" }],
+      });
+      expect(await briefOf(ada)).toEqual({
+        status: "ready",
+        domain: "",
+        body: "Port congestion is easing.",
+        sources: [{ url: "https://example.com/source", title: "A source" }],
+        updatedAt: "2026-10-01T09:01:00.000Z",
+      });
+      // Bob has no clipping with that id, so he gets no brief either.
+      expect((await callTool(bob, "get_clipping", { id })).isError).toBe(true);
     });
 
     it("returns the page text Clippings saved, and says so when there is none", async () => {

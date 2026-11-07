@@ -22,6 +22,17 @@
 //   [fake-error rate-limit]    HTTP 429 with retry-after, an ordinary rate limit
 //   [fake-error overloaded]    HTTP 529
 //
+// A research brief (a request with the web_search_20260209 tool) gets text with two
+// web_search_result_location citations (https://example.com/fake-source-1 and -2), the matching
+// server_tool_use and web_search_tool_result blocks, and usage with two web searches (or the
+// `searches=` of a [fake-usage] marker), straight away.
+//
+// The Message Batches API (/v1/messages/batches): a create answers "in_progress"; a retrieve
+// answers "ended", with a results_url, once FAKE_BATCH_DELAY_MS (default 0) has passed; the
+// results are JSONL, each request answered as a normal call would be. A [fake-batch errored] or
+// [fake-batch expired] marker in a request's message gives that outcome for the request, and a
+// [fake-error spend-limit|credit|tier-cap] marker makes the create itself fail with that error.
+//
 // A librarian request (a forced plan_tags, plan_folders, plan_links, plan_topic_pages or
 // confirm_links tool) gets a deterministic plan read off the library in its system prompt: tags
 // "<x>" and "<x>s" merge, a tag with capitals is renamed to lowercase, items and tags go in a
@@ -31,7 +42,13 @@
 import { createHash, createHmac } from "node:crypto";
 import http from "node:http";
 
-import { constructNow, getTime, getUnixTime } from "date-fns";
+import {
+  addMilliseconds,
+  constructNow,
+  differenceInMilliseconds,
+  getTime,
+  getUnixTime,
+} from "date-fns";
 
 const SIGNING_KEY = "local-current-key"; // QSTASH_CURRENT_SIGNING_KEY in local.env
 const RETRY_AFTER_MS = 1000;
@@ -161,6 +178,29 @@ function suggestTags(message, title) {
   const confidence = /\[fake-confidence high\]/.test(message) ? "high" : "low";
   const tag = (name) => ({ name, confidence, reason: `The page is about ${name}.` });
   return { existing_tags: mine.slice(0, 2).map(tag), new_tags: [tag(word)] };
+}
+
+/** A request's system prompt as text: a string, or a list of text blocks. */
+function systemText(system) {
+  return Array.isArray(system)
+    ? system.map((block) => block.text ?? "").join("\n")
+    : String(system ?? "");
+}
+
+/**
+ * The triage verdict for a save: worth researching when its text names one of the domains listed
+ * one per line in the system prompt's <research_domains> (the first it names, as listed), unless a
+ * `[fake-research no]` marker says otherwise.
+ */
+function researchVerdict(system, message) {
+  const listed = /<research_domains>\n([\s\S]*?)\n<\/research_domains>/.exec(system)?.[1] ?? "";
+  const domains = listed.split("\n").filter(Boolean);
+  const text = message.toLowerCase();
+  const domain = domains.find((candidate) => text.includes(candidate.toLowerCase()));
+  if (!domain || /\[fake-research no\]/.test(message)) {
+    return { worth: false, domain: "", reason: "Not mainly about one of the research domains." };
+  }
+  return { worth: true, domain, reason: `The save is about ${domain}.` };
 }
 
 // Error replies a `[fake-error name]` marker asks for: status, type, message, retry-after seconds.
@@ -317,91 +357,267 @@ function librarianInput(payload, message) {
   return { pages };
 }
 
-listen(
-  Number(process.env.FAKE_ANTHROPIC_PORT ?? 8081),
-  "fake anthropic",
-  (request, response, body) => {
-    const payload = JSON.parse(body || "{}");
-    // The content is a string or a list of blocks (a PDF comes as a document block before the text).
-    const content = payload.messages?.[0]?.content ?? "";
-    const message = Array.isArray(content)
-      ? content
-          .filter((block) => block.type === "text")
-          .map((block) => block.text)
-          .join("\n")
-      : String(content);
-    const failure = requestedError(message);
-    if (failure) {
-      const [status, type, text, retryAfter] = failure;
-      console.log(`[anthropic] ${request.url} model=${payload.model} -> ${status} ${type}`);
-      response.writeHead(status, {
-        "content-type": "application/json",
-        ...(retryAfter && { "retry-after": String(retryAfter) }),
-      });
-      return response.end(
+const ANTHROPIC_PORT = Number(process.env.FAKE_ANTHROPIC_PORT ?? 8081);
+// How long a batch stays "in_progress" after it is created.
+const BATCH_DELAY_MS = Number(process.env.FAKE_BATCH_DELAY_MS ?? 0);
+
+/** The text of a request's first message, where the `[fake-…]` markers are. */
+function requestText(payload) {
+  const content = payload.messages?.[0]?.content ?? "";
+  return Array.isArray(content)
+    ? content
+        .filter((block) => block.type === "text")
+        .map((block) => block.text)
+        .join("\n")
+    : String(content);
+}
+
+/** True for a request that carries the web search tool: a research brief. */
+const isBriefRequest = (payload) =>
+  Boolean(payload.tools?.some((tool) => tool.type === "web_search_20260209"));
+
+/**
+ * A research brief: a server-side web search, then text with two citations. The title is read
+ * from the `Title:` line of the clipping in the message. Usage counts two searches unless a
+ * `[fake-usage …]` marker says otherwise.
+ */
+function briefReply(payload, message, body) {
+  const title = /^Title: (.*)$/m.exec(message)?.[1] ?? "the page";
+  const sources = [1, 2].map((n) => ({
+    type: "web_search_result",
+    url: `https://example.com/fake-source-${n}`,
+    title: `Fake source ${n}`,
+    encrypted_content: "x",
+    page_age: null,
+  }));
+  const cited = (source, text) => ({
+    type: "text",
+    text,
+    citations: [
+      {
+        type: "web_search_result_location",
+        url: source.url,
+        title: source.title,
+        cited_text: "A stand-in passage.",
+        encrypted_index: "x",
+      },
+    ],
+  });
+  const usage = replyUsage(message, body);
+  usage.server_tool_use ??= { web_search_requests: 2 };
+  return {
+    id: "msg_local",
+    type: "message",
+    role: "assistant",
+    model: payload.model,
+    stop_reason: "end_turn",
+    stop_sequence: null,
+    content: [
+      {
+        type: "server_tool_use",
+        id: "srvtoolu_local",
+        name: "web_search",
+        input: { query: title },
+      },
+      { type: "web_search_tool_result", tool_use_id: "srvtoolu_local", content: sources },
+      cited(sources[0], `## What it is\n\nA stand-in research brief about ${title}. `),
+      cited(sources[1], `It has been written about elsewhere. [Fake source 2](${sources[1].url})`),
+    ],
+    usage,
+  };
+}
+
+const batches = new Map();
+let batchCount = 0;
+
+/**
+ * The batch as the API describes it: ended once `FAKE_BATCH_DELAY_MS` has passed since it was
+ * created (`created` describes the create's own reply, which is always in progress).
+ */
+function describeBatch(batch, origin, { created = false } = {}) {
+  const ended =
+    !created &&
+    differenceInMilliseconds(constructNow(undefined), batch.createdAt) >= BATCH_DELAY_MS;
+  const counts = { processing: 0, succeeded: 0, errored: 0, canceled: 0, expired: 0 };
+  if (ended) counts.succeeded = batch.requests.length;
+  else counts.processing = batch.requests.length;
+  return {
+    id: batch.id,
+    type: "message_batch",
+    processing_status: ended ? "ended" : "in_progress",
+    request_counts: counts,
+    created_at: batch.createdAt.toISOString(),
+    expires_at: addMilliseconds(batch.createdAt, 86_400_000).toISOString(),
+    ended_at: ended ? addMilliseconds(batch.createdAt, BATCH_DELAY_MS).toISOString() : null,
+    archived_at: null,
+    cancel_initiated_at: null,
+    results_url: ended ? `${origin}/v1/messages/batches/${batch.id}/results` : null,
+  };
+}
+
+/** One request's result, computed like a normal call: by asking the Messages endpoint. */
+async function batchResult({ custom_id, params }) {
+  const text = requestText(params);
+  const marker = /\[fake-batch (errored|expired)\]/.exec(text)?.[1];
+  if (marker === "expired") return { custom_id, result: { type: "expired" } };
+  const failed = (type, message) => ({
+    custom_id,
+    result: { type: "errored", error: { type: "error", error: { type, message } } },
+  });
+  if (marker === "errored") return failed("api_error", "Fake batch error");
+  const answer = await fetch(`http://127.0.0.1:${ANTHROPIC_PORT}/v1/messages`, {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+  const reply = await answer.json();
+  return answer.ok
+    ? { custom_id, result: { type: "succeeded", message: reply } }
+    : failed(reply.error?.type ?? "api_error", reply.error?.message ?? `HTTP ${answer.status}`);
+}
+
+/** The Message Batches API: create, retrieve and the JSONL results. */
+async function handleBatches(request, response, payload) {
+  const path = new URL(request.url, "http://fake").pathname;
+  const origin = `http://${request.headers.host}`;
+  const json = (status, value, type = "application/json") => {
+    response.writeHead(status, { "content-type": type });
+    response.end(value);
+  };
+  if (request.method === "POST" && path === "/v1/messages/batches") {
+    // The create is what a workspace limit refuses, whatever the batch holds.
+    const refused = (payload.requests ?? [])
+      .map(
+        ({ params }) =>
+          /\[fake-error (spend-limit|credit|tier-cap)\]/.exec(requestText(params))?.[1],
+      )
+      .find(Boolean);
+    if (refused) {
+      const [status, type, text] = ERROR_REPLIES[refused];
+      console.log(`[anthropic] batch create -> ${status} ${type}`);
+      return json(
+        status,
         JSON.stringify({ type: "error", error: { type, message: text }, request_id: "req_local" }),
       );
     }
-    if (LIBRARIAN_TOOLS.has(payload.tool_choice?.name)) {
-      console.log(
-        `[anthropic] ${request.url} model=${payload.model} librarian=${payload.tool_choice.name}`,
-      );
-      response.writeHead(200, { "content-type": "application/json" });
-      return response.end(
-        JSON.stringify({
-          id: "msg_local",
-          type: "message",
-          role: "assistant",
-          model: payload.model,
-          stop_reason: "tool_use",
-          stop_sequence: null,
-          content: [
-            {
-              type: "tool_use",
-              id: "toolu_local",
-              name: payload.tool_choice.name,
-              input: librarianInput(payload, message),
-            },
-          ],
-          usage: replyUsage(message, body),
-        }),
-      );
-    }
-    const title = /^Page title: (.*)$/m.exec(message)?.[1];
-    // Present when the tool asks for suggestions (tag suggestions are on for the user).
-    const suggests = Boolean(payload.tools?.[0]?.input_schema?.properties?.existing_tags);
-    console.log(
-      `[anthropic] ${request.url} model=${payload.model} title=${title} suggests=${suggests}`,
+    batchCount += 1;
+    const batch = {
+      id: `msgbatch_fake_${batchCount}`,
+      createdAt: constructNow(undefined),
+      requests: payload.requests ?? [],
+    };
+    batches.set(batch.id, batch);
+    console.log(`[anthropic] batch ${batch.id} created with ${batch.requests.length} requests`);
+    return json(200, JSON.stringify(describeBatch(batch, origin, { created: true })));
+  }
+  const match = /^\/v1\/messages\/batches\/([^/]+)(\/results)?$/.exec(path);
+  const batch = match && batches.get(match[1]);
+  if (request.method !== "GET" || !batch)
+    return json(
+      404,
+      JSON.stringify({
+        type: "error",
+        error: { type: "not_found_error", message: "No such batch" },
+      }),
     );
-    setTimeout(() => {
-      response.writeHead(200, { "content-type": "application/json" });
-      response.end(
-        JSON.stringify({
-          id: "msg_local",
-          type: "message",
-          role: "assistant",
-          model: payload.model,
-          stop_reason: "tool_use",
-          stop_sequence: null,
-          content: [
-            {
-              type: "tool_use",
-              id: "toolu_local",
-              name: payload.tool_choice?.name ?? "save_reading",
-              input: {
-                title: `Read: ${title ?? "Untitled"}`,
-                summary: "A stand-in summary of the page. It says what the page is about.",
-                excerpt: "A stand-in passage copied from the page.",
-                ...(suggests ? suggestTags(message, title) : {}),
-              },
+  if (!match[2]) return json(200, JSON.stringify(describeBatch(batch, origin)));
+  const results = await Promise.all(batch.requests.map(batchResult));
+  json(200, results.map((result) => JSON.stringify(result)).join("\n"), "application/x-jsonl");
+}
+
+listen(ANTHROPIC_PORT, "fake anthropic", (request, response, body) => {
+  const payload = JSON.parse(body || "{}");
+  if (request.url?.startsWith("/v1/messages/batches")) {
+    return handleBatches(request, response, payload);
+  }
+  // The content is a string or a list of blocks (a PDF comes as a document block before the text).
+  const content = payload.messages?.[0]?.content ?? "";
+  const message = Array.isArray(content)
+    ? content
+        .filter((block) => block.type === "text")
+        .map((block) => block.text)
+        .join("\n")
+    : String(content);
+  const failure = requestedError(message);
+  if (failure) {
+    const [status, type, text, retryAfter] = failure;
+    console.log(`[anthropic] ${request.url} model=${payload.model} -> ${status} ${type}`);
+    response.writeHead(status, {
+      "content-type": "application/json",
+      ...(retryAfter && { "retry-after": String(retryAfter) }),
+    });
+    return response.end(
+      JSON.stringify({ type: "error", error: { type, message: text }, request_id: "req_local" }),
+    );
+  }
+  if (isBriefRequest(payload)) {
+    console.log(`[anthropic] ${request.url} model=${payload.model} brief`);
+    response.writeHead(200, { "content-type": "application/json" });
+    return response.end(JSON.stringify(briefReply(payload, message, body)));
+  }
+  if (LIBRARIAN_TOOLS.has(payload.tool_choice?.name)) {
+    console.log(
+      `[anthropic] ${request.url} model=${payload.model} librarian=${payload.tool_choice.name}`,
+    );
+    response.writeHead(200, { "content-type": "application/json" });
+    return response.end(
+      JSON.stringify({
+        id: "msg_local",
+        type: "message",
+        role: "assistant",
+        model: payload.model,
+        stop_reason: "tool_use",
+        stop_sequence: null,
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu_local",
+            name: payload.tool_choice.name,
+            input: librarianInput(payload, message),
+          },
+        ],
+        usage: replyUsage(message, body),
+      }),
+    );
+  }
+  const title = /^Page title: (.*)$/m.exec(message)?.[1];
+  // Present when the tool asks for suggestions (tag suggestions are on for the user).
+  const suggests = Boolean(payload.tools?.[0]?.input_schema?.properties?.existing_tags);
+  // Present when the tool asks for a research verdict (the user has research domains).
+  const researches = Boolean(payload.tools?.[0]?.input_schema?.properties?.research);
+  console.log(
+    `[anthropic] ${request.url} model=${payload.model} title=${title} suggests=${suggests}`,
+  );
+  setTimeout(() => {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(
+      JSON.stringify({
+        id: "msg_local",
+        type: "message",
+        role: "assistant",
+        model: payload.model,
+        stop_reason: "tool_use",
+        stop_sequence: null,
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu_local",
+            name: payload.tool_choice?.name ?? "save_reading",
+            input: {
+              title: `Read: ${title ?? "Untitled"}`,
+              summary: "A stand-in summary of the page. It says what the page is about.",
+              excerpt: "A stand-in passage copied from the page.",
+              ...(suggests ? suggestTags(message, title) : {}),
+              ...(researches
+                ? { research: researchVerdict(systemText(payload.system), message) }
+                : {}),
             },
-          ],
-          usage: replyUsage(message, body),
-        }),
-      );
-    }, MODEL_DELAY_MS);
-  },
-);
+          },
+        ],
+        usage: replyUsage(message, body),
+      }),
+    );
+  }, MODEL_DELAY_MS);
+});
 
 const EMBEDDING_DIMENSIONS = 1024; // EMBEDDING_DIMENSIONS in @clippings/db
 

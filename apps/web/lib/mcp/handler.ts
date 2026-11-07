@@ -15,6 +15,7 @@ import {
   type McpClippings,
   type McpLibrarian,
   type McpLibrarianRunner,
+  type McpResearch,
 } from "./tools.ts";
 
 /** An access token's verified claims, as `requireMcpAuth` hands them over. */
@@ -38,6 +39,7 @@ const WRITE_INSTRUCTIONS = `${READ_INSTRUCTIONS} Save a text the user wants to k
 export function createClippingsMcpHandler(deps: {
   clippings: McpClippings;
   librarian: McpLibrarian;
+  research: McpResearch;
   runner: McpLibrarianRunner;
   appOrigin: string;
 }) {
@@ -115,6 +117,7 @@ export function createMcpRoute({
   auth,
   clippings,
   librarian,
+  research,
   runner,
   connections,
   resource,
@@ -123,6 +126,7 @@ export function createMcpRoute({
   auth: ReturnType<typeof createAuth>;
   clippings: McpClippings;
   librarian: McpLibrarian;
+  research: McpResearch;
   runner: McpLibrarianRunner;
   connections: Pick<ConnectionsService, "recordUse">;
   resource: string;
@@ -132,6 +136,7 @@ export function createMcpRoute({
   const mcp = createClippingsMcpHandler({
     clippings,
     librarian,
+    research,
     runner,
     appOrigin: new URL(resource).origin,
   });

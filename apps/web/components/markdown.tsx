@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 /**
@@ -105,18 +105,33 @@ const components: Components = {
   ),
 };
 
+/** Only a web address survives: a mail, phone or relative link is plain text. */
+const webUrlTransform = (url: string) => (/^https?:\/\//i.test(url) ? url : "");
+
 /**
  * GitHub-flavoured Markdown (tables, task lists, strikethrough, autolinks, code) as formatted
- * text, for notes now and for briefs, lessons and topic pages later. A plain component with no
- * client code: rendered in a Server Component it adds nothing to the page's JavaScript.
+ * text, for notes, briefs, lessons and topic pages. A plain component with no client code:
+ * rendered in a Server Component it adds nothing to the page's JavaScript.
  *
- * The source is untrusted (a client can write a note over MCP): see `components` for what is
- * never rendered.
+ * The source is untrusted (a client can write a note over MCP, and a model writes briefs from the
+ * web): see `components` for what is never rendered. `links="web"` goes further for text the
+ * model wrote: only `http:` and `https:` addresses become links, and any other (`mailto:`, `tel:`,
+ * a relative path) is shown as plain text.
  */
-export function Markdown({ source }: { source: string }) {
+export function Markdown({
+  source,
+  links = "default",
+}: {
+  source: string;
+  links?: "default" | "web";
+}) {
   return (
     <div className="flex flex-col gap-3 typescale-body-lg wrap-anywhere">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={components}
+        urlTransform={links === "web" ? webUrlTransform : defaultUrlTransform}
+      >
         {source}
       </ReactMarkdown>
     </div>

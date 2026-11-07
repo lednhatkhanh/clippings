@@ -30,6 +30,7 @@ export {
   type JobPublisher,
   type PageFetcher,
   type PageSummary,
+  type ResearchVerdict,
   type Summarizer,
   type SummarizerInput,
   type TagProposal,

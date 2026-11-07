@@ -125,3 +125,20 @@ export function voyageCostMicros(model: string, tokens: number): number {
   if (rate === undefined) throw new UnknownModelError(model);
   return Math.ceil((tokens * rate) / MICROS_PER_MICRO_MTOK);
 }
+
+/**
+ * About what one research brief costs in a batch: ~20,000 tokens in, ~3,000 out and 5 web searches
+ * at Sonnet 5.5's rates. The gateway reserves it against a user's cap for each brief of a batch,
+ * which is only paid for when the batch ends.
+ */
+export const BRIEF_COST_ESTIMATE_MICROS = claudeCostMicros(
+  "claude-sonnet-5-5",
+  {
+    inputTokens: 20_000,
+    outputTokens: 3_000,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    webSearches: 5,
+  },
+  { batch: true },
+);

@@ -1,0 +1,361 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "8b85da19-5f66-4daa-b831-bcfa089393e1",
+  "prevIds": ["e9507bc4-9734-4512-9211-fe01da9709c8"],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "research_submissions"],
+      "writes": [
+        "s|tbl|public.research_submissions",
+        "n|tbl|public.research_submissions",
+        "e|tbl|public.research_submissions",
+        "n|rel|public.research_submissions",
+        "n|type|public.research_submissions",
+        "n|rel|public.research_submissions_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "model_usage", "request_key"],
+      "writes": [
+        "s|col|public.model_usage.request_key",
+        "n|col|public.model_usage.request_key",
+        "e|col|public.model_usage.request_key"
+      ],
+      "reads": ["n|tbl|public.model_usage", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "research_briefs", "writer_started_at"],
+      "writes": [
+        "s|col|public.research_briefs.writer_started_at",
+        "n|col|public.research_briefs.writer_started_at",
+        "e|col|public.research_briefs.writer_started_at"
+      ],
+      "reads": ["n|tbl|public.research_briefs", "n|sch|public"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "model_usage", "model_usage_request_key_uidx"],
+      "writes": [
+        "s|idx|public.model_usage_request_key_uidx",
+        "n|idx|public.model_usage_request_key_uidx",
+        "e|idx|public.model_usage_request_key_uidx",
+        "n|rel|public.model_usage_request_key_uidx"
+      ],
+      "reads": ["n|tbl|public.model_usage", "n|sch|public", "n|col|public.model_usage.request_key"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "research_submissions",
+        "research_submissions_user_submitted_idx"
+      ],
+      "writes": [
+        "s|idx|public.research_submissions_user_submitted_idx",
+        "n|idx|public.research_submissions_user_submitted_idx",
+        "e|idx|public.research_submissions_user_submitted_idx",
+        "n|rel|public.research_submissions_user_submitted_idx"
+      ],
+      "reads": [
+        "n|tbl|public.research_submissions",
+        "n|sch|public",
+        "n|col|public.research_submissions.user_id",
+        "n|col|public.research_submissions.submitted_at"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "research_submissions",
+        "research_submissions_brief_idx"
+      ],
+      "writes": [
+        "s|idx|public.research_submissions_brief_idx",
+        "n|idx|public.research_submissions_brief_idx",
+        "e|idx|public.research_submissions_brief_idx",
+        "n|rel|public.research_submissions_brief_idx"
+      ],
+      "reads": [
+        "n|tbl|public.research_submissions",
+        "n|sch|public",
+        "n|col|public.research_submissions.brief_id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "research_submissions"],
+      "writes": [
+        "s|fk|public.research_submissions.research_submissions_user_id_user_id_fkey",
+        "n|fk|public.research_submissions.research_submissions_user_id_user_id_fkey",
+        "e|fk|public.research_submissions.research_submissions_user_id_user_id_fkey",
+        "n|con|public.research_submissions.research_submissions_user_id_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.research_submissions",
+        "n|sch|public",
+        "n|tbl|public.user",
+        "n|sch|public",
+        "n|col|public.research_submissions.user_id",
+        "n|col|public.user.id",
+        "e|uniqueness|public.user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "research_submissions"],
+      "writes": [
+        "s|fk|public.research_submissions.research_submissions_brief_id_research_briefs_id_fkey",
+        "n|fk|public.research_submissions.research_submissions_brief_id_research_briefs_id_fkey",
+        "e|fk|public.research_submissions.research_submissions_brief_id_research_briefs_id_fkey",
+        "n|con|public.research_submissions.research_submissions_brief_id_research_briefs_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.research_submissions",
+        "n|sch|public",
+        "n|tbl|public.research_briefs",
+        "n|sch|public",
+        "n|col|public.research_submissions.brief_id",
+        "n|col|public.research_briefs.id",
+        "e|uniqueness|public.research_briefs.id"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "research_submissions",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "model_usage",
+        "name": "request_key",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "writer_started_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_submissions",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "gen_random_uuid()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_submissions",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_submissions",
+        "name": "brief_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_submissions",
+        "name": "submitted_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "model_usage",
+        "name": "model_usage_request_key_uidx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "request_key",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": true,
+        "where": "\"request_key\" is not null",
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_submissions",
+        "name": "research_submissions_user_submitted_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "user_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "submitted_at",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_submissions",
+        "name": "research_submissions_brief_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "brief_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_submissions",
+        "name": "research_submissions_user_id_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["user_id"],
+        "schemaTo": "public",
+        "tableTo": "user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_submissions",
+        "name": "research_submissions_brief_id_research_briefs_id_fkey",
+        "nameExplicit": false,
+        "columns": ["brief_id"],
+        "schemaTo": "public",
+        "tableTo": "research_briefs",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_submissions",
+        "name": "research_submissions_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    }
+  ]
+}

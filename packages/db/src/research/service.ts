@@ -15,7 +15,13 @@ import {
 
 import type { Clock } from "../clippings/ports.ts";
 import { createDatabase, type Database } from "../database.ts";
-import { clippings, clippingTexts, researchBriefs, userSettings } from "../schema.ts";
+import {
+  clippings,
+  clippingTexts,
+  researchBriefs,
+  researchSubmissions,
+  userSettings,
+} from "../schema.ts";
 
 export interface ResearchServiceDeps {
   pool: pg.Pool;
@@ -24,6 +30,9 @@ export interface ResearchServiceDeps {
 
 /** What the database client and a transaction on it share: `queueBrief` runs on either. */
 export type BriefWriter = Pick<Database, "insert">;
+
+/** What the database client and a transaction on it share: reads that load briefs run on either. */
+type BriefReader = Pick<Database, "select">;
 
 export interface QueueBriefInput {
   userId: string;
@@ -108,28 +117,48 @@ function toBrief(row: Pick<typeof researchBriefs.$inferSelect, keyof typeof brie
 /**
  * The research briefs: one per clipping, queued by enrichment or asked for by hand, written by the
  * daily batch or on request. The daily limit (`user_settings.research_jobs_per_day`) counts a
- * user's submissions in the UTC day. Operations that act for a user take them and scope their
- * queries by them; the batch operations (`claimForBatch` and what follows it) act on every user's
- * briefs by id, as the cron job does.
+ * user's rows in `research_submissions` for the UTC day. Operations that act for a user take them
+ * and scope their queries by them; the batch operations (`claimForBatch` and what follows it) act
+ * on every user's briefs by id, as the cron job does.
+ *
+ * The operations that start a submission (`claimForBatch`, `requestBriefNow`) take the user's
+ * advisory lock for the length of their transaction: the count against the limit and the move out
+ * of `queued` can't be split by another one, so no brief is submitted twice and the limit holds.
  */
 export function createResearchService({ pool, clock }: ResearchServiceDeps) {
   const db = createDatabase(pool);
 
   const dayStart = (at: Date) => startOfDay(at, { in: utc });
 
-  /** How many briefs of each user were submitted since `since`. */
-  async function submissionCounts(userIds: readonly string[], since: Date) {
-    const counts = new Map<string, number>();
-    if (userIds.length === 0) return counts;
-    const rows = await db
-      .select({ userId: researchBriefs.userId, submitted: count() })
-      .from(researchBriefs)
+  /** Holds the user's research lock until the transaction ends. */
+  async function lockUser(tx: Pick<Database, "execute">, userId: string): Promise<void> {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`research:${userId}`}, 0))`,
+    );
+  }
+
+  /** How many submissions the user has made since `since`. */
+  async function submissionsSince(
+    reader: BriefReader,
+    userId: string,
+    since: Date,
+  ): Promise<number> {
+    const [row] = await reader
+      .select({ used: count() })
+      .from(researchSubmissions)
       .where(
-        and(inArray(researchBriefs.userId, [...userIds]), gte(researchBriefs.submittedAt, since)),
-      )
-      .groupBy(researchBriefs.userId);
-    for (const row of rows) counts.set(row.userId, row.submitted);
-    return counts;
+        and(eq(researchSubmissions.userId, userId), gte(researchSubmissions.submittedAt, since)),
+      );
+    return row?.used ?? 0;
+  }
+
+  /** The user's research jobs per day: their setting, else the default. */
+  async function dailyLimit(reader: BriefReader, userId: string): Promise<number> {
+    const [settings] = await reader
+      .select({ limit: userSettings.researchJobsPerDay })
+      .from(userSettings)
+      .where(eq(userSettings.userId, userId));
+    return settings?.limit ?? AUTOMATION_DEFAULTS.researchJobsPerDay;
   }
 
   /**
@@ -178,9 +207,9 @@ export function createResearchService({ pool, clock }: ResearchServiceDeps) {
     return row ? toBrief(row) : null;
   }
 
-  /** How many briefs the user has submitted since 00:00 UTC today. */
+  /** How many submissions the user has made since 00:00 UTC today. */
   async function submissionsToday(userId: string): Promise<number> {
-    return (await submissionCounts([userId], dayStart(clock.now()))).get(userId) ?? 0;
+    return submissionsSince(db, userId, dayStart(clock.now()));
   }
 
   /**
@@ -196,9 +225,7 @@ export function createResearchService({ pool, clock }: ResearchServiceDeps) {
     if (!UUID.test(clippingId)) return { status: "not_found" };
     return db.transaction(async (tx) => {
       // The count and the write after it can't be split by another request of the same user.
-      await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`research:${userId}`}, 0))`,
-      );
+      await lockUser(tx, userId);
       const now = clock.now();
 
       const [owned] = await tx
@@ -215,18 +242,10 @@ export function createResearchService({ pool, clock }: ResearchServiceDeps) {
         return { status: "busy" };
       }
 
-      const [settings] = await tx
-        .select({ limit: userSettings.researchJobsPerDay })
-        .from(userSettings)
-        .where(eq(userSettings.userId, userId));
-      const limit = settings?.limit ?? AUTOMATION_DEFAULTS.researchJobsPerDay;
-      const [usage] = await tx
-        .select({ used: count() })
-        .from(researchBriefs)
-        .where(
-          and(eq(researchBriefs.userId, userId), gte(researchBriefs.submittedAt, dayStart(now))),
-        );
-      if ((usage?.used ?? 0) >= limit) return { status: "limit_reached" };
+      const limit = await dailyLimit(tx, userId);
+      if ((await submissionsSince(tx, userId, dayStart(now))) >= limit) {
+        return { status: "limit_reached" };
+      }
 
       const writing = {
         status: "writing",
@@ -234,6 +253,7 @@ export function createResearchService({ pool, clock }: ResearchServiceDeps) {
         batchId: null,
         note: null,
         submittedAt: now,
+        writerStartedAt: null,
         completedAt: null,
         updatedAt: now,
       } as const;
@@ -257,14 +277,19 @@ export function createResearchService({ pool, clock }: ResearchServiceDeps) {
             .onConflictDoNothing({ target: researchBriefs.clippingId })
             .returning(briefColumns);
       // Enrichment queued a brief for the clipping between the check and the insert.
-      return brief ? { status: "started", brief: toBrief(brief) } : { status: "busy" };
+      if (!brief) return { status: "busy" };
+      await tx.insert(researchSubmissions).values({ userId, briefId: brief.id, submittedAt: now });
+      return { status: "started", brief: toBrief(brief) };
     });
   }
 
   /** The briefs with these ids and what the writer needs, in the order given; one the clipping of which is deleted is left out. */
-  async function loadForWriting(briefIds: readonly string[]): Promise<BriefForWriting[]> {
+  async function loadForWriting(
+    reader: BriefReader,
+    briefIds: readonly string[],
+  ): Promise<BriefForWriting[]> {
     if (briefIds.length === 0) return [];
-    const rows = await db
+    const rows = await reader
       .select({
         id: researchBriefs.id,
         userId: researchBriefs.userId,
@@ -329,23 +354,26 @@ export function createResearchService({ pool, clock }: ResearchServiceDeps) {
     briefId: string,
   ): Promise<BriefForWriting | null> {
     if (!UUID.test(briefId)) return null;
-    const [brief] = await loadForWriting([briefId]);
+    const [brief] = await loadForWriting(db, [briefId]);
     return brief && brief.userId === userId ? brief : null;
   }
 
   /**
-   * What the daily batch should submit: per user, their oldest queued briefs of clippings that
-   * are not deleted, as many as the user has research jobs left for the UTC day of `now`. Changes
-   * nothing: `markSubmitted` does, once the batch is created.
+   * Claims what the daily batch should submit: per user, their oldest queued briefs of clippings
+   * that are not deleted, as many as the user has research jobs left for the UTC day of `now`.
+   * The claimed briefs are `submitted` at once (one more attempt, a row in the user's submissions,
+   * no batch yet), so no other claim, and no "write it now", can take them. A user with no
+   * research domains keeps their queued briefs that came from a verdict; the ones asked for by
+   * hand (no domain) still go. The caller then sends them: `attachBatch` names the batch, and
+   * `holdBrief` puts back any the provider didn't take.
    */
   async function claimForBatch(
     now: Date,
   ): Promise<{ userId: string; briefs: BriefForWriting[] }[]> {
-    const queued = await db
+    const users = await db
       .select({
-        id: researchBriefs.id,
         userId: researchBriefs.userId,
-        limit: sql<number>`coalesce(${userSettings.researchJobsPerDay}, ${AUTOMATION_DEFAULTS.researchJobsPerDay})`,
+        oldest: sql<Date>`min(${researchBriefs.createdAt})`,
       })
       .from(researchBriefs)
       .innerJoin(
@@ -355,52 +383,99 @@ export function createResearchService({ pool, clock }: ResearchServiceDeps) {
           eq(clippings.userId, researchBriefs.userId),
         ),
       )
-      .leftJoin(userSettings, eq(userSettings.userId, researchBriefs.userId))
       .where(and(eq(researchBriefs.status, "queued"), live))
-      .orderBy(asc(researchBriefs.createdAt), asc(researchBriefs.id));
+      .groupBy(researchBriefs.userId)
+      .orderBy(sql`min(${researchBriefs.createdAt})`, asc(researchBriefs.userId));
 
-    const used = await submissionCounts(
-      [...new Set(queued.map((row) => row.userId))],
-      dayStart(now),
-    );
-    const chosen = new Map<string, string[]>();
-    for (const { id, userId, limit } of queued) {
-      const ids = chosen.get(userId) ?? [];
-      if (ids.length + (used.get(userId) ?? 0) >= limit) continue;
-      chosen.set(userId, [...ids, id]);
+    const claims: { userId: string; briefs: BriefForWriting[] }[] = [];
+    for (const { userId } of users) {
+      const briefs = await db.transaction(async (tx) => {
+        await lockUser(tx, userId);
+        const [settings] = await tx
+          .select({ domains: userSettings.researchDomains })
+          .from(userSettings)
+          .where(eq(userSettings.userId, userId));
+        const researchOff = settings !== undefined && settings.domains.length === 0;
+        const left =
+          (await dailyLimit(tx, userId)) - (await submissionsSince(tx, userId, dayStart(now)));
+        if (left <= 0) return [];
+
+        const queued = await tx
+          .select({ id: researchBriefs.id })
+          .from(researchBriefs)
+          .innerJoin(
+            clippings,
+            and(
+              eq(clippings.id, researchBriefs.clippingId),
+              eq(clippings.userId, researchBriefs.userId),
+            ),
+          )
+          .where(
+            and(
+              eq(researchBriefs.userId, userId),
+              eq(researchBriefs.status, "queued"),
+              live,
+              researchOff ? eq(researchBriefs.domain, "") : undefined,
+            ),
+          )
+          .orderBy(asc(researchBriefs.createdAt), asc(researchBriefs.id))
+          .limit(left);
+        if (queued.length === 0) return [];
+
+        const claimed = await tx
+          .update(researchBriefs)
+          .set({
+            status: "submitted",
+            mode: "batch",
+            batchId: null,
+            note: null,
+            attempts: sql`${researchBriefs.attempts} + 1`,
+            submittedAt: now,
+            writerStartedAt: null,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              inArray(
+                researchBriefs.id,
+                queued.map(({ id }) => id),
+              ),
+              eq(researchBriefs.userId, userId),
+              eq(researchBriefs.status, "queued"),
+            ),
+          )
+          .returning({ id: researchBriefs.id });
+        await tx
+          .insert(researchSubmissions)
+          .values(claimed.map(({ id }) => ({ userId, briefId: id, submittedAt: now })));
+        return loadForWriting(
+          tx,
+          queued.map(({ id }) => id).filter((id) => claimed.some((one) => one.id === id)),
+        );
+      });
+      if (briefs.length > 0) claims.push({ userId, briefs });
     }
-
-    const loaded = await loadForWriting([...chosen.values()].flat());
-    const claims = new Map<string, BriefForWriting[]>();
-    for (const brief of loaded)
-      claims.set(brief.userId, [...(claims.get(brief.userId) ?? []), brief]);
-    return [...chosen.keys()].flatMap((userId) => {
-      const briefs = claims.get(userId);
-      return briefs ? [{ userId, briefs }] : [];
-    });
+    return claims;
   }
 
   /**
-   * Records that these queued briefs went into the batch: each is `submitted`, one more attempt
-   * made, and counts toward its user's research jobs today. Returns how many it moved.
+   * Names the batch that holds these claimed briefs, so the daily run can ask the provider about
+   * it. Only a `submitted` brief with no batch yet takes it. Returns how many it moved.
    */
-  async function markSubmitted(briefIds: readonly string[], batchId: string): Promise<number> {
+  async function attachBatch(briefIds: readonly string[], batchId: string): Promise<number> {
     if (briefIds.length === 0) return 0;
-    const now = clock.now();
-    const moved = await db
+    const attached = await db
       .update(researchBriefs)
-      .set({
-        status: "submitted",
-        mode: "batch",
-        batchId,
-        note: null,
-        attempts: sql`${researchBriefs.attempts} + 1`,
-        submittedAt: now,
-        updatedAt: now,
-      })
-      .where(and(inArray(researchBriefs.id, [...briefIds]), eq(researchBriefs.status, "queued")))
+      .set({ batchId, updatedAt: clock.now() })
+      .where(
+        and(
+          inArray(researchBriefs.id, [...briefIds]),
+          eq(researchBriefs.status, "submitted"),
+          isNull(researchBriefs.batchId),
+        ),
+      )
       .returning({ id: researchBriefs.id });
-    return moved.length;
+    return attached.length;
   }
 
   /** The ids of the batches that hold submitted briefs: the ones to ask the provider about. */
@@ -440,6 +515,7 @@ export function createResearchService({ pool, clock }: ResearchServiceDeps) {
         sources,
         batchId: null,
         note: null,
+        writerStartedAt: null,
         completedAt: now,
         updatedAt: now,
       })
@@ -463,6 +539,7 @@ export function createResearchService({ pool, clock }: ResearchServiceDeps) {
       .set({
         status: sql`case when ${retry} then 'queued' else 'dropped' end`,
         batchId: null,
+        writerStartedAt: null,
         note: sql`case when ${retry} then ${`Retrying after ${why}`} else ${`Dropped after ${MAX_ATTEMPTS} tries: ${why}`} end`,
         completedAt: sql`case when ${retry} then null else ${now}::timestamptz end`,
         updatedAt: now,
@@ -496,28 +573,106 @@ export function createResearchService({ pool, clock }: ResearchServiceDeps) {
   }
 
   /**
+   * Fails the briefs that were claimed for a batch before `olderThan` and never got one: the run
+   * that claimed them died before, or while, creating it. Same rule as `failBrief`. Returns how
+   * many it failed.
+   */
+  async function failUnstartedBatch(olderThan: Date): Promise<number> {
+    const failed = await failWhere(
+      and(
+        eq(researchBriefs.status, "submitted"),
+        isNull(researchBriefs.batchId),
+        lt(researchBriefs.submittedAt, olderThan),
+      ),
+      "the batch never started",
+    );
+    return failed.length;
+  }
+
+  /**
+   * Fails the briefs submitted before `olderThan` whose batch is still waiting on them: a batch
+   * ends within a day, so one this old is lost. Same rule as `failBrief`. Returns how many it
+   * failed.
+   */
+  async function failUnfinishedBatch(olderThan: Date): Promise<number> {
+    const failed = await failWhere(
+      and(
+        eq(researchBriefs.status, "submitted"),
+        isNotNull(researchBriefs.batchId),
+        lt(researchBriefs.submittedAt, olderThan),
+      ),
+      "the batch never finished",
+    );
+    return failed.length;
+  }
+
+  /**
+   * Takes up a brief a job is about to write: the user's own brief, `writing`, that no job has
+   * taken yet. True for the first job to ask, false for a job delivered a second time (or for a
+   * brief that isn't being written). Any later change of state lets the next writer in.
+   */
+  async function claimWriter(userId: string, briefId: string): Promise<boolean> {
+    if (!UUID.test(briefId)) return false;
+    const now = clock.now();
+    const claimed = await db
+      .update(researchBriefs)
+      .set({ writerStartedAt: now })
+      .where(
+        and(
+          eq(researchBriefs.id, briefId),
+          eq(researchBriefs.userId, userId),
+          eq(researchBriefs.status, "writing"),
+          isNull(researchBriefs.writerStartedAt),
+        ),
+      )
+      .returning({ id: researchBriefs.id });
+    return claimed.length > 0;
+  }
+
+  /** Puts the in-flight briefs that match `where` back in the queue; see `holdBrief`. */
+  async function holdWhere(where: ReturnType<typeof and>, note: string): Promise<boolean> {
+    return db.transaction(async (tx) => {
+      const held = await tx
+        .update(researchBriefs)
+        .set({
+          status: "queued",
+          mode: "batch",
+          batchId: null,
+          note,
+          attempts: sql`greatest(${researchBriefs.attempts} - 1, 0)`,
+          submittedAt: null,
+          writerStartedAt: null,
+          updatedAt: clock.now(),
+        })
+        .where(and(inArray(researchBriefs.status, ["submitted", "writing"]), where))
+        .returning({ id: researchBriefs.id });
+      if (held.length === 0) return false;
+      // The go didn't happen, so it takes back the research job it used.
+      await tx.delete(researchSubmissions).where(
+        eq(
+          researchSubmissions.id,
+          sql`(select id from research_submissions where brief_id = ${held[0]!.id}
+            order by submitted_at desc, id desc limit 1)`,
+        ),
+      );
+      return true;
+    });
+  }
+
+  /**
    * Puts an in-flight brief back in the queue without counting the go: the model was never called
    * (the daily spending cap was reached), so it takes no attempt and no research job of the day.
    * `note` tells the user why. True when the brief was in flight.
    */
   async function holdBrief(id: string, note: string): Promise<boolean> {
     if (!UUID.test(id)) return false;
-    const held = await db
-      .update(researchBriefs)
-      .set({
-        status: "queued",
-        mode: "batch",
-        batchId: null,
-        note,
-        attempts: sql`greatest(${researchBriefs.attempts} - 1, 0)`,
-        submittedAt: null,
-        updatedAt: clock.now(),
-      })
-      .where(
-        and(eq(researchBriefs.id, id), inArray(researchBriefs.status, ["submitted", "writing"])),
-      )
-      .returning({ id: researchBriefs.id });
-    return held.length > 0;
+    return holdWhere(eq(researchBriefs.id, id), note);
+  }
+
+  /** `holdBrief` for the user's own brief: another user's is left alone. */
+  async function holdBriefFor(userId: string, id: string, note: string): Promise<boolean> {
+    if (!UUID.test(id)) return false;
+    return holdWhere(and(eq(researchBriefs.id, id), eq(researchBriefs.userId, userId)), note);
   }
 
   return {
@@ -526,13 +681,17 @@ export function createResearchService({ pool, clock }: ResearchServiceDeps) {
     getBriefForWriting,
     requestBriefNow,
     claimForBatch,
-    markSubmitted,
+    attachBatch,
     submittedBatchIds,
     briefsInBatch,
     completeBrief,
     failBrief,
     failStuckWriting,
+    failUnstartedBatch,
+    failUnfinishedBatch,
+    claimWriter,
     holdBrief,
+    holdBriefFor,
     submissionsToday,
   };
 }

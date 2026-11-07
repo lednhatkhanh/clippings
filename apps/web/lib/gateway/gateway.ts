@@ -1,10 +1,14 @@
-import type Anthropic from "@anthropic-ai/sdk";
+import Anthropic from "@anthropic-ai/sdk";
+import type {
+  MessageBatchIndividualResponse,
+  MessageBatchResult,
+} from "@anthropic-ai/sdk/resources/messages/batches";
 
 import type { UsageService } from "@clippings/db";
 import { EMBEDDING_DIMENSIONS } from "@clippings/db";
 import type { ModelJobKind } from "@clippings/shared";
 
-import { mayCall } from "./cap.ts";
+import { mayCall, spendLimitMicros } from "./cap.ts";
 import {
   claudeCostMicros,
   hasClaudeRate,
@@ -46,6 +50,44 @@ export interface MessageCall {
   timeoutMs?: number;
 }
 
+/** One request of a batch. */
+export interface BatchEntry {
+  /** The id its result comes back under; unique within the batch. */
+  customId: string;
+  userId: string;
+  jobKind: ModelJobKind;
+  request: Anthropic.MessageCreateParamsNonStreaming;
+  /**
+   * About what the request will cost, in micro-dollars. A batch is paid for when it ends, so
+   * `submitBatch` counts the estimates of a user's accepted entries as spent and holds the rest
+   * once they would carry the user past the cap. Left out, the entry reserves nothing.
+   */
+  estimateMicros?: number;
+}
+
+export interface BatchSubmission {
+  /** Null when no entry was accepted, so no batch was made. */
+  batchId: string | null;
+  /** The `customId`s that went into the batch. */
+  accepted: string[];
+  /** The entries that didn't: the caller keeps them for another day. */
+  held: { customId: string; reason: CapReason }[];
+}
+
+/** One request of an ended batch. */
+export type BatchItemResult =
+  | { customId: string; outcome: "succeeded"; message: Anthropic.Message; costMicros: number }
+  | {
+      customId: string;
+      outcome: "errored" | "expired" | "canceled";
+      /** What went wrong, in a phrase fit for a log or a note. */
+      detail: string;
+    };
+
+export type BatchCollection =
+  | { status: "in_progress" }
+  | { status: "ended"; results: BatchItemResult[] };
+
 export interface EmbedCall {
   userId: string;
   jobKind: ModelJobKind;
@@ -54,6 +96,33 @@ export interface EmbedCall {
   purpose: "document" | "query";
   timeoutMs: number;
   signal?: AbortSignal;
+}
+
+/** How long a call to the Batch API may take; the results file can be large. */
+const BATCH_TIMEOUT_MS = 120_000;
+
+/** What a response's `usage` came to, in the units the ledger and the rate table share. */
+function countUsage(usage: Anthropic.Usage) {
+  return {
+    inputTokens: usage.input_tokens,
+    outputTokens: usage.output_tokens,
+    cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+    cacheWriteTokens: usage.cache_creation_input_tokens ?? 0,
+    cacheWrite1hTokens: usage.cache_creation?.ephemeral_1h_input_tokens ?? 0,
+    webSearches: usage.server_tool_use?.web_search_requests ?? 0,
+  };
+}
+
+/** Why a batch request produced no message, in a phrase fit for a log or a note. */
+function failureDetail(result: Exclude<MessageBatchResult, { type: "succeeded" }>): string {
+  switch (result.type) {
+    case "errored":
+      return `${result.error.error.type}: ${result.error.error.message}`;
+    case "expired":
+      return "The request expired before it was processed";
+    case "canceled":
+      return "The request was canceled";
+  }
 }
 
 /**
@@ -90,6 +159,33 @@ export function createGateway({ ledger, anthropic }: GatewayDeps) {
     }
   }
 
+  /**
+   * Writes a response's usage to the ledger and returns what it cost. `message` and
+   * `collectBatch` both use it, so they count tokens and searches the same way; only `batch`
+   * differs.
+   */
+  async function recordClaude(
+    userId: string,
+    jobKind: ModelJobKind,
+    model: string,
+    usage: Anthropic.Usage,
+    batch: boolean,
+    requestKey?: string,
+  ): Promise<number> {
+    const counted = countUsage(usage);
+    const costMicros = claudeCostMicros(model, counted, { batch });
+    const { cacheWrite1hTokens: _lifetime, ...entry } = counted;
+    await record(userId, {
+      jobKind,
+      model,
+      batch,
+      costMicros,
+      ...entry,
+      ...(requestKey === undefined ? {} : { requestKey }),
+    });
+    return costMicros;
+  }
+
   /** A Messages API call. */
   async function message({
     userId,
@@ -113,20 +209,123 @@ export function createGateway({ ledger, anthropic }: GatewayDeps) {
       throw error;
     }
 
-    const { usage } = response;
-    const counted = {
-      inputTokens: usage.input_tokens,
-      outputTokens: usage.output_tokens,
-      cacheReadTokens: usage.cache_read_input_tokens ?? 0,
-      cacheWriteTokens: usage.cache_creation_input_tokens ?? 0,
-      cacheWrite1hTokens: usage.cache_creation?.ephemeral_1h_input_tokens ?? 0,
-      webSearches: usage.server_tool_use?.web_search_requests ?? 0,
-    };
-    const batch = false;
-    const costMicros = claudeCostMicros(model, counted, { batch });
-    const { cacheWrite1hTokens: _lifetime, ...entry } = counted;
-    await record(userId, { jobKind, model, batch, costMicros, ...entry });
+    const costMicros = await recordClaude(userId, jobKind, model, response.usage, false);
     return { status: "ok", value: response, costMicros };
+  }
+
+  /**
+   * Sends requests to the Batch API, which answers within a day for half the token price. Each
+   * entry is checked against its user's cap first, as `message` does, but a batch is paid for only
+   * when it ends, so the check counts what the user's earlier entries in this batch will cost
+   * (`estimateMicros`) as already spent: a user's entries are accepted only while today's spend plus
+   * those estimates stays within the limit for the job kind. The ones past it are `held` and left
+   * out. Nothing is recorded yet: `collectBatch` writes the ledger rows when the results
+   * arrive. A workspace spend limit on the create holds every entry (`provider_limit`). Any other
+   * error is thrown.
+   */
+  async function submitBatch(entries: readonly BatchEntry[]): Promise<BatchSubmission> {
+    const accepted: BatchEntry[] = [];
+    const held: BatchSubmission["held"] = [];
+    const budgets = new Map<string, ReturnType<UsageService["getBudget"]>>();
+    const reserved = new Map<string, number>();
+    for (const entry of entries) {
+      if (!hasClaudeRate(entry.request.model)) throw new UnknownModelError(entry.request.model);
+      const { userId, jobKind, estimateMicros = 0 } = entry;
+      let pending = budgets.get(userId);
+      if (!pending) budgets.set(userId, (pending = ledger.getBudget(userId)));
+      const { spentTodayMicros, dailyCapMicros } = await pending;
+      const projected = spentTodayMicros + (reserved.get(userId) ?? 0);
+      const limit = spendLimitMicros(jobKind, dailyCapMicros);
+      if (projected >= limit || projected + estimateMicros > limit) {
+        held.push({ customId: entry.customId, reason: "daily_cap" });
+        continue;
+      }
+      reserved.set(userId, (reserved.get(userId) ?? 0) + estimateMicros);
+      accepted.push(entry);
+    }
+    if (accepted.length === 0) return { batchId: null, accepted: [], held };
+
+    try {
+      const batch = await anthropic().messages.batches.create(
+        {
+          requests: accepted.map(({ customId, request }) => ({
+            custom_id: customId,
+            params: request,
+          })),
+        },
+        { timeout: BATCH_TIMEOUT_MS },
+      );
+      return { batchId: batch.id, accepted: accepted.map((entry) => entry.customId), held };
+    } catch (error) {
+      if (!isSpendLimitError(error)) throw error;
+      const refused = accepted.map(({ customId }) => ({
+        customId,
+        reason: "provider_limit" as const,
+      }));
+      return { batchId: null, accepted: [], held: [...held, ...refused] };
+    }
+  }
+
+  /**
+   * Asks whether a batch has ended and, once it has, reads its results and writes a ledger row
+   * (`batch: true`) for each request that produced a message. `owners` maps a `customId` to whom
+   * to bill: a result with no owner is skipped, which keeps a request that was already handled
+   * from being billed twice. A row is keyed by the batch and request, so collecting the same
+   * batch again writes none. A batch the provider no longer has (`NotFoundError`: its results are
+   * kept for 29 days) ends with every owner's request `expired`.
+   */
+  async function collectBatch(
+    batchId: string,
+    owners: ReadonlyMap<string, { userId: string; jobKind: ModelJobKind }>,
+  ): Promise<BatchCollection> {
+    const options = { timeout: BATCH_TIMEOUT_MS };
+    const items: MessageBatchIndividualResponse[] = [];
+    try {
+      const batch = await anthropic().messages.batches.retrieve(batchId, undefined, options);
+      if (batch.processing_status !== "ended") return { status: "in_progress" };
+      const decoder = await anthropic().messages.batches.results(batchId, undefined, options);
+      for await (const item of decoder) {
+        if (owners.has(item.custom_id)) items.push(item);
+      }
+    } catch (error) {
+      if (!(error instanceof Anthropic.NotFoundError)) throw error;
+      // Asked about for ever otherwise.
+      return {
+        status: "ended",
+        results: [...owners.keys()].map((customId) => ({
+          customId,
+          outcome: "expired" as const,
+          detail: "The provider no longer has the batch",
+        })),
+      };
+    }
+    // Before any row is written, so a model with no rate fails the collection whole and a retry
+    // doesn't bill the first results twice.
+    for (const { result } of items) {
+      if (result.type === "succeeded" && !hasClaudeRate(result.message.model)) {
+        throw new UnknownModelError(result.message.model);
+      }
+    }
+
+    const results: BatchItemResult[] = [];
+    for (const { custom_id: customId, result } of items) {
+      if (result.type !== "succeeded") {
+        results.push({ customId, outcome: result.type, detail: failureDetail(result) });
+        continue;
+      }
+      const { userId, jobKind } = owners.get(customId)!;
+      const { message } = result;
+      const costMicros = await recordClaude(
+        userId,
+        jobKind,
+        message.model,
+        message.usage,
+        true,
+        `batch:${batchId}:${customId}`,
+      );
+      results.push({ customId, outcome: "succeeded", message, costMicros });
+    }
+    return { status: "ended", results };
   }
 
   /** One Voyage AI embeddings call for up to 128 texts: one vector per text, in order. */
@@ -214,7 +413,7 @@ export function createGateway({ ledger, anthropic }: GatewayDeps) {
     return (await refusal(userId, jobKind)) === null;
   }
 
-  return { message, embed, canSpend };
+  return { message, submitBatch, collectBatch, embed, canSpend };
 }
 
 export type Gateway = ReturnType<typeof createGateway>;

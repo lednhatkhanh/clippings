@@ -4,7 +4,8 @@ import { describe, expect, it } from "vitest";
 
 import { Markdown } from "./markdown.tsx";
 
-const render = (source: string) => renderToStaticMarkup(createElement(Markdown, { source }));
+const render = (source: string, links?: "default" | "web") =>
+  renderToStaticMarkup(createElement(Markdown, { source, links }));
 
 describe("Markdown", () => {
   it("shows raw HTML as text and never as markup", () => {
@@ -48,5 +49,21 @@ describe("Markdown", () => {
     expect(html).toContain('type="checkbox"');
     expect(html).toContain("<del>gone</del>");
     expect(html).toContain("const x = 1;");
+  });
+
+  it('with links="web" keeps only http and https addresses as links', () => {
+    const source =
+      "[web](https://example.com/a) [plain](http://example.com/b) [mail](mailto:a@example.com) " +
+      "[call](tel:+15555550100) [rel](/settings) [proto](//evil.test/x) [anchor](#top)";
+
+    const html = render(source, "web");
+
+    expect(html).toContain('href="https://example.com/a"');
+    expect(html).toContain('href="http://example.com/b"');
+    expect(html).not.toMatch(/mailto:|tel:|href="\/settings"|evil\.test|href="#top"/);
+    expect(html.match(/<a /g)).toHaveLength(2);
+    for (const text of ["mail", "call", "rel", "proto", "anchor"]) expect(html).toContain(text);
+    // The default still allows what it did.
+    expect(render("[mail](mailto:a@example.com)")).toContain('href="mailto:a@example.com"');
   });
 });

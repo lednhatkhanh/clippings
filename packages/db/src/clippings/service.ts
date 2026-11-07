@@ -33,6 +33,7 @@ import type pg from "pg";
 import {
   AUTO_TAG_DEFAULT,
   AUTOMATION_DEFAULTS,
+  RESEARCH_DEFAULTS,
   formatIsoUtc,
   MAX_NOTE_BODY_LENGTH,
   MAX_NOTE_LENGTH,
@@ -58,6 +59,7 @@ import {
 
 import { applyAutoTags } from "../changes/auto-tag.ts";
 import { createDatabase, type Database } from "../database.ts";
+import { createResearchService } from "../research/service.ts";
 import {
   clippings,
   clippingTags,
@@ -735,6 +737,7 @@ export function createClippingsService({
   budget,
 }: ClippingsServiceDeps) {
   const db = createDatabase(pool);
+  const { queueBrief } = createResearchService({ pool, clock });
 
   /** The embedder's vector, checked to fit the column, so a wrong model fails here and not in SQL. */
   async function embed(
@@ -2061,12 +2064,27 @@ export function createClippingsService({
 
     // Only a user with suggestions or auto-tagging on has their tag names sent to the model.
     const [settings] = await db
-      .select({ suggest: userSettings.suggestTags, auto: userSettings.autoTag })
+      .select({
+        suggest: userSettings.suggestTags,
+        auto: userSettings.autoTag,
+        researchProfile: userSettings.researchProfile,
+        researchDomains: userSettings.researchDomains,
+      })
       .from(userSettings)
       .where(eq(userSettings.userId, row.userId));
     const suggesting = settings?.suggest === true;
     const autoTagging = settings?.auto ?? AUTO_TAG_DEFAULT;
     const userTags = suggesting || autoTagging ? await mostUsedTagNames(row.userId) : undefined;
+    // No domains means research is off: nothing about it goes to the model, and nothing is queued.
+    // A bookmark import saves hundreds of old links at once: those are never researched.
+    const researchDomains = settings?.researchDomains ?? RESEARCH_DEFAULTS.domains;
+    const research =
+      researchDomains.length > 0 && row.source !== "import"
+        ? {
+            profile: settings?.researchProfile ?? RESEARCH_DEFAULTS.profile,
+            domains: researchDomains,
+          }
+        : undefined;
 
     if (!(await budget.canSpend(row.userId, "enrich"))) return "held";
 
@@ -2118,6 +2136,7 @@ export function createClippingsService({
         userId: row.userId,
         ...page,
         ...(userTags === undefined ? {} : { userTags }),
+        ...(research ? { research } : {}),
       });
       // The reading stands without an embedding: search finds the clipping by its words, and the
       // daily sweep embeds it later. A retry would only read the page and call Haiku again.
@@ -2209,6 +2228,15 @@ export function createClippingsService({
       }
       if (ready && suggesting) {
         await replaceSuggestions(tx, row.userId, clippingId, { model: proposed, neighbours }, now);
+      }
+      // A clipping that already has a brief keeps it, so reading a page again queues no second one.
+      if (ready && research && read.research?.worth) {
+        await queueBrief(tx, {
+          userId: row.userId,
+          clippingId,
+          domain: read.research.domain,
+          reason: read.research.reason,
+        });
       }
       return ready;
     });

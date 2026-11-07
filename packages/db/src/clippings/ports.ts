@@ -86,6 +86,20 @@ export interface PageSummary {
    * out when the model gave no confidence (every tag in `suggestedTags` is then a suggestion).
    */
   tagProposals?: TagProposal[];
+  /**
+   * The model's call on whether the save is worth a research brief, when it was asked. Left out
+   * when research was off or the verdict was unusable.
+   */
+  research?: ResearchVerdict;
+}
+
+/** The triage verdict on a save. */
+export interface ResearchVerdict {
+  worth: boolean;
+  /** One of the user's research domains, in their spelling; empty when not worth it. */
+  domain: string;
+  /** One sentence on why. */
+  reason: string;
 }
 
 /**
@@ -115,6 +129,11 @@ export type SummarizerInput = {
      * Undefined when suggestions are off: then no tag names leave the app and none are suggested.
      */
     userTags?: readonly string[];
+    /**
+     * The user's "About me" text and research domains, when they have domains (an empty list turns
+     * research off). The summarizer then also says whether the save is worth a research brief.
+     */
+    research?: { profile: string; domains: readonly string[] };
   };
 
 /**

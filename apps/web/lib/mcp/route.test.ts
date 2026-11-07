@@ -57,6 +57,7 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
       auth,
       clippings: fixture.service,
       librarian: fixture.librarian,
+      research: fixture.research,
       runner: {
         run: () => {
           throw new Error("This test doesn't run the librarian");
