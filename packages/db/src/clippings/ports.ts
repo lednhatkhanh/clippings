@@ -1,3 +1,5 @@
+import type { ClippingKind } from "@clippings/shared";
+
 /** Time, injected so tests decide what "now" is. */
 export interface Clock {
   now: () => Date;
@@ -73,8 +75,16 @@ export class CapReachedError extends Error {
   }
 }
 
-/** What the summarizer reads: the page, and the user's tag names when they want suggestions. */
-export type SummarizerInput = { url: string; userId: string } & FetchedPage & {
+/**
+ * What the summarizer reads: the page (or, for a note, its body as `text`, with no `url`), and the
+ * user's tag names when they want suggestions.
+ */
+export type SummarizerInput = {
+  kind: ClippingKind;
+  /** Null for a note. */
+  url: string | null;
+  userId: string;
+} & FetchedPage & {
     /**
      * The user's most-used tag names, when they have tag suggestions on (possibly none yet).
      * Undefined when suggestions are off: then no tag names leave the app and none are suggested.

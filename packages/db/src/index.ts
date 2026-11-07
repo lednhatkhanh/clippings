@@ -34,6 +34,7 @@ export {
 } from "./clippings/ports.ts";
 export {
   createClippingsService,
+  EmptyNoteBodyError,
   IMPORT_DAILY_BUDGET,
   IMPORT_SPREAD_SECONDS,
   InvalidCursorError,
@@ -41,6 +42,8 @@ export {
   InvalidTagsError,
   InvalidUrlError,
   MAX_BULK_CLIPPINGS,
+  NoteBodyTooLongError,
+  NotANoteError,
   NoteTooLongError,
   systemClock,
   TagNameTakenError,
@@ -62,6 +65,7 @@ export {
   type TagClippingsResult,
   type SaveClippingInput,
   type SaveClippingResult,
+  type SaveNoteInput,
   type SearchClippingsInput,
   type SearchResults,
   type UpdateClippingInput,

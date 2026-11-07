@@ -172,7 +172,8 @@ export function createExtensionApi({
 
   const present = (clipping: Clipping): ExtensionClipping => ({
     id: clipping.id,
-    url: clipping.url,
+    // The extension saves and edits pages; a note it names has no address.
+    url: clipping.url ?? "",
     title: clipping.title,
     note: clipping.note,
     tags: clipping.tags.map(presentTag),

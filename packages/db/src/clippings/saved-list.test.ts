@@ -26,8 +26,8 @@ describe.skipIf(!TEST_DATABASE_URL)("listing saved clippings", () => {
     return clipping;
   }
 
-  const names = (clippings: { url: string }[]) =>
-    clippings.map((clipping) => clipping.url.replace("https://example.com/", ""));
+  const names = (clippings: { url: string | null }[]) =>
+    clippings.map((clipping) => clipping.url!.replace("https://example.com/", ""));
 
   it("lists everything newest first with pinned clippings among the rest, and pages without gaps", async () => {
     const ana = await fixture.createUser("ana");

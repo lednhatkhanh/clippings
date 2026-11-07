@@ -27,6 +27,7 @@ import { useRowPresence, type RowPresence } from "./deleted-clippings.tsx";
 import { Favicon } from "./favicon.tsx";
 import { HighlightedText } from "./highlighted-text.tsx";
 import { copyLinkWithToast, shareLinkWithToast, useCanShare } from "./link-actions.ts";
+import { NoteBadge, NoteMark } from "./note-mark.tsx";
 import { refreshFirstPage } from "./refresh-first-page.ts";
 import { StatusMotion } from "./status-motion.tsx";
 import { useListPoll } from "./use-list-poll.ts";
@@ -74,6 +75,8 @@ function ClippingRow({
   // State, not a ref object: React Aria renders the item's element after this component commits.
   const [element, setElement] = useState<HTMLDivElement | null>(null);
   const href = `/c/${row.id}`;
+  // A note has no page to share or link to.
+  const url = row.url;
 
   // A pending row asks for itself until enrichment has finished, then shows the result in place.
   // Only while on screen, and ever more slowly (`poll-schedule.ts`): an imported backlog stays
@@ -126,7 +129,7 @@ function ClippingRow({
           status={row.status}
           className="relative flex lift items-start gap-3.5 rounded-lg paper px-4 py-row-block"
         >
-          <Favicon url={row.url} />
+          {row.url === null ? <NoteMark /> : <Favicon url={row.url} />}
           <div className="flex min-w-0 flex-1 status-content flex-col gap-row-gap">
             <span className="flex min-w-0 items-center gap-1.5">
               {pinned ? (
@@ -140,7 +143,7 @@ function ClippingRow({
               </span>
             </span>
             <span className="flex flex-wrap items-center gap-x-1.5 typescale-label-sm font-mono text-ink-faint">
-              <span>{row.domain}</span>
+              {row.domain === null ? <NoteBadge /> : <span>{row.domain}</span>}
               <span aria-hidden="true">·</span>
               <time dateTime={row.dateTime}>{row.dateLabel}</time>
             </span>
@@ -155,14 +158,20 @@ function ClippingRow({
             {row.status === "pending" ? (
               <div className="flex flex-col gap-1.5 pt-1 @lg:max-w-xs">
                 <span aria-hidden="true" className="typescale-label-sm text-ink-faint">
-                  Reading the page…
+                  {row.kind === "note" ? "Reading the note…" : "Reading the page…"}
                 </span>
-                <ProgressBar label="Reading the page" />
+                <ProgressBar
+                  label={row.kind === "note" ? "Reading the note" : "Reading the page"}
+                />
               </div>
             ) : null}
             {row.status === "failed" ? (
               <div className="flex flex-wrap items-center gap-x-3 typescale-body-sm text-ink-muted">
-                <span>Couldn&apos;t read this page. Your link and note are saved.</span>
+                <span>
+                  {row.kind === "note"
+                    ? "Couldn't read this note. Your text is saved."
+                    : "Couldn't read this page. Your link and note are saved."}
+                </span>
                 <Button variant="text" onPress={retry} isPending={retrying} isDisabled={!online}>
                   Retry
                 </Button>
@@ -180,17 +189,19 @@ function ClippingRow({
               <MenuItem icon={pinned ? PinOff : Pin} isDisabled={!online} onAction={onTogglePin}>
                 {pinned ? "Unpin" : "Pin"}
               </MenuItem>
-              {canShare ? (
+              {canShare && url !== null ? (
                 <MenuItem
                   icon={Share2}
-                  onAction={() => void shareLinkWithToast({ title: row.title, url: row.url })}
+                  onAction={() => void shareLinkWithToast({ title: row.title, url })}
                 >
                   Share
                 </MenuItem>
               ) : null}
-              <MenuItem icon={Copy} onAction={() => void copyLinkWithToast(row.url)}>
-                Copy link
-              </MenuItem>
+              {url !== null ? (
+                <MenuItem icon={Copy} onAction={() => void copyLinkWithToast(url)}>
+                  Copy link
+                </MenuItem>
+              ) : null}
             </Menu>
           </MenuTrigger>
           {/* A quiet hint on the keyboard-focused row only; touch has no keyboard. */}

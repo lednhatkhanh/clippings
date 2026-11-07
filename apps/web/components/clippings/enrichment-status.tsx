@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import { reEnrichClippingAction } from "@/app/(app)/actions.ts";
 import { useOnline } from "@/components/online-status.tsx";
-import type { ClippingStatus } from "@clippings/shared";
+import type { ClippingKind, ClippingStatus } from "@clippings/shared";
 import { Button, ProgressBar } from "@clippings/ui";
 
 import { usePendingPoll } from "./use-pending-poll.ts";
@@ -16,11 +16,14 @@ import { usePendingPoll } from "./use-pending-poll.ts";
  */
 export function EnrichmentStatus({
   clippingId,
+  kind,
   status,
 }: {
   clippingId: string;
+  kind: ClippingKind;
   status: Exclude<ClippingStatus, "ready">;
 }) {
+  const what = kind === "note" ? "note" : "page";
   const router = useRouter();
   const [retrying, setRetrying] = useState(false);
   const online = useOnline();
@@ -44,15 +47,19 @@ export function EnrichmentStatus({
     return (
       <div className="flex flex-col gap-2">
         <span aria-hidden="true" className="typescale-body-md text-ink-faint">
-          Reading the page…
+          Reading the {what}…
         </span>
-        <ProgressBar label="Reading the page" />
+        <ProgressBar label={`Reading the ${what}`} />
       </div>
     );
   }
   return (
     <div className="flex flex-wrap items-center gap-x-3 typescale-body-md text-ink-muted">
-      <span>Couldn&apos;t read this page. Your link and note are saved.</span>
+      <span>
+        {kind === "note"
+          ? "Couldn't read this note. Your text is saved."
+          : "Couldn't read this page. Your link and note are saved."}
+      </span>
       <Button variant="text" onPress={retry} isPending={retrying} isDisabled={!online}>
         Retry
       </Button>

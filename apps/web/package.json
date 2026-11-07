@@ -34,7 +34,8 @@
     "react": "catalog:",
     "react-aria-components": "catalog:",
     "react-dom": "catalog:",
-    "streamdown": "catalog:",
+    "react-markdown": "catalog:",
+    "remark-gfm": "catalog:",
     "swr": "catalog:",
     "zod": "catalog:"
   },

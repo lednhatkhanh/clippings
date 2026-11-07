@@ -3,6 +3,7 @@ import { constructNow } from "date-fns";
 import { formatClippingDate } from "@/lib/format-date.ts";
 import type {
   Clipping,
+  ClippingKind,
   ClippingSource,
   ClippingStatus,
   SearchHighlights,
@@ -10,14 +11,19 @@ import type {
 } from "@clippings/shared";
 
 import type { BrowseParams } from "./browse-params.ts";
+import { notePreview } from "./note-preview.ts";
 import { getClippings } from "./service.ts";
 
 /** What one row of the list needs, with dates already worded so rows render the same anywhere. */
 export interface ClippingRowData {
   id: string;
-  url: string;
+  /** A saved page or a note the user wrote. */
+  kind: ClippingKind;
+  /** The page's address; null on a note. */
+  url: string | null;
   title: string;
-  domain: string;
+  /** The page's host; null on a note, which has none. */
+  domain: string | null;
   /** "2 days ago" or "3 Oct". */
   dateLabel: string;
   /** ISO 8601, for the `<time>` element. */
@@ -25,7 +31,10 @@ export interface ClippingRowData {
   status: ClippingStatus;
   /** Where it was saved from: an imported one stays pending for hours, so its poll is slower. */
   source: ClippingSource;
-  /** The page's summary once it has been read, shown under the title when there's no snippet. */
+  /**
+   * The page's summary once it has been read, shown under the title when there's no snippet. A
+   * note without one shows the start of its body.
+   */
   summary: string | null;
   tags: Tag[];
   /** Whether it is pinned above the newest-first list. */
@@ -61,14 +70,15 @@ export function toRow(
   return {
     ...(highlights ? { highlights } : {}),
     id: clipping.id,
+    kind: clipping.kind,
     url: clipping.url,
     title: clipping.title,
-    domain: domainOf(clipping.url),
+    domain: clipping.url === null ? null : domainOf(clipping.url),
     dateLabel: formatClippingDate(clipping.createdAt, now),
     dateTime: clipping.createdAt,
     status: clipping.status,
     source: clipping.source,
-    summary: clipping.summary,
+    summary: clipping.summary ?? (clipping.body === null ? null : notePreview(clipping.body)),
     tags: clipping.tags,
     pinned: clipping.pinned,
   };

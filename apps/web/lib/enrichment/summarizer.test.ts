@@ -142,12 +142,14 @@ describe("parseReading suggestions", () => {
 
 describe("summaryRequest", () => {
   const html = {
+    kind: "link" as const,
     url: "https://example.com/a",
     userId: "ana",
     title: "A page",
     text: "Some words.",
   };
   const pdf = {
+    kind: "link" as const,
     url: "https://example.com/paper.pdf",
     userId: "ana",
     title: "paper",
@@ -173,6 +175,19 @@ describe("summaryRequest", () => {
     const content = blocks(summaryRequest(html));
     expect(content.map((block) => block.type)).toEqual(["text"]);
     expect(content[0]).toMatchObject({ text: expect.stringContaining("Some words.") });
+  });
+
+  it("sends a note as its text alone, with no URL or page title, and asks about a note", () => {
+    const request = summaryRequest({
+      kind: "note",
+      url: null,
+      userId: "ana",
+      title: null,
+      text: "# Idea\n\nA body.",
+    });
+    expect(blocks(request)).toEqual([{ type: "text", text: "<note>\n# Idea\n\nA body.\n</note>" }]);
+    expect(request.system).toContain("notes that someone wrote");
+    expect(request.tools?.[0]).toMatchObject({ name: "save_reading" });
   });
 
   it("asks for the reading the same way for a PDF as for a page, tags included", () => {

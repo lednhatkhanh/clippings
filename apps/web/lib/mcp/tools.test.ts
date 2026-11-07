@@ -6,6 +6,7 @@ import {
   type ServiceFixture,
 } from "@clippings/db/testing";
 import {
+  MAX_NOTE_BODY_LENGTH,
   MAX_NOTE_LENGTH,
   MAX_TAG_LENGTH,
   MAX_TAGS_PER_CLIPPING,
@@ -24,6 +25,7 @@ const WRITE_TOOLS = [
   "merge_tag",
   "rename_tag",
   "restore_clipping",
+  "save_note",
   "tag_clippings",
   "update_clipping",
 ];
@@ -37,7 +39,9 @@ const READ_TOOLS = [
 
 interface ToolClipping {
   id: string;
-  url: string;
+  kind: "link" | "note";
+  url: string | null;
+  body?: string | null;
   title: string;
   pageTitle?: string;
   excerpt: string | null;
@@ -176,6 +180,7 @@ describe.skipIf(!TEST_DATABASE_URL)("the MCP tools", () => {
       ["get_clipping", { id }],
       ["get_page_text", { id }],
       ["update_clipping", { id, title: "Renamed", note: "changed", tags: ["x"] }],
+      ["save_note", { body: "should not be saved" }],
       ["list_tags", {}],
       ["delete_clipping", { id }],
       ["restore_clipping", { id }],
@@ -195,6 +200,8 @@ describe.skipIf(!TEST_DATABASE_URL)("the MCP tools", () => {
       title: "https://example.com/keep",
       tags: [],
     });
+    // Nor was the note saved.
+    expect((await fixture.service.listClippings(ada.userId, {})).items).toHaveLength(1);
   });
 
   it("saves a clipping with source mcp and the calling client recorded", async () => {
@@ -329,7 +336,7 @@ describe.skipIf(!TEST_DATABASE_URL)("the MCP tools", () => {
 
     const urlsOf = (result: { json: () => unknown }) =>
       (result.json() as { clippings: ToolClipping[] }).clippings.map((clipping) =>
-        clipping.url.replace("https://example.com/", ""),
+        clipping.url!.replace("https://example.com/", ""),
       );
 
     it("lists newest first, pinned among the rest, and pages with nextCursor", async () => {
@@ -462,6 +469,75 @@ describe.skipIf(!TEST_DATABASE_URL)("the MCP tools", () => {
       const saved = await callTool(caller, "save_clipping", { url, note });
       return (saved.json() as { clipping: ToolClipping }).clipping;
     }
+
+    describe("save_note", () => {
+      const body = "# Gearbox ideas\n\n- a wider ratio\n- [ ] ask the shop\n\n<b>raw</b>";
+
+      it("saves Markdown text as a note for the caller, source mcp and the client recorded", async () => {
+        const saved = await callTool(ada, "save_note", { body, tags: ["cars"] });
+
+        expect(saved.isError).toBe(false);
+        const { clipping } = saved.json() as { clipping: ToolClipping };
+        expect(clipping).toMatchObject({
+          kind: "note",
+          url: null,
+          title: "Gearbox ideas",
+          // Exactly as sent: no conversion.
+          body,
+          tags: ["cars"],
+          source: "mcp",
+          status: "pending",
+        });
+        expect(clipping.link).toBe(`https://clippings.test/c/${clipping.id}`);
+        const stored = await fixture.service.getClipping(ada.userId, clipping.id);
+        expect(stored).toMatchObject({ kind: "note", body, clientId: ada.clientId });
+        expect(fixture.enrichmentRequests).toEqual([clipping.id]);
+      });
+
+      it("keeps users apart: the note is the caller's alone", async () => {
+        const { clipping } = (await callTool(ada, "save_note", { body })).json() as {
+          clipping: ToolClipping;
+        };
+
+        expect((await callTool(bob, "get_clipping", { id: clipping.id })).isError).toBe(true);
+        expect((await callTool(bob, "list_recent", {})).json()).toEqual({ clippings: [] });
+        expect((await callTool(bob, "delete_clipping", { id: clipping.id })).isError).toBe(true);
+        expect(await fixture.service.getClipping(ada.userId, clipping.id)).not.toBeNull();
+      });
+
+      it("lists the note next to links, with a null address, and reads it back in full", async () => {
+        await save(ada, "https://example.com/a");
+        fixture.advanceClock(60_000);
+        const { clipping } = (await callTool(ada, "save_note", { body })).json() as {
+          clipping: ToolClipping;
+        };
+
+        const recent = (await callTool(ada, "list_recent", {})).json() as {
+          clippings: ToolClipping[];
+        };
+        expect(recent.clippings.map((c) => [c.kind, c.url === null])).toEqual([
+          ["note", true],
+          ["link", false],
+        ]);
+        // The list leaves the text out; get_clipping has it.
+        expect(recent.clippings[0]?.body).toBeUndefined();
+        const full = (await callTool(ada, "get_clipping", { id: clipping.id })).json() as {
+          clipping: ToolClipping;
+        };
+        expect(full.clipping.body).toBe(body);
+        expect((await callTool(ada, "get_page_text", { id: clipping.id })).isError).toBe(true);
+      });
+
+      it("refuses a blank or too long text and saves nothing", async () => {
+        expect((await callTool(ada, "save_note", { body: "   \n" })).isError).toBe(true);
+        const tooLong = await rpc(ada, "tools/call", {
+          name: "save_note",
+          arguments: { body: "x".repeat(MAX_NOTE_BODY_LENGTH + 1) },
+        });
+        expect(tooLong.error ?? tooLong.result?.isError).toBeTruthy();
+        expect((await fixture.service.listClippings(ada.userId, {})).items).toEqual([]);
+      });
+    });
 
     it("reads one clipping in full, with the page's title when it was renamed", async () => {
       fixture.web.set("https://example.com/essay", {

@@ -53,12 +53,23 @@ export interface ClippingStatuses {
 /** A clipping as every delivery surface sees it. JSON-safe, so it crosses the server/client line. */
 export interface Clipping {
   id: string;
-  url: string;
-  /** What duplicate detection compares: `url` without tracking parameters, fragment and the like. */
-  urlNormalized: string;
+  /** A saved page or a note the user wrote. */
+  kind: ClippingKind;
+  /** The page's address. Null on a note, which has none. */
+  url: string | null;
+  /**
+   * What duplicate detection compares: `url` without tracking parameters, fragment and the like.
+   * Null on a note: duplicates are for links only.
+   */
+  urlNormalized: string | null;
+  /**
+   * A note's text, as Markdown source exactly as written. Null on a link, whose `note` is the
+   * comment on why it was kept.
+   */
+  body: string | null;
   /**
    * The title to show: the user's own when they renamed the clipping, otherwise the page's. The
-   * URL until enrichment reads the page.
+   * URL until enrichment reads the page. A note's is made from the start of its body.
    */
   title: string;
   /** The page's title as enrichment wrote it, whether or not the user renamed the clipping. */

@@ -3,16 +3,24 @@
 import { useState } from "react";
 import { useFormStatus } from "react-dom";
 
-import { saveClippingAction, updateClippingAction, type SaveOutcome } from "@/app/(app)/actions.ts";
+import {
+  saveClippingAction,
+  saveNoteAction,
+  updateClippingAction,
+  type SaveNoteOutcome,
+  type SaveOutcome,
+} from "@/app/(app)/actions.ts";
 import { useOnline } from "@/components/online-status.tsx";
 import { hrefWithTag, loadBrowseParams } from "@/lib/clippings/browse-params.ts";
-import { MAX_NOTE_LENGTH, MAX_TAG_LENGTH } from "@clippings/shared";
+import { MAX_NOTE_BODY_LENGTH, MAX_NOTE_LENGTH, MAX_TAG_LENGTH } from "@clippings/shared";
 import {
   Button,
   Dialog,
   Heading,
   LinkButton,
   Modal,
+  Segment,
+  SegmentedButtons,
   TagChips,
   TagPicker,
   TextField,
@@ -165,6 +173,82 @@ function SaveForm({ initial, onSaved }: { initial: Prefill; onSaved: () => void 
   );
 }
 
+/** Writes a note: Markdown text with no address, tagged if the user likes. */
+function NoteForm({ onSaved }: { onSaved: () => void }) {
+  const [outcome, setOutcome] = useState<SaveNoteOutcome | null>(null);
+  const [tagNames, setTagNames] = useState<string[]>([]);
+  const { tags, refresh } = useTags();
+  const showClipping = useShowClipping();
+
+  async function save(formData: FormData) {
+    const result = await saveNoteAction(formData);
+    if (result.status === "created") {
+      showClipping(result.clippingId);
+      if (tagNames.length > 0) refresh();
+      onSaved();
+    } else {
+      setOutcome(result);
+    }
+  }
+
+  const invalid = outcome?.status === "invalid" ? outcome : null;
+  const clearInvalid = () => {
+    if (invalid) setOutcome(null);
+  };
+  return (
+    <form action={save} onInput={clearInvalid} className="flex flex-col gap-4">
+      <TextField
+        name="body"
+        label="Note (Markdown)"
+        multiline
+        rows={8}
+        // oxlint-disable-next-line jsx-a11y/no-autofocus -- ready to write
+        autoFocus
+        maxLength={MAX_NOTE_BODY_LENGTH}
+        isRequired
+        errorMessage={invalid?.field === "body" ? invalid.message : undefined}
+      />
+      <TagPicker
+        label="Tags (optional)"
+        name="tags"
+        tags={tags}
+        value={tagNames}
+        onChange={setTagNames}
+        maxLength={MAX_TAG_LENGTH}
+        errorMessage={invalid?.field === "tags" ? invalid.message : undefined}
+      />
+      <div className="flex justify-end gap-2">
+        <Button variant="text" slot="close">
+          Cancel
+        </Button>
+        <SubmitButton>Save note</SubmitButton>
+      </div>
+    </form>
+  );
+}
+
+/** A link to save or a note to write. A prefilled address (a drop, a share) means a link. */
+function NewClippingForm({ initial, onSaved }: { initial: Prefill; onSaved: () => void }) {
+  const [kind, setKind] = useState<"link" | "note">("link");
+  return (
+    <div className="flex flex-col gap-4">
+      <SegmentedButtons
+        aria-label="What to save"
+        selectedKey={kind}
+        onSelectionChange={(key) => setKind(key === "note" ? "note" : "link")}
+      >
+        <Segment id="link">Link</Segment>
+        <Segment id="note">Note</Segment>
+      </SegmentedButtons>
+      {kind === "link" ? (
+        <SaveForm initial={initial} onSaved={onSaved} />
+      ) : (
+        <NoteForm onSaved={onSaved} />
+      )}
+    </div>
+  );
+}
+
 /** What "New clipping" opens with: a dropped link's address, or a share's address and quote. */
 export interface Prefill {
   url?: string;
@@ -189,7 +273,7 @@ export function NewClippingModal({
       <Dialog>
         <Heading>New clipping</Heading>
         {/* The modal unmounts its children once it has closed, so every open starts a fresh form. */}
-        <SaveForm initial={initial} onSaved={() => onOpenChange(false)} />
+        <NewClippingForm initial={initial} onSaved={() => onOpenChange(false)} />
       </Dialog>
     </Modal>
   );

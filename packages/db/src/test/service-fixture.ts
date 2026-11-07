@@ -84,12 +84,29 @@ export async function createServiceFixture() {
   const summarizedPages: { url: string; title: string | null; text: string }[] = [];
   /** Whether the model gateway refuses calls, as it does for a user past their daily cap. */
   let capped = false;
+  /** What the summarizer makes of a note, by its body; a body not in it gets a reading of its own. */
+  const noteReadings = new Map<string, PageSummary>();
+  /** The body of each note the summarizer was asked to read, in order. */
+  const summarizedNotes: string[] = [];
+  /** Runs while the summarizer reads the note with this body, before it answers. */
+  const duringNoteReading = new Map<string, () => Promise<void>>();
   const summarizer: Summarizer = {
-    summarize: async ({ url, title, text, userTags }) => {
+    summarize: async ({ kind, url, title, text, userTags }) => {
       if (capped) throw new CapReachedError();
       summarizedWithTags.push(userTags);
-      summarizedPages.push({ url, title, text });
-      const entry = web.get(url);
+      if (kind === "note") {
+        summarizedNotes.push(text);
+        await duringNoteReading.get(text)?.();
+        return (
+          noteReadings.get(text) ?? {
+            title: "A title the model wrote",
+            summary: `About: ${text.slice(0, 40)}`,
+            excerpt: text.slice(0, 40),
+          }
+        );
+      }
+      summarizedPages.push({ url: url!, title, text });
+      const entry = web.get(url!);
       if (!entry?.summary) throw new Error(`Nothing to summarize at ${url}`);
       return entry.summary;
     },
@@ -153,6 +170,12 @@ export async function createServiceFixture() {
     fetchedPages,
     /** The page each summarize call got, in order. */
     summarizedPages,
+    /** What the summarizer makes of a note, by its body. */
+    noteReadings,
+    /** The body of each note the summarizer read, in order. */
+    summarizedNotes,
+    /** Something to do while the summarizer reads the note with this body, before it answers. */
+    duringNoteReading,
     /** Every `requestEnrichments` call: the ids in order and the window they were spread over. */
     batchedEnrichmentRequests,
     /**
