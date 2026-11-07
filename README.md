@@ -1,50 +1,59 @@
 # Clippings
 
-A small, private, multi-user app for saving web pages ("clippings") and finding them again. Save
-from the web app, a browser extension or Claude (MCP); the app reads each page in the background,
-then you search by keyword and meaning. Sign-in is Google only, limited to an allowlist of emails,
-and every user's data is private to them.
-
-The v1 spec is [issue #1](https://github.com/lednhatkhanh/clippings/issues/1); the rest of the
-open issues are its slices.
+A small, private, multi-user knowledge inbox: you save web pages ("clippings") and notes, and
+agents tag, file, link, research and teach. Save from the web app, the phone's share sheet, a
+browser extension or Claude (MCP); the app reads each page in the background, then you search by
+keyword and meaning. Sign-in is Google only, limited to an allowlist of emails, and every user's
+data is private to them.
 
 ## Status
 
-v1 is under construction. What exists today:
+In use and released to production. It was built from three specs, all shipped:
 
-- Monorepo, CI, and the Paper & Glass design system (four accent palettes, light/dark, three
-  contrast levels, Lucide icons).
-- The web app shell with Google sign-in and an email allowlist.
-- Environments on Vercel and Neon, instant-restore backups, and a database per PR.
+- **v1**, [issue #1](https://github.com/lednhatkhanh/clippings/issues/1): saving from the web app,
+  extension and Claude; background enrichment with Claude Haiku; hybrid keyword and meaning
+  search; tags; related clippings; an installable PWA; the Paper & Glass design system.
+- **v2**, [issue #101](https://github.com/lednhatkhanh/clippings/issues/101): renaming, tag
+  suggestions, pins, sharing, editing from Claude, bookmark import and export, saved page text
+  and PDFs, daily dead-link checks, and the Clippings plugin.
+- **Scale-up**, [issue #136](https://github.com/lednhatkhanh/clippings/issues/136): a model
+  gateway with a cost ledger and a daily cap; Markdown notes; auto-tagging; the weekly librarian
+  (folders, tag colors, links between items, topic pages, an undoable change log); research
+  briefs for saves in your chosen domains; and twice-weekly lessons. The in-app Ask and This week
+  digest were removed in favour of using Claude over MCP.
 
-Saving, enrichment, search, tags, the extension and the MCP server are open issues.
+New work starts as a GitHub issue ([`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md)).
 
 ## Stack
 
 Next.js 16 (App Router) · React 19 · TypeScript 7 · Tailwind 4 · React Aria Components ·
-Better Auth · Postgres 18 on Neon · WXT (extension) · pnpm 12 + Turborepo · oxlint/oxfmt · Vitest.
-Hosted on Vercel Hobby and Neon Launch. The reasoning is in
-[`docs/research`](docs/research/2026-10-14-stack-and-design.md).
+Better Auth · Drizzle · Postgres 18 with pgvector on Neon · WXT (extension) · pnpm 12 + Turborepo ·
+oxlint/oxfmt · Vitest and Playwright. Background jobs run on Upstash QStash and Vercel Cron; the
+models are Claude Haiku 5.5 and Sonnet 5.5, with Voyage `voyage-4` embeddings
+([ADR 0001](docs/adr/0001-embeddings-voyage-4.md)). Hosted on Vercel Hobby and Neon Launch. The
+reasoning is in [`docs/research`](docs/research/2026-10-14-stack-and-design.md) and
+[`docs/adr`](docs/adr).
 
 ## Layout
 
 ```text
 apps/
 ├── web/          Next.js app: UI, auth, API routes
-├── extension/    WXT browser extension: toolbar popup that saves the current page
+├── extension/    WXT browser extension: popup, context menu and shortcuts that save the page
 └── e2e/          Playwright end-to-end tests against a production build of the web app
 packages/
 ├── ui/           Design system: generated theme, tokens, icons, illustrations
-├── db/           Postgres pool, SQL migrations and the migration runner
+├── db/           Drizzle schema, migrations, the migration runner and the data services
 ├── shared/       Zod schemas, DTO types, URL normalizer (shared by web and extension)
 └── config/       Shared tsconfig presets
-docs/             Deploy runbook, research, agent docs
-scripts/          CI helpers
+plugins/clippings Claude plugin: the MCP connector and a skill for using it
+docs/             Deploy runbook, ADRs, research, agent docs
+scripts/          CI helpers and local fakes
 ```
 
 ## Getting started
 
-You need Node 24 (see `.node-version`), pnpm 12 and a Postgres to point at (a local one, or a Neon
+You need Node 26 (see `.node-version`), pnpm 12 and a Postgres to point at (a local one, or a Neon
 branch).
 
 ```bash
@@ -120,6 +129,24 @@ tag tidy-up. This repo is also the plugin marketplace.
   `lednhatkhanh/clippings` as a marketplace, install `clippings`, then connect Clippings from the
   plugin's Connectors tab. A plugin installed this way syncs to Claude Code at the next session
   start.
+
+## Background jobs and costs
+
+Each save is enriched by a QStash job: the page is read, then Haiku writes a title, summary and
+excerpt, applies the tags it is sure of (the rest wait as suggestions), and decides whether the save
+is worth a research brief. Voyage embeds it for search by meaning. Vercel Cron runs the rest (UTC,
+in `apps/web/vercel.json`): the daily sweep at 04:00 retries stuck saves and checks links, briefs
+are batched at 05:00, the librarian runs Monday at 22:00, and lessons are written Tuesday and Friday
+at 07:00.
+
+Every model and embedding call goes through one gateway that records its tokens and cost and stops
+calling once the day's cap is reached ($3 by default). A save made past the cap waits as pending
+and is picked up the next day. Settings shows today's and this month's spend, and is where the cap,
+the research-job limit, auto-tagging, your profile and research domains are set.
+
+Clippings' data is per user and never shown to anyone else, but it is not end-to-end encrypted: the
+server, Anthropic (enrichment, briefs, librarian, lessons) and Voyage (embeddings) see the text of
+pages and notes, and so does any Claude client you connect.
 
 ## The browser extension
 
