@@ -169,4 +169,78 @@ describe.skipIf(!TEST_DATABASE_URL)("migrate", () => {
       });
     });
   });
+
+  it("turns auto-tagging off for every user who exists, and on for one created after", async () => {
+    await migrate({
+      connectionString: database.url,
+      migrationsFolder: foldersWithout("_light_the_watchers"),
+    });
+    await withClient(database.url, async (client) => {
+      for (const id of ["with-row", "no-row"]) {
+        await client.query(
+          `insert into "user" ("id", "name", "email", "emailVerified") values ($1, $1, $1 || '@example.com', true)`,
+          [id],
+        );
+      }
+      await client.query(
+        `insert into user_settings (user_id, suggest_tags, updated_at) values ('with-row', true, now())`,
+      );
+    });
+
+    expect(await migrate({ connectionString: database.url })).toHaveLength(1);
+
+    await withClient(database.url, async (client) => {
+      await client.query(
+        `insert into "user" ("id", "name", "email", "emailVerified") values ('later', 'later', 'later@example.com', true)`,
+      );
+      await client.query(`insert into user_settings (user_id, updated_at) values ('later', now())`);
+      const { rows } = await client.query<{
+        user_id: string;
+        auto_tag: boolean;
+        suggest_tags: boolean;
+      }>(`select user_id, auto_tag, suggest_tags from user_settings order by user_id`);
+      expect(rows).toEqual([
+        { user_id: "later", auto_tag: true, suggest_tags: false },
+        { user_id: "no-row", auto_tag: false, suggest_tags: false },
+        { user_id: "with-row", auto_tag: false, suggest_tags: true },
+      ]);
+    });
+  });
+
+  it("lets a note have a body and no URL, and refuses any other mix of link and note", async () => {
+    await migrate({ connectionString: database.url });
+    await withClient(database.url, async (client) => {
+      await client.query(
+        `insert into "user" ("id", "name", "email", "emailVerified") values ('u1', 'U', 'u@example.com', true)`,
+      );
+      const insert = (kind: string, url: string | null, body: string | null) =>
+        client.query(
+          `insert into clippings (user_id, kind, url, url_normalized, body, title, source, created_at, updated_at)
+           values ('u1', $1, $2, $2, $3, 't', 'web', now(), now())`,
+          [kind, url, body],
+        );
+
+      await insert("link", "https://example.com", null);
+      await insert("note", null, "my own words");
+      // Notes have no URL, so two of them never count as duplicates.
+      await insert("note", null, "more words");
+      await expect(insert("link", null, null)).rejects.toThrow(/clippings_kind_shape_check/);
+      await expect(insert("link", "https://example.org", "body")).rejects.toThrow(
+        /clippings_kind_shape_check/,
+      );
+      await expect(insert("note", "https://example.net", "body")).rejects.toThrow(
+        /clippings_kind_shape_check/,
+      );
+      await expect(insert("note", null, null)).rejects.toThrow(/clippings_kind_shape_check/);
+      await expect(insert("link", "https://example.com", null)).rejects.toThrow(
+        /clippings_user_id_url_normalized_key/,
+      );
+
+      // Keyword search finds a note by its body.
+      const { rows } = await client.query(
+        `select kind from clippings where search_tsv @@ plainto_tsquery('simple', 'words') order by body`,
+      );
+      expect(rows).toEqual([{ kind: "note" }, { kind: "note" }]);
+    });
+  });
 });

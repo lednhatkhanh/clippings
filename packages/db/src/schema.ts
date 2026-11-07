@@ -22,9 +22,14 @@ import {
 import {
   APPEARANCE_DEFAULTS,
   APPEARANCE_VALUES,
+  AUTO_TAG_DEFAULT,
   AUTOMATION_DEFAULTS,
+  CLIPPING_KINDS,
   CLIPPING_SOURCES,
   CLIPPING_STATUSES,
+  LIBRARY_CHANGE_ACTORS,
+  LIBRARY_CHANGE_CONFIDENCES,
+  LIBRARY_CHANGE_STATUSES,
   TAG_COLORS,
 } from "@clippings/shared";
 
@@ -353,8 +358,15 @@ export const clippings = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    url: text("url").notNull(),
-    urlNormalized: text("url_normalized").notNull(),
+    // A link or a note: a note is text the user wrote, with no URL (`clippings_kind_shape_check`).
+    kind: text("kind", { enum: CLIPPING_KINDS }).notNull().default("link"),
+    // Null on a note. Duplicate detection (`clippings_user_id_url_normalized_key`) applies to links
+    // only, since Postgres treats nulls as distinct.
+    url: text("url"),
+    urlNormalized: text("url_normalized"),
+    // A note's text, as Markdown source exactly as written (distinct from `note`, the comment on a
+    // link). Null on a link. Embedded and searched like a link's summary.
+    body: text("body"),
     // The page's title, as enrichment wrote it. The title to show is `user_title` when set.
     title: text("title").notNull(),
     // The user's own title; null shows the page's. Enrichment never writes it.
@@ -398,10 +410,10 @@ export const clippings = pgTable(
     // while it answers. The first time stays through further failures.
     linkDeadSince: timestamptz("link_dead_since"),
     // What keyword search matches, kept up to date by Postgres. `simple` doesn't stem, so words
-    // in any language are matched as written. The weights rank both titles over note over excerpt.
+    // in any language are matched as written. The weights rank both titles over note and body over excerpt.
     searchTsv: tsvector("search_tsv").generatedAlwaysAs(
       (): SQL =>
-        sql`setweight(to_tsvector('simple', ${clippings.title}), 'A') || setweight(to_tsvector('simple', coalesce(${clippings.userTitle}, '')), 'A') || setweight(to_tsvector('simple', ${clippings.note}), 'B') || setweight(to_tsvector('simple', coalesce(${clippings.excerpt}, '')), 'C')`,
+        sql`setweight(to_tsvector('simple', ${clippings.title}), 'A') || setweight(to_tsvector('simple', coalesce(${clippings.userTitle}, '')), 'A') || setweight(to_tsvector('simple', ${clippings.note}), 'B') || setweight(to_tsvector('simple', coalesce(${clippings.body}, '')), 'B') || setweight(to_tsvector('simple', coalesce(${clippings.excerpt}, '')), 'C')`,
     ),
   },
   (table) => [
@@ -410,6 +422,12 @@ export const clippings = pgTable(
     unique("clippings_id_user_id_key").on(table.id, table.userId),
     check("clippings_status_check", sql`${table.status} in (${inList(CLIPPING_STATUSES)})`),
     check("clippings_source_check", sql`${table.source} in (${inList(CLIPPING_SOURCES)})`),
+    check("clippings_kind_check", sql`${table.kind} in (${inList(CLIPPING_KINDS)})`),
+    // A link has a URL and no body; a note has a body and no URL.
+    check(
+      "clippings_kind_shape_check",
+      sql`(${table.kind} = 'link' and ${table.url} is not null and ${table.urlNormalized} is not null and ${table.body} is null) or (${table.kind} = 'note' and ${table.url} is null and ${table.urlNormalized} is null and ${table.body} is not null)`,
+    ),
     index("clippings_user_newest_idx").on(table.userId, table.createdAt.desc(), table.id.desc()),
     index("clippings_search_tsv_idx").using("gin", table.searchTsv),
     // Typo tolerance on the title to show: `<%` (word similarity) uses it, and the expression
@@ -598,6 +616,10 @@ export const userSettings = pgTable(
       .default(APPEARANCE_DEFAULTS.density),
     // Whether enrichment proposes tags for the user's clippings. Off until they turn it on.
     suggestTags: boolean("suggest_tags").notNull().default(false),
+    // Whether enrichment applies tags itself (high-confidence ones, logged in `library_changes`)
+    // instead of only suggesting them. On for a user with no row; the migration that added the
+    // column gave every user who existed then a row with it off.
+    autoTag: boolean("auto_tag").notNull().default(AUTO_TAG_DEFAULT),
     // What automation may spend: the model gateway refuses calls past the daily cap (in
     // micro-dollars, per UTC day), and research jobs are submitted at most this many a day.
     dailyCapMicros: integer("daily_cap_micros")
@@ -681,5 +703,61 @@ export const modelUsage = pgTable(
     // "Spend by user since the start of a UTC day or month".
     index("model_usage_user_created_idx").on(table.userId, table.createdAt),
     check("model_usage_cost_check", sql`${table.costMicros} >= 0`),
+  ],
+);
+
+/**
+ * The log of changes automation makes to a user's library, and of the ones it proposes. One row
+ * per change: applied changes, suggestions waiting for a decision, and those dismissed or undone
+ * (applying a suggestion or undoing a change flips `status`; the row stays). `before` and `after`
+ * hold what the change replaced and wrote, enough to undo it. `action` and `target_ids` have no
+ * check constraint (an action is a `LibraryChangeAction`; a target is a clipping, tag or folder
+ * id, none of them a foreign key, since a merged tag's id outlives the tag), so a new action needs
+ * no migration.
+ */
+export const libraryChanges = pgTable(
+  "library_changes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    actor: text("actor", { enum: LIBRARY_CHANGE_ACTORS }).notNull(),
+    action: text("action").notNull(),
+    targetIds: uuid("target_ids")
+      .array()
+      .notNull()
+      .default(sql`'{}'::uuid[]`),
+    before: jsonb("before"),
+    after: jsonb("after"),
+    // Null when the change carries no judgement, such as one the user asked for.
+    confidence: text("confidence", { enum: LIBRARY_CHANGE_CONFIDENCES }),
+    status: text("status", { enum: LIBRARY_CHANGE_STATUSES }).notNull().default("applied"),
+    reason: text("reason").notNull().default(""),
+    // No default: the service stamps it from its clock.
+    createdAt: timestamptz("created_at").notNull(),
+  },
+  (table) => [
+    check("library_changes_actor_check", sql`${table.actor} in (${inList(LIBRARY_CHANGE_ACTORS)})`),
+    check(
+      "library_changes_confidence_check",
+      sql`${table.confidence} is null or ${table.confidence} in (${inList(LIBRARY_CHANGE_CONFIDENCES)})`,
+    ),
+    check(
+      "library_changes_status_check",
+      sql`${table.status} in (${inList(LIBRARY_CHANGE_STATUSES)})`,
+    ),
+    // "This user's recent changes", newest first.
+    index("library_changes_user_created_idx").on(
+      table.userId,
+      table.createdAt.desc(),
+      table.id.desc(),
+    ),
+    // "This user's suggestions", newest first.
+    index("library_changes_suggested_idx")
+      .on(table.userId, table.createdAt.desc())
+      .where(sql`${table.status} = 'suggested'`),
+    // "Did a later change touch this target": undo refuses when one did.
+    index("library_changes_target_ids_idx").using("gin", table.targetIds),
   ],
 );

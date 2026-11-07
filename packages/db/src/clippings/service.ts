@@ -315,8 +315,9 @@ const statusChange = (status: ClippingRow["status"], at: Date) => ({
 
 const toClipping = (row: ClippingRow, tagList: Tag[] = []): Clipping => ({
   id: row.id,
-  url: row.url,
-  urlNormalized: row.urlNormalized,
+  // A note has no URL; the DTO grows to carry notes with their service (until then none exists).
+  url: row.url ?? "",
+  urlNormalized: row.urlNormalized ?? "",
   title: row.userTitle ?? row.title,
   pageTitle: row.title,
   titleEdited: row.userTitle !== null,
@@ -1354,7 +1355,7 @@ export function createClippingsService({
         ),
       );
     for (const row of rows) {
-      texts.set(row.id, { ...row, fetchedAt: formatIsoUtc(row.fetchedAt) });
+      texts.set(row.id, { ...row, url: row.url ?? "", fetchedAt: formatIsoUtc(row.fetchedAt) });
     }
     return texts;
   }
@@ -1889,6 +1890,9 @@ export function createClippingsService({
       .from(clippings)
       .where(eq(clippings.id, clippingId));
     if (!row || row.status !== "pending") return "skipped";
+    // A note has no page to read; its enrichment is not here yet.
+    const url = row.url;
+    if (url === null) return "skipped";
 
     // Only a user with suggestions on has their tag names sent to the model.
     const [settings] = await db
@@ -1923,7 +1927,7 @@ export function createClippingsService({
       } else if (browser) {
         // A site that turns servers away, or one that answers with an empty page, still has the
         // text the browser once gave.
-        const fetched = await fetcher.fetchPage(row.url).catch((error: unknown) => {
+        const fetched = await fetcher.fetchPage(url).catch((error: unknown) => {
           console.error(`Couldn't fetch clipping ${clippingId}; reading its browser text`, error);
           return undefined;
         });
@@ -1934,11 +1938,11 @@ export function createClippingsService({
           readFromBrowser = true;
         }
       } else {
-        page = await fetcher.fetchPage(row.url);
+        page = await fetcher.fetchPage(url);
       }
       pageText = page.text;
       read = await summarizer.summarize({
-        url: row.url,
+        url,
         userId: row.userId,
         ...page,
         ...(userTags === undefined ? {} : { userTags }),
@@ -2345,7 +2349,11 @@ export function createClippingsService({
               },
               setWhere: isNotNull(clippings.deletedAt),
             })
-            .returning({ id: clippings.id, urlNormalized: clippings.urlNormalized })),
+            // An imported page is a link, so it always has a normalized URL.
+            .returning({
+              id: clippings.id,
+              urlNormalized: sql<string>`${clippings.urlNormalized}`,
+            })),
         );
       }
       if (rows.length === 0) return rows;
@@ -2501,11 +2509,17 @@ export function createClippingsService({
   }): Promise<{ checked: number; dead: number }> {
     const now = clock.now();
     const due = await db
-      .select({ id: clippings.id, url: clippings.url, checkedAt: clippings.linkCheckedAt })
+      .select({
+        id: clippings.id,
+        url: sql<string>`${clippings.url}`,
+        checkedAt: clippings.linkCheckedAt,
+      })
       .from(clippings)
       .where(
         and(
           eq(clippings.status, "ready"),
+          // A note has no link to check.
+          eq(clippings.kind, "link"),
           live,
           or(
             isNull(clippings.linkCheckedAt),
