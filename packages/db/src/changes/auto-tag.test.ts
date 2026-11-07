@@ -247,6 +247,50 @@ describe.skipIf(!TEST_DATABASE_URL)("auto-tagging", () => {
       expect((await changeRows()).map((row) => row.status)).toEqual(["applied", "applied"]);
     });
 
+    it("doesn't apply a tag the librarian added and the user then undid or took off by hand, when the page is read again", async () => {
+      const ana = await userWithTags("ana", ["css"]);
+      await fixture.settings.setSuggestTags(ana, true);
+      const css = (await fixture.service.findTagByName(ana, "css"))!.id;
+      const undone = await clip(ana, "https://example.com/a", []);
+      const byHand = await clip(ana, "https://example.com/b", []);
+      for (const id of [undone, byHand]) {
+        const added = await fixture.librarian.proposeChange(ana, "librarian", {
+          action: "add_tag",
+          clippingId: id,
+          tagId: css,
+          confidence: "high",
+          reason: "It fits",
+        });
+        expect(added.outcome).toBe("applied");
+        if (id === undone && added.outcome === "applied") {
+          fixture.advanceClock(1000);
+          await fixture.librarian.undoChange(ana, added.change.id);
+        }
+      }
+      await fixture.service.updateClipping(ana, byHand, { tags: [] });
+
+      for (const [url, id] of [
+        ["https://example.com/a", undone],
+        ["https://example.com/b", byHand],
+      ] as const) {
+        fixture.web.set(url, {
+          page: { title: url, text: "" },
+          summary: {
+            title: url,
+            summary: "",
+            excerpt: "",
+            suggestedTags: ["css"],
+            tagProposals: [high("css", true)],
+          },
+        });
+        await fixture.service.reEnrichClipping(ana, id);
+        await fixture.service.enrichClipping(id);
+        expect(await tagNamesOf(ana, id)).toEqual([]);
+        expect(await suggestedFor(ana, id)).toEqual([]);
+      }
+      expect((await changeRows()).every((row) => row.actor === "librarian")).toBe(true);
+    });
+
     it("keeps users apart: one user's tags are not applied to another's clipping", async () => {
       const ana = await userWithTags("ana", ["css"]);
       const bob = await fixture.createUser("bob");

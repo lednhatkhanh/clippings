@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 
 import {
   checkCanonicalTagName,
@@ -31,7 +31,8 @@ export interface AutoTagResult {
  *   canonical-name rule against all of the user's tags; otherwise it waits as a suggestion.
  * - A `low` proposal is a suggestion. So is one that would take the clipping past its tag limit.
  * - A tag the clipping already carries, one the user dismissed for this clipping, and one the
- *   user undid or took off by hand earlier are neither applied nor suggested again.
+ *   user undid or took off by hand earlier (whether auto-tagging or the librarian added it) are
+ *   neither applied nor suggested again.
  *
  * It only adds links and tags: it never removes or renames anything. The caller has checked that
  * the clipping is the user's.
@@ -78,7 +79,10 @@ export async function applyAutoTags(
     .where(
       and(
         eq(libraryChanges.userId, userId),
-        eq(libraryChanges.actor, "auto_tag"),
+        // The librarian's add_tag is the same idea as an automatic one: it deletes the suggestion
+        // row, so only the log remembers that the user turned the tag down.
+        inArray(libraryChanges.actor, ["auto_tag", "librarian"]),
+        inArray(libraryChanges.action, ["add_tag", "create_tag"]),
         sql`${libraryChanges.targetIds}[1] = ${clippingId}::uuid`,
         or(
           eq(libraryChanges.status, "undone"),

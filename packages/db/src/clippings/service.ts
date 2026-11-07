@@ -57,6 +57,7 @@ import {
 } from "@clippings/shared";
 
 import { applyAutoTags } from "../changes/auto-tag.ts";
+import { dismissAddTagChanges } from "../changes/tag-suggestions.ts";
 import { createDatabase, type Database } from "../database.ts";
 import { createResearchService } from "../research/service.ts";
 import {
@@ -1721,7 +1722,8 @@ export function createClippingsService({
 
   /**
    * Adds the named suggested tags to the clipping, or all of its pending suggestions when `names`
-   * is left out, and removes those suggestions, in one transaction. A name matches one of the
+   * is left out, and removes those suggestions (and dismisses the librarian's waiting suggestion
+   * to add the same tags), in one transaction. A name matches one of the
    * user's tags ignoring case, so accepting "CSS" files it under "css". A name that isn't a
    * suggestion any more (dismissed, replaced by a re-read) changes nothing. Leaving `names` out
    * takes only what the detail read shows, so nothing happens while the user has suggestions
@@ -1773,6 +1775,13 @@ export function createClippingsService({
           checkedTagNames([...current.map((tag) => tag.name), ...found.map((tag) => tag.name)]),
         );
         await tx.delete(clippingTagSuggestions).where(suggestion);
+        // The librarian may be asking about the same tags in the library review.
+        await dismissAddTagChanges(
+          tx,
+          userId,
+          clippingId,
+          found.map((tag) => tag.name),
+        );
       }
       return true;
     });
@@ -1852,8 +1861,8 @@ export function createClippingsService({
 
   /**
    * Dismisses the named suggestions, or all of the clipping's when `names` is left out. A
-   * dismissed name is never suggested for that clipping again. Returns false when the user has no
-   * such clipping.
+   * dismissed name is never suggested for that clipping again, and the librarian's waiting
+   * suggestion to add it is dismissed too. Returns false when the user has no such clipping.
    */
   async function dismissTagSuggestions(
     userId: string,
@@ -1868,19 +1877,23 @@ export function createClippingsService({
     if (!owned) return false;
     const named = names === undefined ? [] : normalizeTagNames(names);
     if (names !== undefined && named.length === 0) return true;
-    await db
-      .update(clippingTagSuggestions)
-      .set({ dismissedAt: clock.now() })
-      .where(
-        and(
-          eq(clippingTagSuggestions.clippingId, clippingId),
-          eq(clippingTagSuggestions.userId, userId),
-          isNull(clippingTagSuggestions.dismissedAt),
-          names === undefined
-            ? undefined
-            : sql`${tagKey(clippingTagSuggestions.name)} in ${keysOf(named)}`,
-        ),
-      );
+    await db.transaction(async (tx) => {
+      await tx
+        .update(clippingTagSuggestions)
+        .set({ dismissedAt: clock.now() })
+        .where(
+          and(
+            eq(clippingTagSuggestions.clippingId, clippingId),
+            eq(clippingTagSuggestions.userId, userId),
+            isNull(clippingTagSuggestions.dismissedAt),
+            names === undefined
+              ? undefined
+              : sql`${tagKey(clippingTagSuggestions.name)} in ${keysOf(named)}`,
+          ),
+        );
+      // The librarian may be asking about the same tags in the library review.
+      await dismissAddTagChanges(tx, userId, clippingId, names === undefined ? undefined : named);
+    });
     return true;
   }
 

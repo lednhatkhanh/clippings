@@ -1509,7 +1509,7 @@ function registerLibrarianTools(
     {
       title: "Undo a change",
       description:
-        "Reverse one logged change (a tag color, folder, move, link, topic page, rename or merge, or a tag added automatically) by putting back what it replaced; undoing a merge brings the removed tag back on its clippings. Refused, with nothing changed, when a later change touched the same things: undo that one first.",
+        "Reverse one logged change (a tag color, folder, move, link, topic page, rename, merge or deletion of a tag, or a tag added automatically) by putting back what it replaced; undoing a merge or a deletion brings the removed tag back with its clippings. Refused, with nothing changed, when a later change touched the same things: undo that one first.",
       inputSchema: z.object({ id: changeIdSchema }),
       outputSchema: z.object({ change: changeOutput }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },

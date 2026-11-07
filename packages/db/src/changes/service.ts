@@ -5,6 +5,7 @@ import type { LibraryChangeConfidence } from "@clippings/shared";
 
 import { createDatabase } from "../database.ts";
 import { clippingTags, libraryChanges, tags } from "../schema.ts";
+import { lockUser } from "./lock-user.ts";
 
 export interface ChangesServiceDeps {
   pool: pg.Pool;
@@ -126,6 +127,8 @@ export function createChangesService({ pool }: ChangesServiceDeps) {
   async function undoChange(userId: string, changeId: string): Promise<UndoResult> {
     if (!UUID.test(changeId)) throw new ChangeNotFoundError();
     return db.transaction(async (tx) => {
+      // Takes its turn with the librarian's own writes, so the checks below see them.
+      await lockUser(tx, userId);
       const [change] = await tx
         .select()
         .from(libraryChanges)

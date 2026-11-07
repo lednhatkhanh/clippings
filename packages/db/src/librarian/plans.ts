@@ -127,13 +127,6 @@ export interface StoredChange {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Lets one user's librarian writes take turns, so a check and the write after it can't be split. */
-export async function lockUser(tx: Transaction, userId: string) {
-  await tx.execute(
-    sql`select pg_advisory_xact_lock(hashtextextended(${`librarian:${userId}`}, 0))`,
-  );
-}
-
 /** The latest moment a change of this user took effect, or null before the first. */
 export async function latestChangeAt(tx: Transaction, userId: string): Promise<Date | null> {
   const [row] = await tx
@@ -287,10 +280,43 @@ async function planAddTag(
       },
       waitingFor: null,
       write: async (writer) => {
-        await writer
+        // The plan read the tags before a concurrent edit of this clipping could finish, and the
+        // user lock does not hold that edit back. Lock the clipping, as `acceptTagSuggestions`
+        // does (`no key update` excludes tag editors but not the key-share lock a tag link
+        // takes), and look again: the tag may be on it now, or the clipping full.
+        const [locked] = await writer
+          .select({ id: clippings.id })
+          .from(clippings)
+          .where(
+            and(
+              eq(clippings.id, clipping.id),
+              eq(clippings.userId, userId),
+              isNull(clippings.deletedAt),
+            ),
+          )
+          .for("no key update");
+        if (!locked) throw new LibrarianNotFoundError("clipping");
+        const nowCarried = await writer
+          .select({ tagId: clippingTags.tagId })
+          .from(clippingTags)
+          .where(and(eq(clippingTags.clippingId, clipping.id), eq(clippingTags.userId, userId)));
+        if (nowCarried.some((link) => link.tagId === tag.id)) {
+          throw new LibrarianInvalidError(`It already has the tag "${tag.name}"`);
+        }
+        if (nowCarried.length >= MAX_TAGS_PER_CLIPPING) {
+          throw new LibrarianInvalidError(
+            `It already has ${MAX_TAGS_PER_CLIPPING} tags, the most a clipping can have`,
+          );
+        }
+        // Nothing inserted would still log an applied change for a tag it did not add.
+        const linked = await writer
           .insert(clippingTags)
           .values({ clippingId: clipping.id, tagId: tag.id, userId })
-          .onConflictDoNothing();
+          .onConflictDoNothing()
+          .returning({ tagId: clippingTags.tagId });
+        if (linked.length === 0) {
+          throw new LibrarianInvalidError(`It already has the tag "${tag.name}"`);
+        }
         // The tag no longer waits as a suggestion.
         await writer
           .delete(clippingTagSuggestions)
@@ -1028,7 +1054,8 @@ async function undoMerge(tx: Transaction, userId: string, before: MergeBefore) {
     .from(tags)
     .where(and(eq(tags.id, before.target.id), eq(tags.userId, userId)));
   if (!target) throw gone("The tag it was merged into");
-  await restoreTag(tx, userId, before.source, before);
+  // The target comes off the clippings the merge gave it before the source goes back on, so a
+  // clipping that was full does not count both.
   if (before.addedToTarget.length > 0) {
     await tx
       .delete(clippingTags)
@@ -1040,12 +1067,14 @@ async function undoMerge(tx: Transaction, userId: string, before: MergeBefore) {
         ),
       );
   }
+  await restoreTag(tx, userId, before.source, before);
 }
 
 /**
  * Recreates a removed tag under its old id, with its color, folder, topic page and clippings.
- * Throws `ChangeConflictError` when the user has a tag of that name again. A folder or clipping
- * that has gone since is left out.
+ * Throws `ChangeConflictError` when the user has a tag of that name again, or when a clipping it
+ * would go back on has the most tags a clipping can have. A folder or clipping that has gone
+ * since is left out.
  */
 async function restoreTag(
   tx: Transaction,
@@ -1058,6 +1087,21 @@ async function restoreTag(
     .from(tags)
     .where(and(eq(tags.userId, userId), sql`lower(${tags.name}) = ${tagNameKey(tag.name)}`));
   if (clash) throw new ChangeConflictError(`The user has a tag named ${tag.name} again`);
+  if (clippingIds.length > 0) {
+    // The links go back unchecked otherwise, past the limit the tag editors keep.
+    const [full] = await tx
+      .select({ clippingId: clippingTags.clippingId })
+      .from(clippingTags)
+      .where(and(eq(clippingTags.userId, userId), inArray(clippingTags.clippingId, clippingIds)))
+      .groupBy(clippingTags.clippingId)
+      .having(sql`count(*) >= ${MAX_TAGS_PER_CLIPPING}`)
+      .limit(1);
+    if (full) {
+      throw new ChangeConflictError(
+        `A clipping it was on has ${MAX_TAGS_PER_CLIPPING} tags now, the most a clipping can have`,
+      );
+    }
+  }
   let folderId: string | null = null;
   if (tag.folderId) {
     const [folder] = await tx
