@@ -19,6 +19,7 @@ import { createConnectionsService } from "../connections/service.ts";
 import { createLibraryService } from "../librarian/library.ts";
 import { createLibrarianService } from "../librarian/service.ts";
 import { createPool } from "../pool.ts";
+import { createResearchService } from "../research/service.ts";
 import { EMBEDDING_DIMENSIONS } from "../schema.ts";
 import { createSettingsService } from "../settings/service.ts";
 import { createUsageService } from "../usage/service.ts";
@@ -183,6 +184,7 @@ export async function createServiceFixture() {
     librarian: createLibrarianService({ pool, clock }),
     library: createLibraryService({ pool }),
     usage: createUsageService({ pool, clock }),
+    research: createResearchService({ pool, clock }),
     connections: createConnectionsService({ pool, clock }),
     /** The fixture's pool, for tests that set up rows no service writes (Better Auth's). */
     pool,

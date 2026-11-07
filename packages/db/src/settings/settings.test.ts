@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { APPEARANCE_DEFAULTS, AUTO_TAG_DEFAULT, AUTOMATION_DEFAULTS } from "@clippings/shared";
+import {
+  APPEARANCE_DEFAULTS,
+  AUTO_TAG_DEFAULT,
+  AUTOMATION_DEFAULTS,
+  RESEARCH_DEFAULTS,
+} from "@clippings/shared";
 
 import { createServiceFixture, type ServiceFixture } from "../test/service-fixture.ts";
 import { TEST_DATABASE_URL } from "../test/temp-database.ts";
@@ -166,6 +171,74 @@ describe.skipIf(!TEST_DATABASE_URL)("settings service", () => {
       });
 
       expect(await fixture.settings.getAutomationSettings(ben)).toEqual(AUTOMATION_DEFAULTS);
+    });
+  });
+
+  describe("research settings", () => {
+    it("start with no profile and the shipping and logistics domains", async () => {
+      const ana = await fixture.createUser("ana");
+
+      expect(await fixture.settings.getResearchSettings(ana)).toEqual(RESEARCH_DEFAULTS);
+    });
+
+    it("keep the default domains for a user who only changed something else", async () => {
+      const ana = await fixture.createUser("ana");
+      await fixture.settings.updateSettings(ana, { theme: "dark" });
+
+      expect(await fixture.settings.getResearchSettings(ana)).toEqual(RESEARCH_DEFAULTS);
+    });
+
+    it("change one at a time, leave the other and the rest alone, and normalize domains", async () => {
+      const ana = await fixture.createUser("ana");
+      await fixture.settings.updateSettings(ana, { theme: "dark" });
+
+      await fixture.settings.updateResearchSettings(ana, { profile: "  Backend dev  " });
+      const updated = await fixture.settings.updateResearchSettings(ana, {
+        domains: [" Rust ", "rust", "ports"],
+      });
+
+      expect(updated).toEqual({ profile: "Backend dev", domains: ["Rust", "ports"] });
+      expect(await fixture.settings.getResearchSettings(ana)).toEqual(updated);
+      expect((await fixture.settings.getSettings(ana)).theme).toBe("dark");
+      expect(await fixture.settings.getAutomationSettings(ana)).toEqual(AUTOMATION_DEFAULTS);
+    });
+
+    it("turn research off with an empty list of domains", async () => {
+      const ana = await fixture.createUser("ana");
+
+      const updated = await fixture.settings.updateResearchSettings(ana, { domains: [] });
+
+      expect(updated).toEqual({ profile: "", domains: [] });
+      expect(await fixture.settings.getResearchSettings(ana)).toEqual(updated);
+    });
+
+    it.each([
+      ["a profile that is too long", { profile: "x".repeat(1001) }],
+      ["too many domains", { domains: Array.from({ length: 11 }, (_, i) => `d${i}`) }],
+      ["a domain that is too long", { domains: ["x".repeat(61)] }],
+      ["nothing", {}],
+      ["a key that is not a setting", { profile: "p", theme: "dark" }],
+    ])("refuse %s and save nothing", async (_name, change) => {
+      const ana = await fixture.createUser("ana");
+      await fixture.settings.updateResearchSettings(ana, { profile: "Kept", domains: ["a"] });
+
+      await expect(
+        fixture.settings.updateResearchSettings(ana, change as { profile: string }),
+      ).rejects.toBeInstanceOf(InvalidSettingsError);
+
+      expect(await fixture.settings.getResearchSettings(ana)).toEqual({
+        profile: "Kept",
+        domains: ["a"],
+      });
+    });
+
+    it("keep users apart", async () => {
+      const ana = await fixture.createUser("ana");
+      const ben = await fixture.createUser("ben");
+
+      await fixture.settings.updateResearchSettings(ana, { profile: "Ana", domains: [] });
+
+      expect(await fixture.settings.getResearchSettings(ben)).toEqual(RESEARCH_DEFAULTS);
     });
   });
 

@@ -24,6 +24,9 @@ import {
   APPEARANCE_VALUES,
   AUTO_TAG_DEFAULT,
   AUTOMATION_DEFAULTS,
+  BRIEF_MODES,
+  BRIEF_SOURCES,
+  BRIEF_STATUSES,
   CLIPPING_KINDS,
   CLIPPING_SOURCES,
   CLIPPING_STATUSES,
@@ -31,9 +34,11 @@ import {
   LIBRARY_CHANGE_ACTORS,
   LIBRARY_CHANGE_CONFIDENCES,
   LIBRARY_CHANGE_STATUSES,
+  MAX_BRIEF_LENGTH,
   MAX_FOLDER_NAME_LENGTH,
   MAX_LINK_REASON_LENGTH,
   MAX_TOPIC_PAGE_LENGTH,
+  RESEARCH_DEFAULTS,
   TAG_COLORS,
   TOPIC_PAGE_SOURCES,
 } from "@clippings/shared";
@@ -661,6 +666,14 @@ export const userSettings = pgTable(
     researchJobsPerDay: integer("research_jobs_per_day")
       .notNull()
       .default(AUTOMATION_DEFAULTS.researchJobsPerDay),
+    // The "About me" text the research briefs are aimed at.
+    researchProfile: text("research_profile").notNull().default(RESEARCH_DEFAULTS.profile),
+    // The topics worth researching; empty means research is off. The default is spelled out in
+    // SQL (`RESEARCH_DEFAULTS.domains`).
+    researchDomains: text("research_domains")
+      .array()
+      .notNull()
+      .default(sql`'{shipping,logistics}'::text[]`),
     // When the user's first librarian run finished, which stored its suggestions for them to
     // judge. Null until then, so a first run cut off partway and redelivered is still a first run.
     librarianFirstRunAt: timestamptz("librarian_first_run_at"),
@@ -903,6 +916,68 @@ export const topicPages = pgTable(
     check(
       "topic_pages_body_check",
       sql`char_length(${table.body}) <= ${sql.raw(String(MAX_TOPIC_PAGE_LENGTH))}`,
+    ),
+  ],
+);
+
+/**
+ * The research brief written for a clipping: at most one each. Queued by enrichment when its
+ * verdict says the save is worth researching, or made by hand; a batch or a "write it now" job
+ * writes it. AI content: a brief is never a clipping, so it is never enriched or researched in turn.
+ */
+export const researchBriefs = pgTable(
+  "research_briefs",
+  {
+    // Also the `custom_id` of the brief's request in a batch.
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    clippingId: uuid("clipping_id").notNull(),
+    // The research domain the verdict named; empty for a brief asked for by hand.
+    domain: text("domain").notNull(),
+    // The verdict's one-line reason, or "Asked for by hand".
+    reason: text("reason").notNull().default(""),
+    status: text("status", { enum: BRIEF_STATUSES }).notNull(),
+    mode: text("mode", { enum: BRIEF_MODES }).notNull().default("batch"),
+    // Submissions made. One that failed or expired is retried once (attempts < 2), then dropped.
+    attempts: integer("attempts").notNull().default(0),
+    // The Anthropic batch holding the request while `submitted`.
+    batchId: text("batch_id"),
+    // Markdown; set when ready.
+    body: text("body"),
+    // `{ url, title }[]` the brief drew on.
+    sources: jsonb("sources")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    // Why the brief was dropped or put back in the queue, shown to the user.
+    note: text("note"),
+    source: text("source", { enum: BRIEF_SOURCES }).notNull().default("ai"),
+    // No default: the service stamps all of these from its clock.
+    createdAt: timestamptz("created_at").notNull(),
+    updatedAt: timestamptz("updated_at").notNull(),
+    // The last submission; counts toward the user's research jobs for that UTC day.
+    submittedAt: timestamptz("submitted_at"),
+    completedAt: timestamptz("completed_at"),
+  },
+  (table) => [
+    unique("research_briefs_clipping_id_key").on(table.clippingId),
+    foreignKey({
+      name: "research_briefs_clipping_fkey",
+      columns: [table.clippingId, table.userId],
+      foreignColumns: [clippings.id, clippings.userId],
+    }).onDelete("cascade"),
+    // The collector's lookup of what is in flight.
+    index("research_briefs_submitted_idx")
+      .on(table.status, table.batchId)
+      .where(sql`${table.status} = 'submitted'`),
+    index("research_briefs_user_status_idx").on(table.userId, table.status, table.createdAt),
+    check("research_briefs_status_check", sql`${table.status} in (${inList(BRIEF_STATUSES)})`),
+    check("research_briefs_mode_check", sql`${table.mode} in (${inList(BRIEF_MODES)})`),
+    check("research_briefs_source_check", sql`${table.source} in (${inList(BRIEF_SOURCES)})`),
+    check(
+      "research_briefs_body_check",
+      sql`char_length(${table.body}) <= ${sql.raw(String(MAX_BRIEF_LENGTH))}`,
     ),
   ],
 );

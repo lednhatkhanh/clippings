@@ -133,3 +133,11 @@ export {
   type UsageBudget,
   type UsageService,
 } from "./usage/service.ts";
+export {
+  createResearchService,
+  type BriefForWriting,
+  type BriefWriter,
+  type QueueBriefInput,
+  type RequestBriefNowResult,
+  type ResearchService,
+} from "./research/index.ts";
