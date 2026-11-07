@@ -67,6 +67,15 @@ for going offline; a second build gets a new build id, so it triggers the update
   visible. Its title is the page's own, prefixed with `Read:`. When the request asks for tag
   suggestions, it suggests the user's first two tags and one new tag, the first long word of the
   page title.
+  Every reply carries `usage` (input is the request's characters over four, output 10), which the
+  model gateway prices into the ledger. Markers in the message text set it or make the call fail:
+  `[fake-usage input=1000 output=200 cache_read=5000 cache_write=300 searches=2]`, and
+  `[fake-error spend-limit|credit|tier-cap|rate-limit|overloaded]` for the HTTP 400 workspace
+  limit, 400 empty credit, 429 without `retry-after`, an ordinary 429 and a 529. The gateway test
+  starts the fakes itself on free ports (`FAKE_ANTHROPIC_PORT`, `FAKE_VOYAGE_PORT`,
+  `FAKE_QSTASH_PORT`; `FAKE_MODEL_DELAY_MS=0` skips the four seconds). To see the cap locally, set
+  the daily cap in Settings → Automation to `0.00` (or `UPDATE user_settings SET daily_cap_micros =
+  0`) and save a link: it stays pending and the QStash log shows a 200.
 - **Voyage AI** embeds a text as its words (one hashed axis per word), so search by meaning finds
   texts that share a word even where keyword search wouldn't, such as a word in the summary.
   Real semantic quality stays with the user.

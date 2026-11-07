@@ -22,6 +22,7 @@ import {
 import {
   APPEARANCE_DEFAULTS,
   APPEARANCE_VALUES,
+  AUTOMATION_DEFAULTS,
   CLIPPING_SOURCES,
   CLIPPING_STATUSES,
   TAG_COLORS,
@@ -597,10 +598,20 @@ export const userSettings = pgTable(
       .default(APPEARANCE_DEFAULTS.density),
     // Whether enrichment proposes tags for the user's clippings. Off until they turn it on.
     suggestTags: boolean("suggest_tags").notNull().default(false),
+    // What automation may spend: the model gateway refuses calls past the daily cap (in
+    // micro-dollars, per UTC day), and research jobs are submitted at most this many a day.
+    dailyCapMicros: integer("daily_cap_micros")
+      .notNull()
+      .default(AUTOMATION_DEFAULTS.dailyCapMicros),
+    researchJobsPerDay: integer("research_jobs_per_day")
+      .notNull()
+      .default(AUTOMATION_DEFAULTS.researchJobsPerDay),
     // No default: the service stamps it from its clock.
     updatedAt: timestamptz("updated_at").notNull(),
   },
   (table) => [
+    check("user_settings_daily_cap_check", sql`${table.dailyCapMicros} >= 0`),
+    check("user_settings_research_jobs_check", sql`${table.researchJobsPerDay} >= 0`),
     check("user_settings_theme_check", sql`${table.theme} in (${inList(APPEARANCE_VALUES.theme)})`),
     check(
       "user_settings_palette_check",
@@ -636,5 +647,39 @@ export const weeklyDigests = pgTable(
   },
   (table) => [
     primaryKey({ name: "weekly_digests_pkey", columns: [table.userId, table.weekStart] }),
+  ],
+);
+
+/**
+ * The ledger of paid model calls (Claude and Voyage AI), one row per call, written by the model
+ * gateway from the response's own usage. Spend is summed from it by user and UTC day, which is
+ * what the daily cap checks. `job_kind` is a `ModelJobKind`, and `cost_micros` is in micro-dollars
+ * priced from the gateway's rate table at the time of the call. `job_kind` and `model` carry no
+ * check constraint: a new job or model must not need a migration to be recorded.
+ */
+export const modelUsage = pgTable(
+  "model_usage",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    jobKind: text("job_kind").notNull(),
+    model: text("model").notNull(),
+    // Whether the call ran through the Batch API, at half price.
+    batch: boolean("batch").notNull().default(false),
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
+    cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
+    webSearches: integer("web_searches").notNull().default(0),
+    costMicros: bigint("cost_micros", { mode: "number" }).notNull(),
+    // No default: the service stamps it from its clock.
+    createdAt: timestamptz("created_at").notNull(),
+  },
+  (table) => [
+    // "Spend by user since the start of a UTC day or month".
+    index("model_usage_user_created_idx").on(table.userId, table.createdAt),
+    check("model_usage_cost_check", sql`${table.costMicros} >= 0`),
   ],
 );

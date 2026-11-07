@@ -1,6 +1,12 @@
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
 
-import type { PageSummary, Summarizer, SummarizerInput } from "@clippings/db";
+import type { Gateway } from "@/lib/gateway/gateway.ts";
+import {
+  CapReachedError,
+  type PageSummary,
+  type Summarizer,
+  type SummarizerInput,
+} from "@clippings/db";
 import { MAX_TAG_LENGTH, normalizeTagNames, tagNameKey } from "@clippings/shared";
 
 export const SUMMARIZER_MODEL = "claude-haiku-5-5";
@@ -154,18 +160,24 @@ export function summaryRequest(page: SummarizerInput): Anthropic.MessageCreatePa
   };
 }
 
-/** Claude Haiku, asked for a structured reading of the page. Reads `ANTHROPIC_API_KEY`. */
-export function createSummarizer(): Summarizer {
-  // Built on first use, so a missing key breaks enrichment and not every page that loads.
-  let client: Anthropic | undefined;
+/**
+ * Claude Haiku, asked for a structured reading of the page, through the model gateway (which
+ * reads `ANTHROPIC_API_KEY`). Throws `CapReachedError` when the gateway refuses the call.
+ */
+export function createSummarizer(gateway: Pick<Gateway, "message">): Summarizer {
   return {
     async summarize(page): Promise<PageSummary> {
-      const { userTags } = page;
-      // No SDK retries and a hard limit: QStash retries the whole job, and the page fetch plus
-      // this call must stay inside the route's 60 s.
-      client ??= new Anthropic({ maxRetries: 0, timeout: MODEL_TIMEOUT_MS });
-      const response = await client.messages.create(summaryRequest(page));
-      const call = response.content.find((block) => block.type === "tool_use");
+      const { userTags, userId } = page;
+      // A hard limit: QStash retries the whole job, and the page fetch plus this call must stay
+      // inside the route's 60 s.
+      const result = await gateway.message({
+        userId,
+        jobKind: "enrich",
+        request: summaryRequest(page),
+        timeoutMs: MODEL_TIMEOUT_MS,
+      });
+      if (result.status === "cap_reached") throw new CapReachedError();
+      const call = result.value.content.find((block) => block.type === "tool_use");
       if (!call) throw new Error("The model didn't return a reading");
       return parseReading(call.input as Record<string, unknown>, userTags);
     },

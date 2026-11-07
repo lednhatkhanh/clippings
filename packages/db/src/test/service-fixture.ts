@@ -1,21 +1,23 @@
 import { addMilliseconds, parseISO } from "date-fns";
 import pg from "pg";
 
-import type {
-  Clock,
-  Embedder,
-  EmbeddingPurpose,
-  FetchedPage,
-  JobPublisher,
-  PageFetcher,
-  PageSummary,
-  Summarizer,
+import {
+  CapReachedError,
+  type Clock,
+  type Embedder,
+  type EmbeddingPurpose,
+  type FetchedPage,
+  type JobPublisher,
+  type PageFetcher,
+  type PageSummary,
+  type Summarizer,
 } from "../clippings/ports.ts";
 import { createClippingsService } from "../clippings/service.ts";
 import { createConnectionsService } from "../connections/service.ts";
 import { createPool } from "../pool.ts";
 import { EMBEDDING_DIMENSIONS } from "../schema.ts";
 import { createSettingsService } from "../settings/service.ts";
+import { createUsageService } from "../usage/service.ts";
 import { createMigratedDatabase, type TempDatabase } from "./temp-database.ts";
 
 /**
@@ -80,8 +82,11 @@ export async function createServiceFixture() {
   const summarizedWithTags: (readonly string[] | undefined)[] = [];
   /** The page (URL, title and text) each summarize call got, in order. */
   const summarizedPages: { url: string; title: string | null; text: string }[] = [];
+  /** Whether the model gateway refuses calls, as it does for a user past their daily cap. */
+  let capped = false;
   const summarizer: Summarizer = {
     summarize: async ({ url, title, text, userTags }) => {
+      if (capped) throw new CapReachedError();
       summarizedWithTags.push(userTags);
       summarizedPages.push({ url, title, text });
       const entry = web.get(url);
@@ -93,18 +98,29 @@ export async function createServiceFixture() {
   /** Word → the meaning it carries. Words that share a meaning embed close together. */
   const meanings = new Map<string, string>();
   const embedded: { text: string; purpose: EmbeddingPurpose }[] = [];
+  /** Who each embedding call was made for, in order. */
+  const embeddedFor: { userId: string; jobKind: string }[] = [];
   /** The size of each `embedMany` call, in order. */
   const embeddedBatches: number[] = [];
   let embedding: "up" | "down" = "up";
+  /** Whether only the embedder refuses (the summarizer still answers), and for whom. */
+  let embeddingCapped = false;
+  const cappedEmbeddingUsers = new Set<string>();
+  const embedderRefuses = (userId: string) =>
+    capped || embeddingCapped || cappedEmbeddingUsers.has(userId);
   const embedder: Embedder = {
-    embed: async (text, purpose) => {
+    embed: async (text, purpose, owner) => {
+      if (embedderRefuses(owner.userId)) throw new CapReachedError();
       if (embedding === "down") throw new Error("the embedder is unreachable");
+      embeddedFor.push(owner);
       embedded.push({ text, purpose });
       return fakeEmbedding(text, meanings, embedded.length);
     },
-    embedMany: async (texts, purpose) => {
+    embedMany: async (texts, purpose, owner) => {
+      if (embedderRefuses(owner.userId)) throw new CapReachedError();
       if (embedding === "down") throw new Error("the embedder is unreachable");
       embeddedBatches.push(texts.length);
+      embeddedFor.push(owner);
       return texts.map((text) => {
         embedded.push({ text, purpose });
         return fakeEmbedding(text, meanings, embedded.length);
@@ -121,6 +137,7 @@ export async function createServiceFixture() {
     /** The clock the services read, for a service the test builds itself. */
     clock,
     settings: createSettingsService({ pool, clock }),
+    usage: createUsageService({ pool, clock }),
     connections: createConnectionsService({ pool, clock }),
     /** The fixture's pool, for tests that set up rows no service writes (Better Auth's). */
     pool,
@@ -150,6 +167,20 @@ export async function createServiceFixture() {
     meanings,
     /** Every text the embedder was asked for, in order. */
     embedded,
+    /** Who each embedding call was made for, in order. */
+    embeddedFor,
+    /** Makes only the embedder refuse (or work again), as a reached spend cap does. */
+    setEmbeddingCapReached: (reached: boolean) => {
+      embeddingCapped = reached;
+    },
+    /** Makes the embedder refuse this user's calls only. */
+    capEmbeddingFor: (userId: string) => {
+      cappedEmbeddingUsers.add(userId);
+    },
+    /** Makes the summarizer and embedder refuse (or work again), as a reached spend cap does. */
+    setCapReached: (reached: boolean) => {
+      capped = reached;
+    },
     /** How many texts each batched embedding call carried, in order. */
     embeddedBatches,
     /** Makes the embedder throw (or work again), the way an unreachable provider does. */

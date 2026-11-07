@@ -19,16 +19,18 @@ export {
   user,
   verification,
 } from "./schema.ts";
-export type {
-  Clock,
-  Embedder,
-  EmbeddingPurpose,
-  FetchedPage,
-  JobPublisher,
-  PageFetcher,
-  PageSummary,
-  Summarizer,
-  SummarizerInput,
+export {
+  CapReachedError,
+  type Clock,
+  type Embedder,
+  type EmbeddingOwner,
+  type EmbeddingPurpose,
+  type FetchedPage,
+  type JobPublisher,
+  type PageFetcher,
+  type PageSummary,
+  type Summarizer,
+  type SummarizerInput,
 } from "./clippings/ports.ts";
 export {
   createClippingsService,
@@ -74,3 +76,9 @@ export {
   type Connection,
   type ConnectionsService,
 } from "./connections/service.ts";
+export {
+  createUsageService,
+  type ModelUsageEntry,
+  type UsageBudget,
+  type UsageService,
+} from "./usage/service.ts";

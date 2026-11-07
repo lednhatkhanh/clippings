@@ -89,3 +89,17 @@ export {
 } from "./tag.ts";
 export { extractSharedUrl, type SharedData, type SharedLink } from "./share.ts";
 export { parseWebUrl, type WebUrl } from "./url.ts";
+export {
+  AUTOMATION_DEFAULTS,
+  automationSettingsChangeSchema,
+  DEFAULT_DAILY_CAP_MICROS,
+  DEFAULT_RESEARCH_JOBS_PER_DAY,
+  MAX_DAILY_CAP_MICROS,
+  MAX_RESEARCH_JOBS_PER_DAY,
+  MICROS_PER_DOLLAR,
+  MODEL_JOB_KINDS,
+  type AutomationSettings,
+  type AutomationSettingsChange,
+  type ModelJobKind,
+  type SpendSummary,
+} from "./usage.ts";
