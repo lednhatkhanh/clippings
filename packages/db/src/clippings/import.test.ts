@@ -433,6 +433,24 @@ describe.skipIf(!TEST_DATABASE_URL)("importing bookmarks", () => {
       expect(await fixture.service.drainImports()).toEqual([waiting!.id]);
     });
 
+    it("leaves out a user who can't spend, so a large held backlog doesn't take the budget from others", async () => {
+      const ana = await fixture.createUser("ana");
+      const ben = await fixture.createUser("ben");
+      await fixture.settings.updateAutomationSettings(ana, { dailyCapMicros: 0 });
+      await importBookmarks(ana, IMPORT_DAILY_BUDGET + 5, "ana");
+      fixture.advanceClock(HOUR);
+      await importBookmarks(ben, 1, "ben");
+      fixture.advanceClock(HOUR);
+
+      const ids = await fixture.service.drainImports();
+
+      expect(ids).toEqual([(await listAll(ben))[0]!.id]);
+
+      // Raising the cap lets the backlog drain, with the day's budget less what Ben used.
+      await fixture.settings.updateAutomationSettings(ana, { dailyCapMicros: 3_000_000 });
+      expect(await fixture.service.drainImports()).toHaveLength(IMPORT_DAILY_BUDGET - 1);
+    });
+
     it("drains every user's backlog, oldest first across users", async () => {
       const ana = await fixture.createUser("ana");
       const ben = await fixture.createUser("ben");

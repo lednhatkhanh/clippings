@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/page-header.tsx";
 import { PageTransition, RevealTransition } from "@/components/page-transition.tsx";
 import { AccountSettings } from "@/components/settings/account-settings.tsx";
 import { AppearanceSettings } from "@/components/settings/appearance-settings.tsx";
+import { AutomationSettings } from "@/components/settings/automation-settings.tsx";
 import {
   ConnectionsSettings,
   type ConnectionRow,
@@ -19,9 +20,10 @@ import { clientDisplayName, getConnections } from "@/lib/auth/connections.ts";
 import { getSession, signInRedirect } from "@/lib/auth/session.ts";
 import { getClippings } from "@/lib/clippings/service.ts";
 import { formatLastUsed } from "@/lib/format-date.ts";
-import { getAppearance, getSuggestTags } from "@/lib/settings/service.ts";
+import { getUsage } from "@/lib/gateway/service.ts";
+import { getAppearance, getAutomation, getSuggestTags } from "@/lib/settings/service.ts";
 import { formatIsoUtc } from "@clippings/shared";
-import type { Appearance } from "@clippings/shared";
+import type { Appearance, AutomationSettings as Automation, SpendSummary } from "@clippings/shared";
 import { Tab, TabList, TabPanel, TabPanels, Tabs } from "@clippings/ui";
 
 export const metadata: Metadata = { title: "Settings · Clippings" };
@@ -34,16 +36,22 @@ async function SettingsTabs() {
   let connections: ConnectionRow[];
   let suggestTags: boolean;
   let pendingImports: number;
+  let automation: Automation;
+  let spend: SpendSummary;
   try {
-    const [settings, connected, suggest, pending] = await Promise.all([
+    const [settings, connected, suggest, pending, limits, spent] = await Promise.all([
       getAppearance(session.user.id),
       getConnections().listConnections(session.user.id),
       getSuggestTags(session.user.id),
       getClippings().countPendingImports(session.user.id),
+      getAutomation(session.user.id),
+      getUsage().getSpend(session.user.id),
     ]);
     appearance = settings;
     suggestTags = suggest;
     pendingImports = pending;
+    automation = limits;
+    spend = spent;
     const now = constructNow(undefined);
     connections = connected.map((connection) => ({
       clientId: connection.clientId,
@@ -60,6 +68,7 @@ async function SettingsTabs() {
       <TabList aria-label="Settings">
         <Tab id="appearance">Appearance</Tab>
         <Tab id="library">Library</Tab>
+        <Tab id="automation">Automation</Tab>
         <Tab id="connections">Connections</Tab>
         <Tab id="account">Account</Tab>
       </TabList>
@@ -75,6 +84,9 @@ async function SettingsTabs() {
             <SuggestTagsSettings initial={suggestTags} />
             <ImportSettings pendingImports={pendingImports} />
           </div>
+        </TabPanel>
+        <TabPanel id="automation">
+          <AutomationSettings spend={spend} initial={automation} />
         </TabPanel>
         <TabPanel id="connections">
           <ConnectionsSettings connections={connections} />

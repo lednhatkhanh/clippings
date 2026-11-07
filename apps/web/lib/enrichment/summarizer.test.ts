@@ -141,9 +141,15 @@ describe("parseReading suggestions", () => {
 });
 
 describe("summaryRequest", () => {
-  const html = { url: "https://example.com/a", title: "A page", text: "Some words." };
+  const html = {
+    url: "https://example.com/a",
+    userId: "ana",
+    title: "A page",
+    text: "Some words.",
+  };
   const pdf = {
     url: "https://example.com/paper.pdf",
+    userId: "ana",
     title: "paper",
     text: "",
     document: { mediaType: "application/pdf" as const, data: "JVBERi0xLjc=" },

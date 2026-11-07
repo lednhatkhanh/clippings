@@ -19,20 +19,18 @@ export {
   user,
   verification,
 } from "./schema.ts";
-export type {
-  Clock,
-  DigestClipping,
-  Digester,
-  DigesterInput,
-  Embedder,
-  EmbeddingPurpose,
-  FetchedPage,
-  JobPublisher,
-  PageFetcher,
-  PageSummary,
-  Summarizer,
-  SummarizerInput,
-  WeeklyDigest,
+export {
+  CapReachedError,
+  type Clock,
+  type Embedder,
+  type EmbeddingOwner,
+  type EmbeddingPurpose,
+  type FetchedPage,
+  type JobPublisher,
+  type PageFetcher,
+  type PageSummary,
+  type Summarizer,
+  type SummarizerInput,
 } from "./clippings/ports.ts";
 export {
   createClippingsService,
@@ -69,14 +67,6 @@ export {
   type UpdateClippingInput,
 } from "./clippings/service.ts";
 export {
-  createDigestService,
-  lastFinishedWeek,
-  type DigestClippingRef,
-  type DigestWeek,
-  type DigestService,
-  type WeeklyDigestView,
-} from "./digest/service.ts";
-export {
   createSettingsService,
   InvalidSettingsError,
   type SettingsService,
@@ -86,3 +76,9 @@ export {
   type Connection,
   type ConnectionsService,
 } from "./connections/service.ts";
+export {
+  createUsageService,
+  type ModelUsageEntry,
+  type UsageBudget,
+  type UsageService,
+} from "./usage/service.ts";

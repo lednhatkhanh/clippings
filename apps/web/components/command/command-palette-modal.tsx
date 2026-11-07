@@ -2,7 +2,6 @@
 
 import {
   Copy,
-  MessageCircleQuestion,
   Monitor,
   Moon,
   Palette,
@@ -112,9 +111,6 @@ function PaletteCommands({
       <CommandGroup title="Clippings">
         <Command id="new-clipping" icon={Plus} onAction={onNewClipping}>
           New clipping
-        </Command>
-        <Command id="ask" icon={MessageCircleQuestion} href="/ask" onAction={onNavigate}>
-          Ask my clippings
         </Command>
       </CommandGroup>
       {clipping ? (

@@ -61,8 +61,20 @@ export interface PageSummary {
   suggestedTags?: string[];
 }
 
+/**
+ * Thrown by a port when the model gateway refused a call because the user's daily cap is reached
+ * (or Anthropic says a spend limit or the credit is exhausted). Not a failure: the work waits for
+ * another day, so enrichment holds the clipping instead of retrying or failing it.
+ */
+export class CapReachedError extends Error {
+  constructor() {
+    super("The daily model spend cap is reached");
+    this.name = "CapReachedError";
+  }
+}
+
 /** What the summarizer reads: the page, and the user's tag names when they want suggestions. */
-export type SummarizerInput = { url: string } & FetchedPage & {
+export type SummarizerInput = { url: string; userId: string } & FetchedPage & {
     /**
      * The user's most-used tag names, when they have tag suggestions on (possibly none yet).
      * Undefined when suggestions are off: then no tag names leave the app and none are suggested.
@@ -70,7 +82,10 @@ export type SummarizerInput = { url: string } & FetchedPage & {
     userTags?: readonly string[];
   };
 
-/** Reads a page the way a person would: a clean title, a short summary, a passage worth keeping. */
+/**
+ * Reads a page the way a person would: a clean title, a short summary, a passage worth keeping.
+ * Throws `CapReachedError` when the user's spend cap is reached.
+ */
 export interface Summarizer {
   summarize: (page: SummarizerInput) => Promise<PageSummary>;
 }
@@ -81,44 +96,29 @@ export interface Summarizer {
  */
 export type EmbeddingPurpose = "document" | "query";
 
-/** Turns text into a vector of `EMBEDDING_DIMENSIONS` (schema.ts) numbers, close for texts close in meaning. */
-export interface Embedder {
-  /** `signal` cancels the call, as when the reader has typed past a search. */
-  embed: (text: string, purpose: EmbeddingPurpose, signal?: AbortSignal) => Promise<number[]>;
-  /** One vector per text, in order. For a backlog: one call instead of one per text. */
-  embedMany: (texts: readonly string[], purpose: EmbeddingPurpose) => Promise<number[][]>;
-}
-
-/** A clipping as the digester reads it. */
-export interface DigestClipping {
-  id: string;
-  title: string;
-  summary: string | null;
-  /** The user's tag names on it. */
-  tags: string[];
-  note: string;
-}
-
-/** What the digester reads: one finished week of a user's clippings, and some older ones. */
-export interface DigesterInput {
-  /** The week's Monday, `yyyy-MM-dd` (UTC). */
-  weekStart: string;
-  /** Everything saved that week, newest first. */
-  clippings: DigestClipping[];
-  /** Up to 3 older clippings related to the week's, which the digest may bring back. */
-  related: DigestClipping[];
+/** Whose spend an embedding call counts toward, and for which job. */
+export interface EmbeddingOwner {
+  userId: string;
+  /** "search" for a query the reader is waiting on, "enrich" for a clipping's own text. */
+  jobKind: "enrich" | "search";
 }
 
 /**
- * A user's digest of a week, as stored: the week's clippings in groups, and older ones worth
- * seeing again. Clippings are named by id, and every id comes from the digester's input.
+ * Turns text into a vector of `EMBEDDING_DIMENSIONS` (schema.ts) numbers, close for texts close in
+ * meaning. Throws `CapReachedError` when the owner's spend cap is reached.
  */
-export interface WeeklyDigest {
-  groups: { title: string; summary: string; clippingIds: string[] }[];
-  resurfaced: { clippingId: string; why: string }[];
-}
-
-/** Writes the digest of a week: groups the clippings by theme and says why an older one is back. */
-export interface Digester {
-  digest: (input: DigesterInput) => Promise<WeeklyDigest>;
+export interface Embedder {
+  /** `signal` cancels the call, as when the reader has typed past a search. */
+  embed: (
+    text: string,
+    purpose: EmbeddingPurpose,
+    owner: EmbeddingOwner,
+    signal?: AbortSignal,
+  ) => Promise<number[]>;
+  /** One vector per text, in order. For a backlog: one call instead of one per text. */
+  embedMany: (
+    texts: readonly string[],
+    purpose: EmbeddingPurpose,
+    owner: EmbeddingOwner,
+  ) => Promise<number[][]>;
 }

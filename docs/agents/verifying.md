@@ -66,10 +66,16 @@ for going offline; a second build gets a new build id, so it triggers the update
 - **Anthropic** answers the page-reading tool call after four seconds, so the pending state is
   visible. Its title is the page's own, prefixed with `Read:`. When the request asks for tag
   suggestions, it suggests the user's first two tags and one new tag, the first long word of the
-  page title. A `save_digest` request (the weekly digest) gets one group of all the week's
-  clippings and the first archive clipping brought back. A streaming request whose message holds
-  `search_result` blocks (the Ask page) gets a short streamed answer that quotes the first result
-  and cites it.
+  page title.
+  Every reply carries `usage` (input is the request's characters over four, output 10), which the
+  model gateway prices into the ledger. Markers in the message text set it or make the call fail:
+  `[fake-usage input=1000 output=200 cache_read=5000 cache_write=300 searches=2]`, and
+  `[fake-error spend-limit|credit|tier-cap|rate-limit|overloaded]` for the HTTP 400 workspace
+  limit, 400 empty credit, 429 without `retry-after`, an ordinary 429 and a 529. The gateway test
+  starts the fakes itself on free ports (`FAKE_ANTHROPIC_PORT`, `FAKE_VOYAGE_PORT`,
+  `FAKE_QSTASH_PORT`; `FAKE_MODEL_DELAY_MS=0` skips the four seconds). To see the cap locally, set
+  the daily cap in Settings → Automation to `0.00` (or `UPDATE user_settings SET daily_cap_micros =
+  0`) and save a link: it stays pending and the QStash log shows a 200.
 - **Voyage AI** embeds a text as its words (one hashed axis per word), so search by meaning finds
   texts that share a word even where keyword search wouldn't, such as a word in the summary.
   Real semantic quality stays with the user.
@@ -77,10 +83,8 @@ for going offline; a second build gets a new build id, so it triggers the update
   loopback and private addresses on purpose: a link to `http://127.0.0.1:...` ends as failed, which
   is also the way to see the failed row and Retry.
 
-Call the crons by hand with the secret from `local.env`: `curl -H "Authorization: Bearer $CRON_SECRET"
-http://localhost:3100/api/cron/sweep`, and `/api/cron/digest` for the weekly digests. A digest is
-written for the last finished Monday to Sunday (UTC), so backdate a few clippings into it first
-(`update clippings set created_at = ...`); a second call the same week writes nothing.
+Call the sweep cron by hand with the secret from `local.env`: `curl -H "Authorization: Bearer
+$CRON_SECRET" http://localhost:3100/api/cron/sweep`.
 
 Read the fakes' output with `preview_logs`. Stop what you started when you are done:
 `preview_stop` for the servers, `agent-browser close` for the browser session, and

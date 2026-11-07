@@ -4,8 +4,12 @@ import type pg from "pg";
 import {
   APPEARANCE_DEFAULTS,
   APPEARANCE_KEYS,
+  AUTOMATION_DEFAULTS,
+  automationSettingsChangeSchema,
   isAppearanceValue,
   type Appearance,
+  type AutomationSettings,
+  type AutomationSettingsChange,
 } from "@clippings/shared";
 
 import type { Clock } from "../clippings/ports.ts";
@@ -89,7 +93,50 @@ export function createSettingsService({ pool, clock }: SettingsServiceDeps) {
     return saved!.on;
   }
 
-  return { getSettings, updateSettings, getSuggestTags, setSuggestTags };
+  const automationColumns = {
+    dailyCapMicros: userSettings.dailyCapMicros,
+    researchJobsPerDay: userSettings.researchJobsPerDay,
+  };
+
+  /** The user's daily cap and research-job limit, or the defaults when they never changed one. */
+  async function getAutomationSettings(userId: string): Promise<AutomationSettings> {
+    const [row] = await db
+      .select(automationColumns)
+      .from(userSettings)
+      .where(eq(userSettings.userId, userId));
+    return row ?? AUTOMATION_DEFAULTS;
+  }
+
+  /**
+   * Saves the cap and/or research-job limit named in `changes`; the other keeps its value.
+   * Returns both as they now stand. A change that isn't valid (not a whole number, out of range,
+   * an unknown key, empty) throws `InvalidSettingsError` and saves nothing.
+   */
+  async function updateAutomationSettings(
+    userId: string,
+    changes: AutomationSettingsChange,
+  ): Promise<AutomationSettings> {
+    const parsed = automationSettingsChangeSchema.safeParse(changes);
+    if (!parsed.success) {
+      throw new InvalidSettingsError("automation settings", parsed.error.issues[0]?.message);
+    }
+    const updatedAt = clock.now();
+    const [saved] = await db
+      .insert(userSettings)
+      .values({ userId, ...parsed.data, updatedAt })
+      .onConflictDoUpdate({ target: userSettings.userId, set: { ...parsed.data, updatedAt } })
+      .returning(automationColumns);
+    return saved!;
+  }
+
+  return {
+    getSettings,
+    updateSettings,
+    getSuggestTags,
+    setSuggestTags,
+    getAutomationSettings,
+    updateAutomationSettings,
+  };
 }
 
 export type SettingsService = ReturnType<typeof createSettingsService>;

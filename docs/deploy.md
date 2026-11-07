@@ -98,7 +98,7 @@ be pulled into a build, which is fine: the web app reads them only at runtime.
 | `QSTASH_CURRENT_SIGNING_KEY` | QStash signing key            | same                                    |
 | `QSTASH_NEXT_SIGNING_KEY`    | QStash next signing key       | same                                    |
 | `QSTASH_URL`           | only if the QStash console shows one (a regional endpoint); not a secret | same |
-| `ANTHROPIC_API_KEY`    | an Anthropic key (Haiku)            | same                                    |
+| `ANTHROPIC_API_KEY`    | an Anthropic key from a limited workspace (see Model spend) | same                    |
 | `VOYAGE_API_KEY`       | a Voyage AI key (embeddings, ADR 0001); without it search matches words only | same |
 | `CRON_SECRET`          | `openssl rand -base64 32`           | a different value                       |
 | `VERCEL_AUTOMATION_BYPASS_SECRET` | none: production isn't protected | the project's "Protection Bypass for Automation" secret |
@@ -113,14 +113,35 @@ console lists, or the token is rejected. A daily Vercel Cron (`vercel.json`, 04:
 failed for more than an hour, and embeds up to 50 ready clippings that have no embedding (saved
 before search by meaning, or while Voyage AI was down). It also checks up to 40 ready clippings
 whose link was last checked more than a week ago (ten at once, each given 5 s), and marks a link
-dead after three checks in a row that find the page gone. A second daily cron (05:00 UTC) calls
-`/api/cron/digest` with the same bearer token and writes the weekly digest of the last finished
-Monday to Sunday (UTC) for up to 20 users who saved clippings that week and have none yet, one
-Haiku call each. It stops starting calls with under 30 seconds of its 60 left, and the next day's
-run takes the rest. Vercel only runs crons on the production deployment. Add a payment method to
+dead after three checks in a row that find the page gone. Vercel only runs crons on the
+production deployment. Add a payment method to
 the Voyage AI account even though usage stays inside the free
 tokens: its documented limits (2,000 requests a minute for `voyage-4`) start at Tier 1, which needs
 one ([rate limits](https://docs.voyageai.com/docs/rate-limits)), and every search makes a request.
+
+#### Model spend
+
+Every Claude and Voyage AI call goes through the app's model gateway, which writes it to a ledger
+and refuses new calls once the day's spend (UTC) reaches the cap in Settings → Automation ($3 by
+default). Saves made past the cap wait as pending and are read once the cap resets (the daily sweep takes at most 100 a day). That cap is the first
+line of defence; the Anthropic Console is the second, so set it up before the first deploy:
+
+1. In the [Console](https://platform.claude.com), in the organization linked to the Max plan, create
+   a **new workspace** (for example "Clippings") and create `ANTHROPIC_API_KEY` in it. Don't use the
+   Default Workspace: it can't have a spend limit.
+2. Open the workspace's limits and set a **monthly spend limit below the $100 monthly API credit that
+   comes with Max**, for example $60. The Console has monthly limits only, no daily ones (the app
+   enforces the daily cap).
+3. Know that the two don't line up: a spend limit resets on the 1st of the calendar month, while the
+   credit renews per billing cycle. A limit set below the credit is the safe choice; a limit above
+   what is left of the credit does nothing, because the credit stops requests first and calls stop
+   when it runs out.
+
+When the Console's limit or the credit is reached, Anthropic answers with a 400 ("workspace API
+usage limits" or "credit balance is too low") or a 429 without `retry-after`. The gateway treats
+those like the daily cap: the clipping is held, not failed, and the daily sweep tries it again.
+Spend limits reset on the 1st, so held saves resume on their own then; if the credit is the cause,
+they resume when it renews.
 
 ### 4. Google OAuth client
 

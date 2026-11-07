@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { APPEARANCE_DEFAULTS } from "@clippings/shared";
+import { APPEARANCE_DEFAULTS, AUTOMATION_DEFAULTS } from "@clippings/shared";
 
 import { createServiceFixture, type ServiceFixture } from "../test/service-fixture.ts";
 import { TEST_DATABASE_URL } from "../test/temp-database.ts";
@@ -98,5 +98,74 @@ describe.skipIf(!TEST_DATABASE_URL)("settings service", () => {
     await fixture.createUser("ana");
 
     expect(await fixture.settings.getSettings("ana")).toEqual(APPEARANCE_DEFAULTS);
+  });
+
+  describe("automation limits", () => {
+    it("start at $3 a day and 3 research jobs", async () => {
+      const ana = await fixture.createUser("ana");
+
+      expect(await fixture.settings.getAutomationSettings(ana)).toEqual({
+        dailyCapMicros: 3_000_000,
+        researchJobsPerDay: 3,
+      });
+      expect(AUTOMATION_DEFAULTS).toEqual(await fixture.settings.getAutomationSettings(ana));
+    });
+
+    it("change one at a time and leave the other, and appearance, alone", async () => {
+      const ana = await fixture.createUser("ana");
+      await fixture.settings.updateSettings(ana, { theme: "dark" });
+
+      await fixture.settings.updateAutomationSettings(ana, { dailyCapMicros: 5_000_000 });
+      const updated = await fixture.settings.updateAutomationSettings(ana, {
+        researchJobsPerDay: 7,
+      });
+
+      expect(updated).toEqual({ dailyCapMicros: 5_000_000, researchJobsPerDay: 7 });
+      expect(await fixture.settings.getAutomationSettings(ana)).toEqual(updated);
+      expect((await fixture.settings.getSettings(ana)).theme).toBe("dark");
+    });
+
+    it.each([
+      ["a negative cap", { dailyCapMicros: -1 }],
+      ["a cap above $1,000", { dailyCapMicros: 1_000_000_001 }],
+      ["a fractional cap", { dailyCapMicros: 1.5 }],
+      ["a cap that is not a number", { dailyCapMicros: "3" }],
+      ["a negative job limit", { researchJobsPerDay: -1 }],
+      ["too many jobs", { researchJobsPerDay: 101 }],
+      ["nothing", {}],
+      ["a key that is not a setting", { dailyCapMicros: 1_000_000, theme: "dark" }],
+    ])("refuse %s and save nothing", async (_name, change) => {
+      const ana = await fixture.createUser("ana");
+      await fixture.settings.updateAutomationSettings(ana, { dailyCapMicros: 2_000_000 });
+
+      await expect(
+        fixture.settings.updateAutomationSettings(ana, change as { dailyCapMicros: number }),
+      ).rejects.toBeInstanceOf(InvalidSettingsError);
+
+      expect(await fixture.settings.getAutomationSettings(ana)).toEqual({
+        dailyCapMicros: 2_000_000,
+        researchJobsPerDay: 3,
+      });
+    });
+
+    it("accept a cap of zero, which holds every model call", async () => {
+      const ana = await fixture.createUser("ana");
+
+      const updated = await fixture.settings.updateAutomationSettings(ana, { dailyCapMicros: 0 });
+
+      expect(updated.dailyCapMicros).toBe(0);
+    });
+
+    it("keep users apart", async () => {
+      const ana = await fixture.createUser("ana");
+      const ben = await fixture.createUser("ben");
+
+      await fixture.settings.updateAutomationSettings(ana, {
+        dailyCapMicros: 9_000_000,
+        researchJobsPerDay: 10,
+      });
+
+      expect(await fixture.settings.getAutomationSettings(ben)).toEqual(AUTOMATION_DEFAULTS);
+    });
   });
 });
