@@ -10,6 +10,8 @@ import { DetailActions } from "@/components/clippings/detail-actions.tsx";
 import { DetailSheet, Sheet } from "@/components/clippings/detail-sheet.tsx";
 import { EnrichmentStatus } from "@/components/clippings/enrichment-status.tsx";
 import { Favicon } from "@/components/clippings/favicon.tsx";
+import { FolderPicker } from "@/components/clippings/folder-picker.tsx";
+import { LinkedItems } from "@/components/clippings/linked-items.tsx";
 import { NoteBodyEditor } from "@/components/clippings/note-body-editor.tsx";
 import { NoteEditor } from "@/components/clippings/note-editor.tsx";
 import { NoteBadge } from "@/components/clippings/note-mark.tsx";
@@ -29,6 +31,9 @@ import { getChanges } from "@/lib/changes/service.ts";
 import { domainOf } from "@/lib/clippings/rows.ts";
 import { getClippings } from "@/lib/clippings/service.ts";
 import { SOURCE_LABELS } from "@/lib/clippings/source-labels.ts";
+import { getLibrary } from "@/lib/librarian/library.ts";
+import { getLibrarian } from "@/lib/librarian/service.ts";
+import type { LinkedClipping } from "@clippings/db";
 import { formatAbsoluteDate, type Clipping, type ClippingStatus } from "@clippings/shared";
 import { Disclosure, LinkButton } from "@clippings/ui";
 
@@ -76,11 +81,14 @@ function RawMetadata({ clipping }: { clipping: Clipping }) {
  */
 async function loadClipping(userId: string, clippingId: string) {
   const service = getClippings();
-  const [clipping, autoApplied] = await Promise.all([
+  const [clipping, autoApplied, placement, filed] = await Promise.all([
     service.getClipping(userId, clippingId),
     getChanges().listAutoApplied(userId, clippingId),
+    getLibrary().getClippingPlacement(userId, clippingId),
+    getLibrarian().listFolders(userId),
   ]);
   if (!clipping) return null;
+  const folders = filed.map(({ id, name, color }) => ({ id, name, color }));
   const now = constructNow(undefined);
   const savedText = clipping.linkDeadSince
     ? await service.getClippingText(userId, clippingId)
@@ -88,6 +96,8 @@ async function loadClipping(userId: string, clippingId: string) {
   return {
     clipping,
     autoApplied,
+    folder: placement.folder,
+    folders,
     now,
     savedOn: formatAbsoluteDate(clipping.createdAt, now),
     savedText,
@@ -108,7 +118,7 @@ async function ClippingDetail({ params }: Pick<PageProps<"/c/[id]">, "params">) 
     return <LoadError message="Couldn't load this clipping." />;
   }
   if (!loaded) notFound();
-  const { clipping, autoApplied, now, savedOn, savedText } = loaded;
+  const { clipping, autoApplied, folder, folders, now, savedOn, savedText } = loaded;
   const { url, body } = clipping;
 
   return (
@@ -195,12 +205,33 @@ async function ClippingDetail({ params }: Pick<PageProps<"/c/[id]">, "params">) 
         autoApplied={autoApplied.map(({ changeId, name, reason }) => ({ changeId, name, reason }))}
       />
 
+      <FolderPicker clippingId={clipping.id} folder={folder} folders={folders} />
+
       {/* A note's text is the note: the comment a link carries has no place on it. */}
       {body === null ? <NoteEditor clippingId={clipping.id} note={clipping.note} /> : null}
 
       <RawMetadata clipping={clipping} />
     </div>
   );
+}
+
+/**
+ * What the librarian linked this to, streamed after the sheet. Shows nothing while there are no
+ * links, or when they can't be loaded: the clipping itself is what the page is for.
+ */
+async function Linked({ params }: Pick<PageProps<"/c/[id]">, "params">) {
+  const session = await getSession();
+  if (!session) redirect(await signInRedirect());
+  const { id } = await params;
+  let links: LinkedClipping[];
+  try {
+    links = (await getLibrary().getClippingPlacement(session.user.id, id)).links;
+  } catch (error) {
+    unstable_rethrow(error);
+    console.error(`Couldn't load the links of ${id}`, error);
+    return null;
+  }
+  return <LinkedItems links={links} />;
 }
 
 /** The neighbours, streamed after the sheet: finding them is a second query. */
@@ -271,6 +302,11 @@ export default function ClippingPage({ params }: PageProps<"/c/[id]">) {
               </RevealTransition>
             </Suspense>
           </DetailSheet>
+        </Suspense>
+        <Suspense>
+          <RevealTransition>
+            <Linked params={params} />
+          </RevealTransition>
         </Suspense>
         <Suspense>
           <RevealTransition>

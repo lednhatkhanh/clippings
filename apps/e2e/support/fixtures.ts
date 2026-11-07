@@ -5,9 +5,11 @@ import pg from "pg";
 
 import {
   createClippingsService,
+  createLibrarianService,
   createPool,
   systemClock,
   type ClippingsService,
+  type LibrarianService,
 } from "@clippings/db";
 import { createTestSession, sessionCookieName } from "@clippings/db/testing";
 
@@ -47,6 +49,8 @@ interface WorkerFixtures {
    * nothing: a seeded clipping stays pending, and nothing is fetched, summarized or embedded.
    */
   clippings: ClippingsService;
+  /** The librarian on the end-to-end database, to seed suggestions and applied changes. */
+  librarian: LibrarianService;
 }
 
 /**
@@ -95,6 +99,13 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
           budget: { canSpend: unavailable("Spending") },
         }),
       );
+    },
+    { scope: "worker" },
+  ],
+
+  librarian: [
+    async ({ database }, use) => {
+      await use(createLibrarianService({ pool: database, clock: systemClock }));
     },
     { scope: "worker" },
   ],

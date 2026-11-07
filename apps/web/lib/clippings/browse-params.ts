@@ -44,8 +44,17 @@ const parseAsTags = createMultiParser({
   eq: (a, b) => a.join("\n") === b.join("\n"),
 });
 
+const FOLDER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A folder as `folder=<id>`; anything that is not an id in the URL is no folder. */
+const parseAsFolder = createParser({
+  parse: (value) => (FOLDER_ID.test(value) ? value.toLowerCase() : null),
+  serialize: (value) => value,
+});
+
 /**
- * What the clippings list shows, as the URL says: `?q=` searches, `tag=` and `source=web,mcp` filter and
+ * What the clippings list shows, as the URL says: `?q=` searches, `tag=`, `folder=<id>` and
+ * `source=web,mcp` filter and
  * `sort=date` orders search results newest first. The server page, the route handler, the server
  * action and the browser (`useQueryStates`) all read it through these.
  */
@@ -53,6 +62,7 @@ export const browseParsers = {
   q: parseAsQuery.withDefault(""),
   tags: parseAsTags.withDefault([]),
   sources: parseAsSources.withDefault([]),
+  folder: parseAsFolder,
   sort: parseAsStringLiteral(SEARCH_SORTS).withDefault("relevance"),
 };
 
@@ -70,12 +80,13 @@ const serialize = createSerializer(browseParsers, { urlKeys: browseUrlKeys });
  * out, and the sort only beside a query, since it orders search results only. Empty for the plain
  * list. Equal params give equal strings, so it keys fetches too.
  */
-export function toQueryString({ q, tags, sources, sort }: BrowseParams): string {
+export function toQueryString({ q, tags, sources, folder, sort }: BrowseParams): string {
   const query = q.trim();
   return serialize({
     q: query,
     tags: normalizeTagNames(tags),
     sources,
+    folder,
     sort: query ? sort : null,
   }).replace(/^\?/, "");
 }
@@ -87,4 +98,9 @@ export function toQueryString({ q, tags, sources, sort }: BrowseParams): string 
 export function hrefWithTag(params: BrowseParams, tag: string): string {
   const query = toQueryString({ ...params, tags: [...params.tags, tag] });
   return query ? `/?${query}` : "/";
+}
+
+/** The whole list narrowed to the clippings filed in this folder: where a folder chip leads. */
+export function hrefWithFolder(folderId: string): string {
+  return `/?${toQueryString({ ...loadBrowseParams(""), folder: folderId })}`;
 }
