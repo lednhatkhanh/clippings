@@ -273,7 +273,15 @@ export function NewClippingModal({
       <Dialog>
         <Heading>New clipping</Heading>
         {/* The modal unmounts its children once it has closed, so every open starts a fresh form. */}
-        <NewClippingForm initial={initial} onSaved={() => onOpenChange(false)} />
+        <NewClippingForm
+          initial={initial}
+          onSaved={() => {
+            // Drop the on-screen keyboard first: a phone's sheet closes by scrolling away, and the
+            // keyboard leaving mid-scroll resizes the viewport under it.
+            if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+            onOpenChange(false);
+          }}
+        />
       </Dialog>
     </Modal>
   );
