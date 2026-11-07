@@ -18,3 +18,14 @@ export const getAppearance = cache((userId: string) => getSettings().getSettings
 
 /** Whether the user has tag suggestions on. Off until they turn it on in Settings. */
 export const getSuggestTags = cache((userId: string) => getSettings().getSuggestTags(userId));
+
+/** Whether auto-tagging is on for the user. Deduplicated per request. */
+export const getAutoTag = cache((userId: string) => getSettings().getAutoTag(userId));
+
+/** The user's daily spend cap and research-job limit. Deduplicated per request. */
+export const getAutomation = cache((userId: string) => getSettings().getAutomationSettings(userId));
+
+/** The user's "About me" text and research domains. Deduplicated per request. */
+export const getResearchSettings = cache((userId: string) =>
+  getSettings().getResearchSettings(userId),
+);

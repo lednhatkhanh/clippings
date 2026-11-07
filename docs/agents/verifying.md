@@ -66,10 +66,52 @@ for going offline; a second build gets a new build id, so it triggers the update
 - **Anthropic** answers the page-reading tool call after four seconds, so the pending state is
   visible. Its title is the page's own, prefixed with `Read:`. When the request asks for tag
   suggestions, it suggests the user's first two tags and one new tag, the first long word of the
-  page title. A `save_digest` request (the weekly digest) gets one group of all the week's
-  clippings and the first archive clipping brought back. A streaming request whose message holds
-  `search_result` blocks (the Ask page) gets a short streamed answer that quotes the first result
-  and cites it.
+  page title, each with `low` confidence (a suggestion). A `[fake-confidence high]` marker in the
+  message makes them `high`, which auto-tagging (on by default for every user) applies and logs.
+  When the user has research domains it also gives the research verdict: worth researching when
+  the save's text names one of the domains (the default ones are `shipping` and `logistics`), and
+  `[fake-research no]` in the message forces not worth it.
+  Every reply carries `usage` (input is the request's characters over four, output 10), which the
+  model gateway prices into the ledger. Markers in the message text set it or make the call fail:
+  `[fake-usage input=1000 output=200 cache_read=5000 cache_write=300 searches=2]`, and
+  `[fake-error spend-limit|credit|tier-cap|rate-limit|overloaded]` for the HTTP 400 workspace
+  limit, 400 empty credit, 429 without `retry-after`, an ordinary 429 and a 529. The gateway test
+  starts the fakes itself on free ports (`FAKE_ANTHROPIC_PORT`, `FAKE_VOYAGE_PORT`,
+  `FAKE_QSTASH_PORT`; `FAKE_MODEL_DELAY_MS=0` skips the four seconds). To see the cap locally, set
+  the daily cap in Settings → Automation to `0.00` (or `UPDATE user_settings SET daily_cap_micros =
+  0`) and save a link: it stays pending and the QStash log shows a 200.
+- **Research briefs and batches**: a request that carries the `web_search_20260209` tool gets a
+  short brief at once: text with two citations (`https://example.com/fake-source-1` and `-2`) and
+  usage of two web searches. The Batches API (`/v1/messages/batches`) accepts a create as
+  `in_progress`, reports `ended` once `FAKE_BATCH_DELAY_MS` (default 0) has passed, and serves
+  JSONL results, each request answered as a normal call. `[fake-batch errored]` or `[fake-batch
+  expired]` in a request's message gives that outcome, and `[fake-error spend-limit]` makes the
+  create fail. Run the daily batch by hand with `curl -H "Authorization: Bearer $CRON_SECRET"
+  http://localhost:3100/api/cron/briefs`: the first call submits the queued briefs, the next
+  collects them (the research jobs per day, 3 by default, cap what a user submits).
+- **The librarian**: a request for the librarian's forced tools (`plan_tags`, `plan_folders`,
+  `plan_links`, `plan_topic_pages`, and Haiku's `confirm_links`) gets a deterministic plan read off
+  the library in its system prompt: tags `x` and `xs` merge, a tag with capitals is renamed to
+  lowercase, items and tags go in a folder named for their first tag (items with no tag in
+  "Notes"), the first two items that share a tag are linked, a tag with three or more items gets a
+  topic page, a tag with ten or more is flagged as too broad. Every change is `high` confidence
+  unless the library holds `[fake-confidence low]` (put it in a note). Try it with the `run_librarian`
+  MCP tool (a dry run, then `dryRun: false`), or by hand: `curl -H "Authorization: Bearer
+  $CRON_SECRET" http://localhost:3100/api/cron/librarian` publishes a job per user to the fake
+  QStash, which delivers it to `/api/jobs/librarian`. A user's first run only suggests, so the
+  first call shows suggestions in `list_suggestions` (an idea already waiting, or dismissed, is not
+  proposed again); to see high-confidence changes applied, save something new after the first run,
+  or delete the user's `library_changes` rows to start again.
+- **Lessons**: a request for the forced `write_lesson` tool gets a short stand-in lesson on the
+  topic named in the message (`Topic: <name>.`, else "recent reading"): a Markdown body with
+  headings, a four-choice quiz, a recap when the message holds a `<previous_lesson>` (empty when
+  not) and the first two saved items it lists as sources. Run the Tuesday/Friday job by hand with
+  `curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3100/api/cron/lessons`: it
+  publishes a `{ userId, day }` job per user with a library to the fake QStash, which delivers it
+  to `/api/jobs/lessons` (the day is today's UTC day, and a lesson exists once per user per day, so
+  a second call that day answers `exists`; delete the user's `lessons` row to write it again). Set
+  the daily cap to `0.00` to see a lesson skipped as `cap_reached`; a note holding `[fake-error
+  overloaded]` in the topic's items makes the job fail and QStash retry it once.
 - **Voyage AI** embeds a text as its words (one hashed axis per word), so search by meaning finds
   texts that share a word even where keyword search wouldn't, such as a word in the summary.
   Real semantic quality stays with the user.
@@ -77,10 +119,8 @@ for going offline; a second build gets a new build id, so it triggers the update
   loopback and private addresses on purpose: a link to `http://127.0.0.1:...` ends as failed, which
   is also the way to see the failed row and Retry.
 
-Call the crons by hand with the secret from `local.env`: `curl -H "Authorization: Bearer $CRON_SECRET"
-http://localhost:3100/api/cron/sweep`, and `/api/cron/digest` for the weekly digests. A digest is
-written for the last finished Monday to Sunday (UTC), so backdate a few clippings into it first
-(`update clippings set created_at = ...`); a second call the same week writes nothing.
+Call the sweep cron by hand with the secret from `local.env`: `curl -H "Authorization: Bearer
+$CRON_SECRET" http://localhost:3100/api/cron/sweep`.
 
 Read the fakes' output with `preview_logs`. Stop what you started when you are done:
 `preview_stop` for the servers, `agent-browser close` for the browser session, and

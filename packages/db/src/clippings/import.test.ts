@@ -44,7 +44,7 @@ describe.skipIf(!TEST_DATABASE_URL)("importing bookmarks", () => {
 
     expect(counts).toEqual({ created: 2, existing: 0, skipped: 0 });
     const items = await listAll(ana);
-    expect(items.map((clipping) => clipping.url).toSorted()).toEqual([
+    expect(items.map((clipping) => clipping.url!).toSorted()).toEqual([
       "https://example.com/a",
       "https://example.org/b",
     ]);
@@ -75,7 +75,7 @@ describe.skipIf(!TEST_DATABASE_URL)("importing bookmarks", () => {
     );
 
     const items = await listAll(ana);
-    expect(items.map((clipping) => [clipping.url.split("/").pop(), clipping.createdAt])).toEqual([
+    expect(items.map((clipping) => [clipping.url!.split("/").pop(), clipping.createdAt])).toEqual([
       ["saved", "2026-10-01T09:00:00.000Z"],
       ["2024", "2024-05-01T10:00:00.000Z"],
       ["2020", "2020-05-01T10:00:00.000Z"],
@@ -98,7 +98,7 @@ describe.skipIf(!TEST_DATABASE_URL)("importing bookmarks", () => {
     );
 
     const createdAt = Object.fromEntries(
-      (await listAll(ana)).map((clipping) => [clipping.url.split("/").pop(), clipping.createdAt]),
+      (await listAll(ana)).map((clipping) => [clipping.url!.split("/").pop(), clipping.createdAt]),
     );
     expect(createdAt).toEqual({
       future: "2026-10-01T09:00:00.000Z",
@@ -133,7 +133,7 @@ describe.skipIf(!TEST_DATABASE_URL)("importing bookmarks", () => {
     const counts = await fixture.service.importClippings(ana, items, { foldersAsTags: false });
 
     expect(counts).toEqual(preview);
-    expect((await listAll(ana)).map((clipping) => clipping.url).toSorted()).toEqual([
+    expect((await listAll(ana)).map((clipping) => clipping.url!).toSorted()).toEqual([
       "https://example.com/essay?id=7",
       "https://example.com/new",
       "https://example.com/other",
@@ -357,7 +357,7 @@ describe.skipIf(!TEST_DATABASE_URL)("importing bookmarks", () => {
         { foldersAsTags: false },
       );
       const [a, b] = (await listAll(ana)).filter((clipping) => clipping.source === "import");
-      fixture.web.set(a!.url, {
+      fixture.web.set(a!.url!, {
         page: { title: "a", text: "" },
         summary: { title: "a", summary: "", excerpt: "" },
       });
@@ -421,8 +421,8 @@ describe.skipIf(!TEST_DATABASE_URL)("importing bookmarks", () => {
       await fixture.service.saveClipping(ana, { url: "https://example.com/hand", source: "web" });
       await importBookmarks(ana, 3);
       const imports = (await listAll(ana)).filter((clipping) => clipping.source === "import");
-      const [readOne, deleted, waiting] = imports.toSorted((a, b) => a.url.localeCompare(b.url));
-      fixture.web.set(readOne!.url, {
+      const [readOne, deleted, waiting] = imports.toSorted((a, b) => a.url!.localeCompare(b.url!));
+      fixture.web.set(readOne!.url!, {
         page: { title: "x", text: "" },
         summary: { title: "x", summary: "", excerpt: "" },
       });
@@ -431,6 +431,24 @@ describe.skipIf(!TEST_DATABASE_URL)("importing bookmarks", () => {
       fixture.enrichmentRequests.length = 0;
 
       expect(await fixture.service.drainImports()).toEqual([waiting!.id]);
+    });
+
+    it("leaves out a user who can't spend, so a large held backlog doesn't take the budget from others", async () => {
+      const ana = await fixture.createUser("ana");
+      const ben = await fixture.createUser("ben");
+      await fixture.settings.updateAutomationSettings(ana, { dailyCapMicros: 0 });
+      await importBookmarks(ana, IMPORT_DAILY_BUDGET + 5, "ana");
+      fixture.advanceClock(HOUR);
+      await importBookmarks(ben, 1, "ben");
+      fixture.advanceClock(HOUR);
+
+      const ids = await fixture.service.drainImports();
+
+      expect(ids).toEqual([(await listAll(ben))[0]!.id]);
+
+      // Raising the cap lets the backlog drain, with the day's budget less what Ben used.
+      await fixture.settings.updateAutomationSettings(ana, { dailyCapMicros: 3_000_000 });
+      expect(await fixture.service.drainImports()).toHaveLength(IMPORT_DAILY_BUDGET - 1);
     });
 
     it("drains every user's backlog, oldest first across users", async () => {
@@ -518,8 +536,8 @@ describe.skipIf(!TEST_DATABASE_URL)("importing bookmarks", () => {
     it("is not undone by the sweep, which leaves pending imports to the drain but still restarts failed ones", async () => {
       const ana = await fixture.createUser("ana");
       await importBookmarks(ana, 2);
-      const [first, second] = (await listAll(ana)).toSorted((a, b) => a.url.localeCompare(b.url));
-      fixture.web.set(first!.url, { error: new Error("503") });
+      const [first, second] = (await listAll(ana)).toSorted((a, b) => a.url!.localeCompare(b.url!));
+      fixture.web.set(first!.url!, { error: new Error("503") });
       await fixture.service.enrichClipping(first!.id, { lastAttempt: true });
       const { clipping: byHand } = await fixture.service.saveClipping(ana, {
         url: "https://example.com/hand",

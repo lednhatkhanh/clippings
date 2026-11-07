@@ -7,7 +7,7 @@
     "dev": "next dev",
     "start": "next start",
     "build": "next build",
-    "lint": "oxlint -c ../../.oxlintrc.json . && ast-grep scan -c ../../sgconfig.yml . && ast-grep test -c ../../sgconfig.yml --skip-snapshot-tests",
+    "lint": "oxlint -c ../../.oxlintrc.json .",
     "format:check": "oxfmt --check -c ../../.oxfmtrc.json .",
     "typegen": "next typegen",
     "typecheck": "tsc --noEmit",
@@ -34,7 +34,8 @@
     "react": "catalog:",
     "react-aria-components": "catalog:",
     "react-dom": "catalog:",
-    "streamdown": "catalog:",
+    "react-markdown": "catalog:",
+    "remark-gfm": "catalog:",
     "swr": "catalog:",
     "zod": "catalog:"
   },

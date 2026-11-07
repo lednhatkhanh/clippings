@@ -1,11 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { handleLibrarianJob } from "@/lib/librarian/job-request.ts";
+import type { LibraryIndex } from "@/lib/librarian/library-index.ts";
+import { EMPTY_PLAN, type LibraryPlan } from "@/lib/librarian/plan.ts";
+import type { Planner } from "@/lib/librarian/planner.ts";
+import { createLibrarianRunner } from "@/lib/librarian/run.ts";
 import {
   createServiceFixture,
   TEST_DATABASE_URL,
   type ServiceFixture,
 } from "@clippings/db/testing";
 import {
+  MAX_NOTE_BODY_LENGTH,
   MAX_NOTE_LENGTH,
   MAX_TAG_LENGTH,
   MAX_TAGS_PER_CLIPPING,
@@ -17,14 +23,25 @@ import { WRITE_SCOPE } from "./scopes.ts";
 import type { McpCaller } from "./tools.ts";
 
 const WRITE_TOOLS = [
+  "apply_suggestion",
+  "create_folder",
   "delete_clipping",
+  "dismiss_suggestion",
   "get_clipping",
   "get_page_text",
+  "link_items",
+  "list_folders",
+  "list_suggestions",
   "list_tags",
   "merge_tag",
+  "move_to_folder",
   "rename_tag",
   "restore_clipping",
+  "run_librarian",
+  "save_note",
+  "set_tag_color",
   "tag_clippings",
+  "undo_change",
   "update_clipping",
 ];
 const READ_TOOLS = [
@@ -37,7 +54,9 @@ const READ_TOOLS = [
 
 interface ToolClipping {
   id: string;
-  url: string;
+  kind: "link" | "note";
+  url: string | null;
+  body?: string | null;
   title: string;
   pageTitle?: string;
   excerpt: string | null;
@@ -53,11 +72,32 @@ describe.skipIf(!TEST_DATABASE_URL)("the MCP tools", () => {
   let handler: (request: Request) => Promise<Response>;
   let ada: McpCaller;
   let bob: McpCaller;
+  /** The user ids whose libraries the planner was given, in order. */
+  let planned: string[];
+  /** The plan the librarian's planner returns for a library. */
+  let planFor: (index: LibraryIndex) => LibraryPlan;
+  let runner: ReturnType<typeof createLibrarianRunner>;
 
   beforeEach(async () => {
     fixture = await createServiceFixture();
+    planned = [];
+    planFor = () => EMPTY_PLAN;
+    const planner: Planner = {
+      plan: async (userId, index) => {
+        planned.push(userId);
+        return { plan: planFor(index), capReached: false, notices: [], costMicros: 0 };
+      },
+    };
+    runner = createLibrarianRunner({
+      librarian: fixture.librarian,
+      planner,
+      now: () => fixture.clock.now(),
+    });
     handler = createClippingsMcpHandler({
       clippings: fixture.service,
+      librarian: fixture.librarian,
+      research: fixture.research,
+      runner,
       appOrigin: "https://clippings.test",
     });
     ada = { userId: await fixture.createUser("ada"), clientId: "https://claude.ai/oauth/mcp" };
@@ -176,12 +216,22 @@ describe.skipIf(!TEST_DATABASE_URL)("the MCP tools", () => {
       ["get_clipping", { id }],
       ["get_page_text", { id }],
       ["update_clipping", { id, title: "Renamed", note: "changed", tags: ["x"] }],
+      ["save_note", { body: "should not be saved" }],
       ["list_tags", {}],
       ["delete_clipping", { id }],
       ["restore_clipping", { id }],
       ["tag_clippings", { ids: [id], add: ["x"] }],
       ["rename_tag", { name: "x", newName: "y" }],
       ["merge_tag", { from: "x", into: "y" }],
+      ["set_tag_color", { tag: "x", color: "red" }],
+      ["create_folder", { name: "Folder" }],
+      ["move_to_folder", { folder: "Folder", clippingIds: [id] }],
+      ["link_items", { fromId: id, toId: id, reason: "why" }],
+      ["list_folders", {}],
+      ["list_suggestions", {}],
+      ["apply_suggestion", { id }],
+      ["dismiss_suggestion", { id }],
+      ["undo_change", { id }],
     ];
     for (const [name, args] of calls) {
       const response = await rpc(ada, "tools/call", { name, arguments: args }, []);
@@ -195,6 +245,8 @@ describe.skipIf(!TEST_DATABASE_URL)("the MCP tools", () => {
       title: "https://example.com/keep",
       tags: [],
     });
+    // Nor was the note saved.
+    expect((await fixture.service.listClippings(ada.userId, {})).items).toHaveLength(1);
   });
 
   it("saves a clipping with source mcp and the calling client recorded", async () => {
@@ -329,7 +381,7 @@ describe.skipIf(!TEST_DATABASE_URL)("the MCP tools", () => {
 
     const urlsOf = (result: { json: () => unknown }) =>
       (result.json() as { clippings: ToolClipping[] }).clippings.map((clipping) =>
-        clipping.url.replace("https://example.com/", ""),
+        clipping.url!.replace("https://example.com/", ""),
       );
 
     it("lists newest first, pinned among the rest, and pages with nextCursor", async () => {
@@ -463,6 +515,75 @@ describe.skipIf(!TEST_DATABASE_URL)("the MCP tools", () => {
       return (saved.json() as { clipping: ToolClipping }).clipping;
     }
 
+    describe("save_note", () => {
+      const body = "# Gearbox ideas\n\n- a wider ratio\n- [ ] ask the shop\n\n<b>raw</b>";
+
+      it("saves Markdown text as a note for the caller, source mcp and the client recorded", async () => {
+        const saved = await callTool(ada, "save_note", { body, tags: ["cars"] });
+
+        expect(saved.isError).toBe(false);
+        const { clipping } = saved.json() as { clipping: ToolClipping };
+        expect(clipping).toMatchObject({
+          kind: "note",
+          url: null,
+          title: "Gearbox ideas",
+          // Exactly as sent: no conversion.
+          body,
+          tags: ["cars"],
+          source: "mcp",
+          status: "pending",
+        });
+        expect(clipping.link).toBe(`https://clippings.test/c/${clipping.id}`);
+        const stored = await fixture.service.getClipping(ada.userId, clipping.id);
+        expect(stored).toMatchObject({ kind: "note", body, clientId: ada.clientId });
+        expect(fixture.enrichmentRequests).toEqual([clipping.id]);
+      });
+
+      it("keeps users apart: the note is the caller's alone", async () => {
+        const { clipping } = (await callTool(ada, "save_note", { body })).json() as {
+          clipping: ToolClipping;
+        };
+
+        expect((await callTool(bob, "get_clipping", { id: clipping.id })).isError).toBe(true);
+        expect((await callTool(bob, "list_recent", {})).json()).toEqual({ clippings: [] });
+        expect((await callTool(bob, "delete_clipping", { id: clipping.id })).isError).toBe(true);
+        expect(await fixture.service.getClipping(ada.userId, clipping.id)).not.toBeNull();
+      });
+
+      it("lists the note next to links, with a null address, and reads it back in full", async () => {
+        await save(ada, "https://example.com/a");
+        fixture.advanceClock(60_000);
+        const { clipping } = (await callTool(ada, "save_note", { body })).json() as {
+          clipping: ToolClipping;
+        };
+
+        const recent = (await callTool(ada, "list_recent", {})).json() as {
+          clippings: ToolClipping[];
+        };
+        expect(recent.clippings.map((c) => [c.kind, c.url === null])).toEqual([
+          ["note", true],
+          ["link", false],
+        ]);
+        // The list leaves the text out; get_clipping has it.
+        expect(recent.clippings[0]?.body).toBeUndefined();
+        const full = (await callTool(ada, "get_clipping", { id: clipping.id })).json() as {
+          clipping: ToolClipping;
+        };
+        expect(full.clipping.body).toBe(body);
+        expect((await callTool(ada, "get_page_text", { id: clipping.id })).isError).toBe(true);
+      });
+
+      it("refuses a blank or too long text and saves nothing", async () => {
+        expect((await callTool(ada, "save_note", { body: "   \n" })).isError).toBe(true);
+        const tooLong = await rpc(ada, "tools/call", {
+          name: "save_note",
+          arguments: { body: "x".repeat(MAX_NOTE_BODY_LENGTH + 1) },
+        });
+        expect(tooLong.error ?? tooLong.result?.isError).toBeTruthy();
+        expect((await fixture.service.listClippings(ada.userId, {})).items).toEqual([]);
+      });
+    });
+
     it("reads one clipping in full, with the page's title when it was renamed", async () => {
       fixture.web.set("https://example.com/essay", {
         page: { title: "Essay | Example", text: "A long essay about gardening." },
@@ -496,6 +617,42 @@ describe.skipIf(!TEST_DATABASE_URL)("the MCP tools", () => {
         title: "Garden plan",
         pageTitle: "An essay about gardening",
       });
+    });
+
+    it("returns the research brief with the clipping, only to its owner", async () => {
+      const { id } = await save(ada, "https://example.com/shipping");
+      type WithBrief = {
+        brief: {
+          status: string;
+          domain: string;
+          body: string | null;
+          sources: { url: string; title: string }[];
+          updatedAt: string;
+        } | null;
+      };
+      const briefOf = async (caller: McpCaller) =>
+        ((await callTool(caller, "get_clipping", { id })).json() as WithBrief).brief;
+
+      expect(await briefOf(ada)).toBeNull();
+
+      const started = await fixture.research.requestBriefNow(ada.userId, id);
+      if (started.status !== "started") throw new Error(`Not started: ${started.status}`);
+      expect(await briefOf(ada)).toMatchObject({ status: "writing", body: null, sources: [] });
+
+      fixture.advanceClock(60_000);
+      await fixture.research.completeBrief(started.brief.id, {
+        body: "Port congestion is easing.",
+        sources: [{ url: "https://example.com/source", title: "A source" }],
+      });
+      expect(await briefOf(ada)).toEqual({
+        status: "ready",
+        domain: "",
+        body: "Port congestion is easing.",
+        sources: [{ url: "https://example.com/source", title: "A source" }],
+        updatedAt: "2026-10-01T09:01:00.000Z",
+      });
+      // Bob has no clipping with that id, so he gets no brief either.
+      expect((await callTool(bob, "get_clipping", { id })).isError).toBe(true);
     });
 
     it("returns the page text Clippings saved, and says so when there is none", async () => {
@@ -723,8 +880,12 @@ describe.skipIf(!TEST_DATABASE_URL)("the MCP tools", () => {
         await callTool(ada, "update_clipping", { id: b.id, tags: ["work"] });
 
         const renamed = await callTool(ada, "rename_tag", { name: "WORK", newName: "Projects" });
-        expect(renamed.json()).toEqual({ from: "Work", to: "Projects" });
-        expect(renamed.structured).toEqual({ from: "Work", to: "Projects" });
+        expect(renamed.json()).toEqual({
+          from: "Work",
+          to: "Projects",
+          changeId: expect.any(String),
+        });
+        expect(renamed.structured).toEqual(renamed.json());
         expect(await tagNames(ada, a.id)).toEqual(["Projects", "keep"]);
         expect(await tagNames(ada, b.id)).toEqual(["Projects"]);
       });
@@ -754,7 +915,12 @@ describe.skipIf(!TEST_DATABASE_URL)("the MCP tools", () => {
         await callTool(ada, "update_clipping", { id: c.id, tags: ["web"] });
 
         const merged = await callTool(ada, "merge_tag", { from: "JS", into: "javascript" });
-        expect(merged.json()).toEqual({ merged: true, from: "js", into: "javascript" });
+        expect(merged.json()).toEqual({
+          merged: true,
+          from: "js",
+          into: "javascript",
+          changeId: expect.any(String),
+        });
         expect(await tagNames(ada, a.id)).toEqual(["javascript", "web"]);
         expect(await tagNames(ada, b.id)).toEqual(["javascript"]);
         expect(await tagNames(ada, c.id)).toEqual(["web"]);
@@ -882,6 +1048,566 @@ describe.skipIf(!TEST_DATABASE_URL)("the MCP tools", () => {
         });
         expect(refused.isError).toBe(true);
         expect(await tagNames(ada, roomy.id)).toEqual([]);
+      });
+    });
+
+    describe("librarian tools", () => {
+      interface ToolChange {
+        id: string | null;
+        action: string;
+        status: string;
+        actor: string;
+        summary: string;
+        targetIds: string[];
+        before: unknown;
+        after: unknown;
+      }
+      interface Outcome {
+        outcome: "applied" | "would_apply" | "skipped";
+        change: ToolChange | null;
+        reason: string | null;
+      }
+
+      const tagRow = async (userId: string, name: string) => {
+        const tag = await fixture.service.findTagByName(userId, name);
+        const { rows } = await fixture.pool.query(
+          `select color, color_overridden, folder_id from tags where id = $1`,
+          [tag?.id],
+        );
+        return rows[0] as { color: string; color_overridden: boolean; folder_id: string | null };
+      };
+      const tagNames = async (caller: McpCaller, id: string) =>
+        (await fixture.service.getClipping(caller.userId, id))?.tags
+          .map((tag) => tag.name)
+          .toSorted();
+      const logged = async (userId: string) =>
+        (
+          await fixture.pool.query(
+            `select actor, action, status from library_changes where user_id = $1 order by created_at, id`,
+            [userId],
+          )
+        ).rows;
+
+      it("sets a tag color, logs it as the user's, and the librarian can't change it afterwards", async () => {
+        const a = await save(ada, "https://example.com/a");
+        await callTool(ada, "update_clipping", { id: a.id, tags: ["css"] });
+
+        const set = await callTool(ada, "set_tag_color", { tag: "CSS", color: "violet" });
+
+        const outcome = set.json() as Outcome;
+        expect(set.structured).toEqual(outcome);
+        expect(outcome).toMatchObject({
+          outcome: "applied",
+          change: { action: "set_tag_color", status: "applied", actor: "user_via_mcp" },
+        });
+        expect(await tagRow(ada.userId, "css")).toEqual({
+          color: "violet",
+          color_overridden: true,
+          folder_id: null,
+        });
+        const tag = await fixture.service.findTagByName(ada.userId, "css");
+        const byLibrarian = await fixture.librarian.proposeChange(ada.userId, "librarian", {
+          action: "set_tag_color",
+          tagId: tag!.id,
+          color: "red",
+          confidence: "high",
+          reason: "Looks red",
+        });
+        expect(byLibrarian.outcome).toBe("skipped");
+        expect((await tagRow(ada.userId, "css")).color).toBe("violet");
+      });
+
+      it("reports a dry run and changes nothing", async () => {
+        const a = await save(ada, "https://example.com/a");
+        await callTool(ada, "update_clipping", { id: a.id, tags: ["css"] });
+
+        const set = await callTool(ada, "set_tag_color", {
+          tag: "css",
+          color: "red",
+          dryRun: true,
+        });
+        const folder = await callTool(ada, "create_folder", { name: "Web", dryRun: true });
+
+        expect(set.json()).toMatchObject({
+          outcome: "would_apply",
+          change: { id: null, summary: 'Color the tag "css" red' },
+        });
+        expect((folder.json() as Outcome).outcome).toBe("would_apply");
+        expect((await tagRow(ada.userId, "css")).color).toBe("none");
+        expect(await logged(ada.userId)).toEqual([]);
+        expect(
+          ((await callTool(ada, "list_folders", {})).json() as { folders: [] }).folders,
+        ).toEqual([]);
+      });
+
+      it("fails on an unknown tag, a color outside the palette and a tag that is another user's", async () => {
+        const b = await save(bob, "https://example.com/b");
+        await callTool(bob, "update_clipping", { id: b.id, tags: ["bobs"] });
+
+        expect((await callTool(ada, "set_tag_color", { tag: "bobs", color: "red" })).isError).toBe(
+          true,
+        );
+        const response = await rpc(ada, "tools/call", {
+          name: "set_tag_color",
+          arguments: { tag: "x", color: "#ff0000" },
+        });
+        expect(response.error ?? response.result?.isError).toBeTruthy();
+        expect((await tagRow(bob.userId, "bobs")).color).toBe("none");
+      });
+
+      it("creates folders, lists them, and files clippings and tags in one, the tag taking its color", async () => {
+        const a = await save(ada, "https://example.com/a");
+        const n = (await callTool(ada, "save_note", { body: "A thought" })).json() as {
+          clipping: ToolClipping;
+        };
+        await callTool(ada, "update_clipping", { id: a.id, tags: ["css"] });
+
+        const created = await callTool(ada, "create_folder", { name: "Web dev", color: "teal" });
+        const again = await callTool(ada, "create_folder", { name: "WEB DEV" });
+        const moved = await callTool(ada, "move_to_folder", {
+          folder: "web DEV",
+          clippingIds: [a.id, n.clipping.id, "00000000-0000-4000-8000-000000000000"],
+          tags: ["css", "nope"],
+        });
+
+        expect((created.json() as Outcome).outcome).toBe("applied");
+        expect(again.json()).toMatchObject({ outcome: "skipped" });
+        const { results } = moved.json() as {
+          results: {
+            item: string;
+            outcome: string;
+            changeId: string | null;
+            reason: string | null;
+          }[];
+        };
+        expect(results.map((r) => [r.item, r.outcome])).toEqual([
+          [a.id, "applied"],
+          [n.clipping.id, "applied"],
+          ["00000000-0000-4000-8000-000000000000", "skipped"],
+          ["css", "applied"],
+          ["nope", "skipped"],
+        ]);
+        expect((await callTool(ada, "list_folders", {})).json()).toEqual({
+          folders: [{ name: "Web dev", color: "teal", clippings: 2, tags: 1 }],
+        });
+        expect((await tagRow(ada.userId, "css")).color).toBe("teal");
+      });
+
+      it("won't move into an unknown or another user's folder, or move nothing", async () => {
+        const a = await save(ada, "https://example.com/a");
+        await callTool(bob, "create_folder", { name: "Bobs" });
+
+        expect(
+          (await callTool(ada, "move_to_folder", { folder: "Bobs", clippingIds: [a.id] })).isError,
+        ).toBe(true);
+        await callTool(ada, "create_folder", { name: "Mine" });
+        expect((await callTool(ada, "move_to_folder", { folder: "Mine" })).isError).toBe(true);
+        expect((await callTool(ada, "list_folders", {})).json()).toEqual({
+          folders: [{ name: "Mine", color: "none", clippings: 0, tags: 0 }],
+        });
+      });
+
+      it("links two items with a reason, once per pair, and refuses another user's item", async () => {
+        const a = await save(ada, "https://example.com/a");
+        const b = await save(ada, "https://example.com/b");
+        const theirs = await save(bob, "https://example.com/theirs");
+
+        const linked = await callTool(ada, "link_items", {
+          fromId: a.id,
+          toId: b.id,
+          reason: "Both about layout",
+        });
+        const reversed = await callTool(ada, "link_items", {
+          fromId: b.id,
+          toId: a.id,
+          reason: "Same",
+        });
+
+        expect(linked.json()).toMatchObject({
+          outcome: "applied",
+          change: { action: "link_items" },
+        });
+        expect(reversed.json()).toMatchObject({ outcome: "skipped" });
+        for (const args of [
+          { fromId: a.id, toId: theirs.id, reason: "x" },
+          { fromId: a.id, toId: a.id, reason: "x" },
+          { fromId: a.id, toId: b.id, reason: "   " },
+        ]) {
+          expect((await callTool(ada, "link_items", args)).isError).toBe(true);
+        }
+        const { rows } = await fixture.pool.query(`select reason from item_links`);
+        expect(rows).toEqual([{ reason: "Both about layout" }]);
+      });
+
+      it("merges a tag, logs it, and undo_change brings the tag back on its clippings", async () => {
+        const a = await save(ada, "https://example.com/a");
+        const b = await save(ada, "https://example.com/b");
+        await callTool(ada, "update_clipping", { id: a.id, tags: ["js", "web"] });
+        await callTool(ada, "update_clipping", { id: b.id, tags: ["js"] });
+        await callTool(ada, "set_tag_color", { tag: "js", color: "amber" });
+
+        const merged = (await callTool(ada, "merge_tag", { from: "js", into: "web" })).json() as {
+          changeId: string;
+        };
+        expect(await tagNames(ada, b.id)).toEqual(["web"]);
+        const undone = await callTool(ada, "undo_change", { id: merged.changeId });
+
+        expect(undone.json()).toMatchObject({ change: { id: merged.changeId, status: "undone" } });
+        expect(await tagNames(ada, a.id)).toEqual(["js", "web"]);
+        expect(await tagNames(ada, b.id)).toEqual(["js"]);
+        expect((await tagRow(ada.userId, "js")).color).toBe("amber");
+      });
+
+      it("undoes a rename, and refuses to undo a change a later one touched", async () => {
+        const a = await save(ada, "https://example.com/a");
+        await callTool(ada, "update_clipping", { id: a.id, tags: ["css"] });
+        const colored = (
+          await callTool(ada, "set_tag_color", { tag: "css", color: "red" })
+        ).json() as Outcome;
+        const renamed = (
+          await callTool(ada, "rename_tag", { name: "css", newName: "styles" })
+        ).json() as { changeId: string };
+
+        const refused = await callTool(ada, "undo_change", { id: colored.change!.id! });
+        expect(refused.isError).toBe(true);
+        expect((await tagRow(ada.userId, "styles")).color).toBe("red");
+
+        await callTool(ada, "undo_change", { id: renamed.changeId });
+        await callTool(ada, "undo_change", { id: colored.change!.id! });
+        expect(await tagNames(ada, a.id)).toEqual(["css"]);
+        expect((await tagRow(ada.userId, "css")).color).toBe("none");
+        expect((await callTool(ada, "undo_change", { id: renamed.changeId })).isError).toBe(true);
+      });
+
+      it("lists the librarian's suggestions, applies one, dismisses another, and keeps users apart", async () => {
+        const a = await save(ada, "https://example.com/a");
+        await callTool(ada, "update_clipping", { id: a.id, tags: ["css", "style"] });
+        const css = (await fixture.service.findTagByName(ada.userId, "css"))!;
+        const style = (await fixture.service.findTagByName(ada.userId, "style"))!;
+        for (const [color, tagId] of [
+          ["blue", css.id],
+          ["pink", style.id],
+        ] as const) {
+          fixture.advanceClock(1000);
+          await fixture.librarian.proposeChange(ada.userId, "librarian", {
+            action: "set_tag_color",
+            tagId,
+            color,
+            confidence: "low",
+            reason: "Looks right",
+          });
+        }
+
+        const listed = (await callTool(ada, "list_suggestions", { limit: 1 })).json() as {
+          suggestions: ToolChange[];
+          nextCursor: string;
+        };
+        const next = (
+          await callTool(ada, "list_suggestions", { cursor: listed.nextCursor })
+        ).json() as { suggestions: ToolChange[]; nextCursor: null };
+
+        expect(listed.suggestions[0]).toMatchObject({
+          status: "suggested",
+          actor: "librarian",
+          summary: 'Color the tag "style" pink',
+        });
+        expect(next.suggestions.map((change) => change.summary)).toEqual([
+          'Color the tag "css" blue',
+        ]);
+        // Bob sees none of it and can't decide on Ada's.
+        const id = listed.suggestions[0]!.id!;
+        expect((await callTool(bob, "list_suggestions", {})).json()).toEqual({
+          suggestions: [],
+          nextCursor: null,
+        });
+        expect((await callTool(bob, "apply_suggestion", { id })).isError).toBe(true);
+        expect((await callTool(bob, "dismiss_suggestion", { id })).isError).toBe(true);
+
+        const applied = await callTool(ada, "apply_suggestion", { id });
+        expect(applied.json()).toMatchObject({ change: { id, status: "applied" } });
+        expect((await tagRow(ada.userId, "style")).color).toBe("pink");
+        expect((await callTool(ada, "apply_suggestion", { id })).isError).toBe(true);
+        const dismissed = await callTool(ada, "dismiss_suggestion", {
+          id: next.suggestions[0]!.id,
+        });
+        expect(dismissed.json()).toMatchObject({ change: { status: "dismissed" } });
+        expect((await tagRow(ada.userId, "css")).color).toBe("none");
+        expect((await callTool(ada, "list_suggestions", {})).json()).toEqual({
+          suggestions: [],
+          nextCursor: null,
+        });
+        expect((await callTool(ada, "list_suggestions", { cursor: "nope" })).isError).toBe(true);
+      });
+
+      it("refuses a stale suggestion and leaves it listed", async () => {
+        const a = await save(ada, "https://example.com/a");
+        await callTool(ada, "update_clipping", { id: a.id, tags: ["css"] });
+        const css = (await fixture.service.findTagByName(ada.userId, "css"))!;
+        await fixture.librarian.proposeChange(ada.userId, "librarian", {
+          action: "set_tag_color",
+          tagId: css.id,
+          color: "blue",
+          confidence: "low",
+          reason: "Looks right",
+        });
+        const [{ id }] = (
+          (await callTool(ada, "list_suggestions", {})).json() as { suggestions: ToolChange[] }
+        ).suggestions as [ToolChange];
+        await callTool(ada, "set_tag_color", { tag: "css", color: "red" });
+
+        const applied = await callTool(ada, "apply_suggestion", { id: id! });
+
+        expect(applied.isError).toBe(true);
+        expect(applied.text).toContain("no longer applies");
+        expect((await tagRow(ada.userId, "css")).color).toBe("red");
+      });
+
+      it("never deletes a clipping or note, whatever the tool", async () => {
+        const a = await save(ada, "https://example.com/a");
+        const b = await save(ada, "https://example.com/b");
+        await callTool(ada, "update_clipping", { id: a.id, tags: ["one"] });
+        await callTool(ada, "update_clipping", { id: b.id, tags: ["two"] });
+        await callTool(ada, "create_folder", { name: "F" });
+        await callTool(ada, "move_to_folder", { folder: "F", clippingIds: [a.id], tags: ["one"] });
+        await callTool(ada, "link_items", { fromId: a.id, toId: b.id, reason: "Related" });
+        const merged = (await callTool(ada, "merge_tag", { from: "one", into: "two" })).json() as {
+          changeId: string;
+        };
+        await callTool(ada, "undo_change", { id: merged.changeId });
+
+        const { rows } = await fixture.pool.query(
+          `select count(*)::int as live from clippings where deleted_at is null`,
+        );
+        expect(rows[0].live).toBe(2);
+        expect(await logged(ada.userId)).toHaveLength(5);
+      });
+
+      describe("run_librarian", () => {
+        interface RunChange {
+          outcome: string;
+          action: string;
+          change: {
+            action: string;
+            targetIds: string[];
+            reason: string;
+            confidence: string;
+          } | null;
+          reason: string | null;
+        }
+        interface Run {
+          dryRun: boolean;
+          firstRun: boolean;
+          counts: Record<string, number>;
+          changes: RunChange[];
+        }
+
+        /** Two pages about css: merge "css layout" into "css", file the first under a new folder. */
+        async function seedLibrary(caller: McpCaller) {
+          const a = await save(caller, "https://example.com/a");
+          const b = await save(caller, "https://example.com/b");
+          await callTool(caller, "update_clipping", { id: a.id, tags: ["css", "css layout"] });
+          await callTool(caller, "update_clipping", { id: b.id, tags: ["css"] });
+          planFor = (index) => {
+            const tag = (name: string) =>
+              index.tagRef(index.view.tags.find((candidate) => candidate.name === name)!.id)!;
+            return {
+              ...EMPTY_PLAN,
+              merges: [
+                {
+                  source: tag("css layout"),
+                  target: tag("css"),
+                  reason: "The same topic",
+                  confidence: "high",
+                },
+              ],
+              folders: [
+                { name: "Frontend", color: "blue", reason: "Web styling", confidence: "high" },
+              ],
+              moves: [{ ref: index.itemRef(a.id)!, folder: "Frontend", confidence: "high" }],
+            };
+          };
+          return { a, b };
+        }
+
+        const run = async (caller: McpCaller, args: Record<string, unknown> = {}) =>
+          (await callTool(caller, "run_librarian", args)).structured as Run;
+
+        const changeCount = async (userId: string) =>
+          (
+            await fixture.pool.query(
+              `select count(*)::int as n from library_changes where user_id = $1`,
+              [userId],
+            )
+          ).rows[0].n as number;
+
+        /** What identifies a change in a list, whichever path made it. */
+        const shape = (changes: RunChange[]) =>
+          changes.map(({ action, change }) => ({
+            action,
+            targetIds: change?.targetIds,
+            reason: change?.reason,
+            confidence: change?.confidence,
+          }));
+
+        it("is a dry run by default: it lists the changes and writes nothing", async () => {
+          await seedLibrary(ada);
+          const before = await changeCount(ada.userId);
+
+          const result = await run(ada);
+
+          expect(result.dryRun).toBe(true);
+          expect(result.changes.map((entry) => entry.action)).toEqual([
+            "merge_tag",
+            "create_folder",
+            "move_to_folder",
+          ]);
+          expect(await changeCount(ada.userId)).toBe(before);
+          expect(await fixture.service.findTagByName(ada.userId, "css layout")).not.toBeNull();
+        });
+
+        it("gives the same change list as the weekly job for the same library", async () => {
+          await seedLibrary(ada);
+          const dry = await run(ada);
+
+          const job = await handleLibrarianJob(
+            new Request("https://clippings.test/api/jobs/librarian", {
+              method: "POST",
+              headers: { "Upstash-Signature": "signed" },
+              body: JSON.stringify({ userId: ada.userId }),
+            }),
+            {
+              url: "https://clippings.test/api/jobs/librarian",
+              receiver: { verify: async () => true },
+              runner,
+            },
+          );
+          const stored = (
+            await fixture.pool.query(
+              `select action, target_ids, reason, confidence, status from library_changes
+               where user_id = $1 order by created_at, id`,
+              [ada.userId],
+            )
+          ).rows as {
+            action: string;
+            target_ids: string[];
+            reason: string;
+            confidence: string;
+            status: string;
+          }[];
+
+          expect(job.status).toBe(200);
+          expect(dry.firstRun).toBe(true);
+          expect(dry.counts).toMatchObject({ wouldSuggest: 3, wouldApply: 0 });
+          expect(stored.map((row) => row.status)).toEqual(["suggested", "suggested", "suggested"]);
+          // The log holds them in the order they were made; a frozen clock gives them one time.
+          const byAction = <T extends { action: string }>(list: T[]) =>
+            list.toSorted((x, y) => x.action.localeCompare(y.action));
+          expect(
+            byAction(
+              stored.map(({ action, target_ids, reason, confidence }) => ({
+                action,
+                targetIds: target_ids,
+                reason,
+                confidence,
+              })),
+            ),
+          ).toEqual(byAction(shape(dry.changes)));
+        });
+
+        it("applies what the librarian is sure of after the first run, and a merge can be undone", async () => {
+          const { a } = await seedLibrary(ada);
+          await fixture.librarian.markLibrarianRun(ada.userId);
+          const dry = await run(ada);
+
+          const real = await run(ada, { dryRun: false });
+
+          expect(dry.firstRun).toBe(false);
+          expect(dry.counts).toMatchObject({ wouldApply: 3 });
+          expect(real.counts).toMatchObject({ applied: 3 });
+          expect(shape(real.changes)).toEqual(shape(dry.changes));
+          expect(await fixture.service.findTagByName(ada.userId, "css layout")).toBeNull();
+          expect(await tagNames(ada, a.id)).toEqual(["css"]);
+
+          const merge = real.changes.find((entry) => entry.action === "merge_tag")!;
+          const changeId = (merge.change as unknown as { id: string }).id;
+          const undone = await callTool(ada, "undo_change", { id: changeId });
+
+          expect(undone.isError).toBe(false);
+          expect(await fixture.service.findTagByName(ada.userId, "css layout")).not.toBeNull();
+          expect(await tagNames(ada, a.id)).toEqual(["css", "css layout"]);
+        });
+
+        it("treats a first run cut off partway as a first run when QStash redelivers it", async () => {
+          await seedLibrary(ada);
+          const flaky = createLibrarianRunner({
+            librarian: {
+              ...fixture.librarian,
+              proposeChanges: async (userId, actor, proposals, options) => {
+                await fixture.librarian.proposeChanges(
+                  userId,
+                  actor,
+                  proposals.slice(0, 1),
+                  options,
+                );
+                throw new Error("cut off");
+              },
+            },
+            planner: {
+              plan: async (_userId, index) => ({
+                plan: planFor(index),
+                capReached: false,
+                notices: [],
+                costMicros: 0,
+              }),
+            },
+            now: () => fixture.clock.now(),
+          });
+          const deliver = (jobRunner: typeof runner) =>
+            handleLibrarianJob(
+              new Request("https://clippings.test/api/jobs/librarian", {
+                method: "POST",
+                headers: { "Upstash-Signature": "signed" },
+                body: JSON.stringify({ userId: ada.userId }),
+              }),
+              {
+                url: "https://clippings.test/api/jobs/librarian",
+                receiver: { verify: async () => true },
+                runner: jobRunner,
+              },
+            );
+          const statuses = async () =>
+            (
+              await fixture.pool.query(
+                `select distinct status from library_changes where user_id = $1`,
+                [ada.userId],
+              )
+            ).rows.map((row) => row.status);
+
+          expect((await deliver(flaky)).status).toBe(500);
+          const redelivered = await deliver(runner);
+
+          expect(redelivered.status).toBe(200);
+          expect(await redelivered.json()).toMatchObject({ firstRun: true, applied: 0 });
+          expect(await statuses()).toEqual(["suggested"]);
+          expect(await fixture.service.findTagByName(ada.userId, "css layout")).not.toBeNull();
+          // The finished run is the first one; the next may apply what it is sure of.
+          expect((await run(ada)).firstRun).toBe(false);
+        });
+
+        it("plans from the caller's library only", async () => {
+          await seedLibrary(ada);
+          await save(bob, "https://example.com/bobs");
+
+          await run(bob);
+
+          expect(planned).toEqual([bob.userId]);
+          expect(await changeCount(ada.userId)).toBe(0);
+        });
+
+        it("is offered only with write access", async () => {
+          const names = (await toolsFor([])).map((tool) => tool.name);
+          expect(names).not.toContain("run_librarian");
+        });
       });
     });
   });

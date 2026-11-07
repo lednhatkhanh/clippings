@@ -13,7 +13,12 @@ import {
 } from "@/lib/clippings/browse-params.ts";
 import type { RowsPage } from "@/lib/clippings/rows.ts";
 import { SOURCE_LABELS } from "@/lib/clippings/source-labels.ts";
-import { CLIPPING_SOURCES, SEARCH_RESULT_LIMIT, SEARCH_SORTS } from "@clippings/shared";
+import {
+  CLIPPING_SOURCES,
+  SEARCH_RESULT_LIMIT,
+  SEARCH_SORTS,
+  type Folder,
+} from "@clippings/shared";
 import {
   Button,
   cn,
@@ -22,6 +27,7 @@ import {
   SearchField,
   Segment,
   SegmentedButtons,
+  TagDot,
 } from "@clippings/ui";
 
 import { ClippingList } from "./clipping-list.tsx";
@@ -76,11 +82,14 @@ function NoResults({
 export function ClippingsBrowser({
   initialParams,
   initialPage,
+  folders = [],
 }: {
   initialParams: BrowseParams;
   initialPage: RowsPage;
+  /** The user's folders, to filter by; the row of folder chips shows only when there are any. */
+  folders?: readonly Folder[];
 }) {
-  const [{ q: query, tags, sources, sort }, setParams] = useQueryStates(browseParsers, {
+  const [{ q: query, tags, sources, folder, sort }, setParams] = useQueryStates(browseParsers, {
     urlKeys: browseUrlKeys,
   });
   const [searchedQuery, setSearchedQuery] = useState(query);
@@ -103,7 +112,7 @@ export function ClippingsBrowser({
     return () => clearTimeout(timer);
   }, [query, searchedQuery]);
 
-  const params: BrowseParams = { q: searchedQuery, tags, sources, sort };
+  const params: BrowseParams = { q: searchedQuery, tags, sources, folder, sort };
   const key = toQueryString(params);
   // What the server rendered: it renders again, with fresh rows, after a save or delete.
   const isServerPage = key === toQueryString(initialParams);
@@ -157,7 +166,7 @@ export function ClippingsBrowser({
   const isStale = !current || query.trim() !== searchedQuery.trim();
   const shownParams = new URLSearchParams(shown.key);
   const shownQuery = shownParams.get("q") ?? "";
-  const hasFilters = tags.length > 0 || sources.length > 0;
+  const hasFilters = tags.length > 0 || sources.length > 0 || folder !== null;
   const { pinned, rows } = shown.page;
 
   return (
@@ -192,6 +201,23 @@ export function ClippingsBrowser({
           {tags.map((tag) => (
             <FilterChip key={tag} id={tag}>
               {tag}
+            </FilterChip>
+          ))}
+        </FilterChips>
+      ) : null}
+      {folders.length > 0 ? (
+        // One folder at a time: choosing another replaces it, choosing it again clears it.
+        <FilterChips
+          aria-label="Folders"
+          selectedKeys={folder ? [folder] : []}
+          onSelectionChange={(keys) =>
+            void setParams({ folder: keys.find((key) => key !== folder) ?? null })
+          }
+        >
+          {folders.map((entry) => (
+            <FilterChip key={entry.id} id={entry.id}>
+              <TagDot color={entry.color} showNone />
+              {entry.name}
             </FilterChip>
           ))}
         </FilterChips>
@@ -243,7 +269,7 @@ export function ClippingsBrowser({
           <NoResults
             q={shownQuery}
             hasFilters={hasFilters}
-            onClearFilters={() => void setParams({ tags: null, sources: null })}
+            onClearFilters={() => void setParams({ tags: null, sources: null, folder: null })}
           />
         ) : (
           <ClippingList

@@ -1,3 +1,5 @@
+import type { ClippingKind, LibraryChangeConfidence, ModelJobKind } from "@clippings/shared";
+
 /** Time, injected so tests decide what "now" is. */
 export interface Clock {
   now: () => Date;
@@ -48,6 +50,26 @@ export interface PageFetcher {
   checkLink: (url: string) => Promise<"alive" | "dead" | "unknown">;
 }
 
+/**
+ * Whether a user's budget allows a model call, asked before the work that leads up to it. A cheap
+ * look at the ledger, not the gateway's own check, which stays authoritative at the call.
+ */
+export interface BudgetGate {
+  /** False when the user's daily cap leaves no room for a call of this kind. */
+  canSpend: (userId: string, jobKind: ModelJobKind) => Promise<boolean>;
+}
+
+/** A tag the model proposes for a page, with how sure it is. */
+export interface TagProposal {
+  /** Spelled as the user spells it when `existing`. */
+  name: string;
+  /** Whether the name is one of the user's own tags (as listed to the model). */
+  existing: boolean;
+  confidence: LibraryChangeConfidence;
+  /** One line on why the tag fits, for the change log. */
+  reason: string;
+}
+
 /** What the summarizer makes of a page. */
 export interface PageSummary {
   title: string;
@@ -59,18 +81,65 @@ export interface PageSummary {
    * unusable.
    */
   suggestedTags?: string[];
+  /**
+   * The same tags with the model's confidence in each and its reason, in the same order. Left
+   * out when the model gave no confidence (every tag in `suggestedTags` is then a suggestion).
+   */
+  tagProposals?: TagProposal[];
+  /**
+   * The model's call on whether the save is worth a research brief, when it was asked. Left out
+   * when research was off or the verdict was unusable.
+   */
+  research?: ResearchVerdict;
 }
 
-/** What the summarizer reads: the page, and the user's tag names when they want suggestions. */
-export type SummarizerInput = { url: string } & FetchedPage & {
+/** The triage verdict on a save. */
+export interface ResearchVerdict {
+  worth: boolean;
+  /** One of the user's research domains, in their spelling; empty when not worth it. */
+  domain: string;
+  /** One sentence on why. */
+  reason: string;
+}
+
+/**
+ * Thrown by a port when the model gateway refused a call because the user's daily cap is reached
+ * (or Anthropic says a spend limit or the credit is exhausted). Not a failure: the work waits for
+ * another day, so enrichment holds the clipping instead of retrying or failing it.
+ */
+export class CapReachedError extends Error {
+  constructor() {
+    super("The daily model spend cap is reached");
+    this.name = "CapReachedError";
+  }
+}
+
+/**
+ * What the summarizer reads: the page (or, for a note, its body as `text`, with no `url`), and the
+ * user's tag names when they want suggestions.
+ */
+export type SummarizerInput = {
+  kind: ClippingKind;
+  /** Null for a note. */
+  url: string | null;
+  userId: string;
+} & FetchedPage & {
     /**
      * The user's most-used tag names, when they have tag suggestions on (possibly none yet).
      * Undefined when suggestions are off: then no tag names leave the app and none are suggested.
      */
     userTags?: readonly string[];
+    /**
+     * The user's "About me" text and research domains, when they have domains (an empty list turns
+     * research off). The summarizer then also says whether the save is worth a research brief.
+     */
+    research?: { profile: string; domains: readonly string[] };
   };
 
-/** Reads a page the way a person would: a clean title, a short summary, a passage worth keeping. */
+/**
+ * Reads a page the way a person would: a clean title, a short summary, a passage worth keeping.
+ * Throws `CapReachedError` when the user's spend cap is reached.
+ */
 export interface Summarizer {
   summarize: (page: SummarizerInput) => Promise<PageSummary>;
 }
@@ -81,44 +150,29 @@ export interface Summarizer {
  */
 export type EmbeddingPurpose = "document" | "query";
 
-/** Turns text into a vector of `EMBEDDING_DIMENSIONS` (schema.ts) numbers, close for texts close in meaning. */
-export interface Embedder {
-  /** `signal` cancels the call, as when the reader has typed past a search. */
-  embed: (text: string, purpose: EmbeddingPurpose, signal?: AbortSignal) => Promise<number[]>;
-  /** One vector per text, in order. For a backlog: one call instead of one per text. */
-  embedMany: (texts: readonly string[], purpose: EmbeddingPurpose) => Promise<number[][]>;
-}
-
-/** A clipping as the digester reads it. */
-export interface DigestClipping {
-  id: string;
-  title: string;
-  summary: string | null;
-  /** The user's tag names on it. */
-  tags: string[];
-  note: string;
-}
-
-/** What the digester reads: one finished week of a user's clippings, and some older ones. */
-export interface DigesterInput {
-  /** The week's Monday, `yyyy-MM-dd` (UTC). */
-  weekStart: string;
-  /** Everything saved that week, newest first. */
-  clippings: DigestClipping[];
-  /** Up to 3 older clippings related to the week's, which the digest may bring back. */
-  related: DigestClipping[];
+/** Whose spend an embedding call counts toward, and for which job. */
+export interface EmbeddingOwner {
+  userId: string;
+  /** "search" for a query the reader is waiting on, "enrich" for a clipping's own text. */
+  jobKind: "enrich" | "search";
 }
 
 /**
- * A user's digest of a week, as stored: the week's clippings in groups, and older ones worth
- * seeing again. Clippings are named by id, and every id comes from the digester's input.
+ * Turns text into a vector of `EMBEDDING_DIMENSIONS` (schema.ts) numbers, close for texts close in
+ * meaning. Throws `CapReachedError` when the owner's spend cap is reached.
  */
-export interface WeeklyDigest {
-  groups: { title: string; summary: string; clippingIds: string[] }[];
-  resurfaced: { clippingId: string; why: string }[];
-}
-
-/** Writes the digest of a week: groups the clippings by theme and says why an older one is back. */
-export interface Digester {
-  digest: (input: DigesterInput) => Promise<WeeklyDigest>;
+export interface Embedder {
+  /** `signal` cancels the call, as when the reader has typed past a search. */
+  embed: (
+    text: string,
+    purpose: EmbeddingPurpose,
+    owner: EmbeddingOwner,
+    signal?: AbortSignal,
+  ) => Promise<number[]>;
+  /** One vector per text, in order. For a backlog: one call instead of one per text. */
+  embedMany: (
+    texts: readonly string[],
+    purpose: EmbeddingPurpose,
+    owner: EmbeddingOwner,
+  ) => Promise<number[][]>;
 }

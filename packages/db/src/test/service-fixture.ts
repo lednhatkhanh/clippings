@@ -1,25 +1,29 @@
 import { addMilliseconds, parseISO } from "date-fns";
 import pg from "pg";
 
-import type {
-  Clock,
-  Digester,
-  DigesterInput,
-  Embedder,
-  EmbeddingPurpose,
-  FetchedPage,
-  JobPublisher,
-  PageFetcher,
-  PageSummary,
-  Summarizer,
-  WeeklyDigest,
+import { createChangesService } from "../changes/service.ts";
+import {
+  CapReachedError,
+  type BudgetGate,
+  type Clock,
+  type Embedder,
+  type EmbeddingPurpose,
+  type FetchedPage,
+  type JobPublisher,
+  type PageFetcher,
+  type PageSummary,
+  type Summarizer,
+  type SummarizerInput,
 } from "../clippings/ports.ts";
 import { createClippingsService } from "../clippings/service.ts";
 import { createConnectionsService } from "../connections/service.ts";
-import { createDigestService } from "../digest/service.ts";
+import { createLibraryService } from "../librarian/library.ts";
+import { createLibrarianService } from "../librarian/service.ts";
 import { createPool } from "../pool.ts";
+import { createResearchService } from "../research/service.ts";
 import { EMBEDDING_DIMENSIONS } from "../schema.ts";
 import { createSettingsService } from "../settings/service.ts";
+import { createUsageService } from "../usage/service.ts";
 import { createMigratedDatabase, type TempDatabase } from "./temp-database.ts";
 
 /**
@@ -82,13 +86,36 @@ export async function createServiceFixture() {
   };
   /** The `userTags` each summarize call got, in order: undefined when suggestions were off. */
   const summarizedWithTags: (readonly string[] | undefined)[] = [];
+  /** The `research` each summarize call got, in order: undefined when the user had no domains. */
+  const summarizedWithResearch: (SummarizerInput["research"] | undefined)[] = [];
   /** The page (URL, title and text) each summarize call got, in order. */
   const summarizedPages: { url: string; title: string | null; text: string }[] = [];
+  /** Whether the model gateway refuses calls, as it does for a user past their daily cap. */
+  let capped = false;
+  /** What the summarizer makes of a note, by its body; a body not in it gets a reading of its own. */
+  const noteReadings = new Map<string, PageSummary>();
+  /** The body of each note the summarizer was asked to read, in order. */
+  const summarizedNotes: string[] = [];
+  /** Runs while the summarizer reads the note with this body, before it answers. */
+  const duringNoteReading = new Map<string, () => Promise<void>>();
   const summarizer: Summarizer = {
-    summarize: async ({ url, title, text, userTags }) => {
+    summarize: async ({ kind, url, title, text, userTags, research }) => {
+      if (capped) throw new CapReachedError();
       summarizedWithTags.push(userTags);
-      summarizedPages.push({ url, title, text });
-      const entry = web.get(url);
+      summarizedWithResearch.push(research);
+      if (kind === "note") {
+        summarizedNotes.push(text);
+        await duringNoteReading.get(text)?.();
+        return (
+          noteReadings.get(text) ?? {
+            title: "A title the model wrote",
+            summary: `About: ${text.slice(0, 40)}`,
+            excerpt: text.slice(0, 40),
+          }
+        );
+      }
+      summarizedPages.push({ url: url!, title, text });
+      const entry = web.get(url!);
       if (!entry?.summary) throw new Error(`Nothing to summarize at ${url}`);
       return entry.summary;
     },
@@ -97,18 +124,32 @@ export async function createServiceFixture() {
   /** Word → the meaning it carries. Words that share a meaning embed close together. */
   const meanings = new Map<string, string>();
   const embedded: { text: string; purpose: EmbeddingPurpose }[] = [];
+  /** Who each embedding call was made for, in order. */
+  const embeddedFor: { userId: string; jobKind: string }[] = [];
   /** The size of each `embedMany` call, in order. */
   const embeddedBatches: number[] = [];
+  /** Runs while a batched embedding call carrying this text is in flight, before it answers. */
+  const duringEmbedding = new Map<string, () => Promise<void>>();
   let embedding: "up" | "down" = "up";
+  /** Whether only the embedder refuses (the summarizer still answers), and for whom. */
+  let embeddingCapped = false;
+  const cappedEmbeddingUsers = new Set<string>();
+  const embedderRefuses = (userId: string) =>
+    capped || embeddingCapped || cappedEmbeddingUsers.has(userId);
   const embedder: Embedder = {
-    embed: async (text, purpose) => {
+    embed: async (text, purpose, owner) => {
+      if (embedderRefuses(owner.userId)) throw new CapReachedError();
       if (embedding === "down") throw new Error("the embedder is unreachable");
+      embeddedFor.push(owner);
       embedded.push({ text, purpose });
       return fakeEmbedding(text, meanings, embedded.length);
     },
-    embedMany: async (texts, purpose) => {
+    embedMany: async (texts, purpose, owner) => {
+      if (embedderRefuses(owner.userId)) throw new CapReachedError();
       if (embedding === "down") throw new Error("the embedder is unreachable");
+      for (const text of texts) await duringEmbedding.get(text)?.();
       embeddedBatches.push(texts.length);
+      embeddedFor.push(owner);
       return texts.map((text) => {
         embedded.push({ text, purpose });
         return fakeEmbedding(text, meanings, embedded.length);
@@ -116,32 +157,25 @@ export async function createServiceFixture() {
     },
   };
 
-  /** What the digester was asked, in order. */
-  const digested: DigesterInput[] = [];
-  /** Clippings that make the digester fail when they are in the week it reads. */
-  const digesterFailures = new Set<string>();
-  const digester: Digester = {
-    digest: async (input) => {
-      digested.push(input);
-      if (input.clippings.some(({ id }) => digesterFailures.has(id))) {
-        throw new Error("the digester is down");
-      }
-      const result: WeeklyDigest = {
-        groups: [
-          {
-            title: "The week",
-            summary: `${input.clippings.length} clippings.`,
-            clippingIds: input.clippings.map(({ id }) => id),
-          },
-        ],
-        resurfaced: input.related[0]
-          ? [{ clippingId: input.related[0].id, why: "It fits this week." }]
-          : [],
-      };
-      return result;
+  /** The users whose budget gate is shut, and what it was asked about. */
+  const shutBudgets = new Set<string>();
+  const budgetAsked: { userId: string; jobKind: string }[] = [];
+  const budget: BudgetGate = {
+    canSpend: async (userId, jobKind) => {
+      budgetAsked.push({ userId, jobKind });
+      return !shutBudgets.has(userId);
     },
   };
-  const service = createClippingsService({ pool, jobs, clock, fetcher, summarizer, embedder });
+
+  const service = createClippingsService({
+    pool,
+    jobs,
+    clock,
+    fetcher,
+    summarizer,
+    embedder,
+    budget,
+  });
 
   return {
     /** The throwaway database's URL, for code that opens its own pool (Better Auth in web tests). */
@@ -149,16 +183,12 @@ export async function createServiceFixture() {
     service,
     /** The clock the services read, for a service the test builds itself. */
     clock,
-    digests: createDigestService({ pool, clock, digester, clippings: service }),
-    /** Every `digest` call the fake digester got, in order. */
-    digested,
-    /** Makes the digester fail for the user who has this clipping in the week. */
-    failDigestsWith: (clippingId: string) => {
-      digesterFailures.add(clippingId);
-    },
-    /** Makes the digester work again for every user. */
-    healDigester: () => digesterFailures.clear(),
     settings: createSettingsService({ pool, clock }),
+    changes: createChangesService({ pool }),
+    librarian: createLibrarianService({ pool, clock }),
+    library: createLibraryService({ pool }),
+    usage: createUsageService({ pool, clock }),
+    research: createResearchService({ pool, clock }),
     connections: createConnectionsService({ pool, clock }),
     /** The fixture's pool, for tests that set up rows no service writes (Better Auth's). */
     pool,
@@ -174,6 +204,12 @@ export async function createServiceFixture() {
     fetchedPages,
     /** The page each summarize call got, in order. */
     summarizedPages,
+    /** What the summarizer makes of a note, by its body. */
+    noteReadings,
+    /** The body of each note the summarizer read, in order. */
+    summarizedNotes,
+    /** Something to do while the summarizer reads the note with this body, before it answers. */
+    duringNoteReading,
     /** Every `requestEnrichments` call: the ids in order and the window they were spread over. */
     batchedEnrichmentRequests,
     /**
@@ -181,6 +217,12 @@ export async function createServiceFixture() {
      * suggestions off. Set a page's `summary.suggestedTags` in `web` to change what it suggests.
      */
     summarizedWithTags,
+    /**
+     * The research profile and domains the summarizer received per call, in order; undefined for
+     * a call made with no research domains. Set a page's `summary.research` in `web` to change
+     * the verdict it gives.
+     */
+    summarizedWithResearch,
     /** Makes the publisher throw (or work again), the way an unreachable queue does. */
     setPublishing: (state: "up" | "down") => {
       publishing = state;
@@ -188,6 +230,32 @@ export async function createServiceFixture() {
     meanings,
     /** Every text the embedder was asked for, in order. */
     embedded,
+    /** Something to do while a batched embedding call carrying this text is in flight. */
+    duringEmbedding,
+    /** Who each embedding call was made for, in order. */
+    embeddedFor,
+    /** Makes only the embedder refuse (or work again), as a reached spend cap does. */
+    setEmbeddingCapReached: (reached: boolean) => {
+      embeddingCapped = reached;
+    },
+    /** Makes the embedder refuse this user's calls only. */
+    capEmbeddingFor: (userId: string) => {
+      cappedEmbeddingUsers.add(userId);
+    },
+    /**
+     * Shuts (or opens) the budget gate for a user, as a spent cap does: `canSpend` says no, though
+     * the summarizer and embedder, which stand for the gateway's own check, still answer.
+     */
+    setBudgetShut: (userId: string, shut: boolean) => {
+      if (shut) shutBudgets.add(userId);
+      else shutBudgets.delete(userId);
+    },
+    /** Every `canSpend` question the service asked, in order. */
+    budgetAsked,
+    /** Makes the summarizer and embedder refuse (or work again), as a reached spend cap does. */
+    setCapReached: (reached: boolean) => {
+      capped = reached;
+    },
     /** How many texts each batched embedding call carried, in order. */
     embeddedBatches,
     /** Makes the embedder throw (or work again), the way an unreachable provider does. */

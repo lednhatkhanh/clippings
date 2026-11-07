@@ -1,0 +1,595 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "e9507bc4-9734-4512-9211-fe01da9709c8",
+  "prevIds": ["c21df085-3feb-4aaf-83ea-1f53a2200237"],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "research_briefs"],
+      "writes": [
+        "s|tbl|public.research_briefs",
+        "n|tbl|public.research_briefs",
+        "e|tbl|public.research_briefs",
+        "n|rel|public.research_briefs",
+        "n|type|public.research_briefs",
+        "n|rel|public.research_briefs_pkey",
+        "n|rel|public.research_briefs_clipping_id_key"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "user_settings", "research_profile"],
+      "writes": [
+        "s|col|public.user_settings.research_profile",
+        "n|col|public.user_settings.research_profile",
+        "e|col|public.user_settings.research_profile"
+      ],
+      "reads": ["n|tbl|public.user_settings", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "user_settings", "research_domains"],
+      "writes": [
+        "s|col|public.user_settings.research_domains",
+        "n|col|public.user_settings.research_domains",
+        "e|col|public.user_settings.research_domains"
+      ],
+      "reads": ["n|tbl|public.user_settings", "n|sch|public"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "research_briefs", "research_briefs_submitted_idx"],
+      "writes": [
+        "s|idx|public.research_briefs_submitted_idx",
+        "n|idx|public.research_briefs_submitted_idx",
+        "e|idx|public.research_briefs_submitted_idx",
+        "n|rel|public.research_briefs_submitted_idx"
+      ],
+      "reads": [
+        "n|tbl|public.research_briefs",
+        "n|sch|public",
+        "n|col|public.research_briefs.status",
+        "n|col|public.research_briefs.batch_id"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "research_briefs", "research_briefs_user_status_idx"],
+      "writes": [
+        "s|idx|public.research_briefs_user_status_idx",
+        "n|idx|public.research_briefs_user_status_idx",
+        "e|idx|public.research_briefs_user_status_idx",
+        "n|rel|public.research_briefs_user_status_idx"
+      ],
+      "reads": [
+        "n|tbl|public.research_briefs",
+        "n|sch|public",
+        "n|col|public.research_briefs.user_id",
+        "n|col|public.research_briefs.status",
+        "n|col|public.research_briefs.created_at"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "research_briefs"],
+      "writes": [
+        "s|fk|public.research_briefs.research_briefs_user_id_user_id_fkey",
+        "n|fk|public.research_briefs.research_briefs_user_id_user_id_fkey",
+        "e|fk|public.research_briefs.research_briefs_user_id_user_id_fkey",
+        "n|con|public.research_briefs.research_briefs_user_id_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.research_briefs",
+        "n|sch|public",
+        "n|tbl|public.user",
+        "n|sch|public",
+        "n|col|public.research_briefs.user_id",
+        "n|col|public.user.id",
+        "e|uniqueness|public.user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "research_briefs"],
+      "writes": [
+        "s|fk|public.research_briefs.research_briefs_clipping_fkey",
+        "n|fk|public.research_briefs.research_briefs_clipping_fkey",
+        "e|fk|public.research_briefs.research_briefs_clipping_fkey",
+        "n|con|public.research_briefs.research_briefs_clipping_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.research_briefs",
+        "n|sch|public",
+        "n|tbl|public.clippings",
+        "n|sch|public",
+        "n|col|public.research_briefs.clipping_id",
+        "n|col|public.research_briefs.user_id",
+        "n|col|public.clippings.id",
+        "n|col|public.clippings.user_id",
+        "e|uniqueness|public.clippings.id.user_id"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "research_briefs",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "gen_random_uuid()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "clipping_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "domain",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "reason",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "''",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "status",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "mode",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'batch'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "attempts",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "0",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "batch_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "body",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "sources",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'[]'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "note",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "source",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'ai'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "submitted_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "completed_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "user_settings",
+        "name": "research_profile",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "''",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "user_settings",
+        "name": "research_domains",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 1,
+        "default": "'{shipping,logistics}'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "research_briefs_submitted_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "status",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "batch_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": "\"status\" = 'submitted'",
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "research_briefs_user_status_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "user_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "status",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "created_at",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "research_briefs_user_id_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["user_id"],
+        "schemaTo": "public",
+        "tableTo": "user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "research_briefs_clipping_fkey",
+        "nameExplicit": true,
+        "columns": ["clipping_id", "user_id"],
+        "schemaTo": "public",
+        "tableTo": "clippings",
+        "columnsTo": ["id", "user_id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "research_briefs_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "research_briefs_clipping_id_key",
+        "nameExplicit": true,
+        "columns": ["clipping_id"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "research_briefs_status_check",
+        "value": "\"status\" in ('queued', 'submitted', 'writing', 'ready', 'dropped')",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "research_briefs_mode_check",
+        "value": "\"mode\" in ('batch', 'now')",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "research_briefs_source_check",
+        "value": "\"source\" in ('ai')",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "research_briefs",
+        "name": "research_briefs_body_check",
+        "value": "char_length(\"body\") <= 40000",
+        "entityType": "checks"
+      }
+    }
+  ]
+}

@@ -24,27 +24,23 @@ export {
   type SkipReason,
 } from "./bookmarks.ts";
 export {
-  ASK_NO_MATCH,
-  askEventSchema,
-  askRequestSchema,
-  MAX_QUESTION_LENGTH,
-  type AskEvent,
-  type AskRequest,
-} from "./ask.ts";
-export {
+  CLIPPING_KINDS,
   CLIPPING_SOURCES,
   CLIPPING_STATUSES,
   clippingStatusIdsSchema,
+  MAX_NOTE_BODY_LENGTH,
   MAX_NOTE_LENGTH,
   MAX_PAGE_TEXT,
   MAX_STATUS_IDS,
   MAX_TITLE_LENGTH,
   type Clipping,
+  type ClippingKind,
   type ClippingSource,
   type ClippingStatus,
   type ClippingStatuses,
 } from "./clipping.ts";
 export { formatAbsoluteDate, formatIsoUtc } from "./dates.ts";
+export { isCodeFenceLine, noteLineText, noteTitleLineIndex } from "./note-text.ts";
 export {
   CLIPPINGS_EXTENSION_ID,
   EXTENSION_API_ERRORS,
@@ -97,3 +93,85 @@ export {
 } from "./tag.ts";
 export { extractSharedUrl, type SharedData, type SharedLink } from "./share.ts";
 export { parseWebUrl, type WebUrl } from "./url.ts";
+export {
+  checkCanonicalTagName,
+  type CanonicalTagVerdict,
+  type NotCanonicalReason,
+} from "./canonical-tag.ts";
+export {
+  AUTO_TAG_DEFAULT,
+  autoTagChangeSchema,
+  type AutoTagChange,
+  LIBRARY_CHANGE_ACTIONS,
+  LIBRARY_CHANGE_ACTORS,
+  LIBRARY_CHANGE_CONFIDENCES,
+  LIBRARY_CHANGE_STATUSES,
+  libraryChangeActionSchema,
+  libraryChangeActorSchema,
+  libraryChangeConfidenceSchema,
+  libraryChangeStatusSchema,
+  ITEM_LINK_CREATORS,
+  itemLinkCreatorSchema,
+  MAX_FOLDER_NAME_LENGTH,
+  MAX_LINK_REASON_LENGTH,
+  MAX_TOPIC_PAGE_LENGTH,
+  TOPIC_PAGE_SOURCES,
+  type Folder,
+  type ItemLink,
+  type ItemLinkCreator,
+  type TopicPage,
+  type TopicPageSource,
+  type LibraryChange,
+  type LibraryChangeAction,
+  type LibraryChangeActor,
+  type LibraryChangeConfidence,
+  type LibraryChangeStatus,
+} from "./library.ts";
+export {
+  AUTOMATION_DEFAULTS,
+  automationSettingsChangeSchema,
+  DEFAULT_DAILY_CAP_MICROS,
+  DEFAULT_RESEARCH_JOBS_PER_DAY,
+  MAX_DAILY_CAP_MICROS,
+  MAX_RESEARCH_JOBS_PER_DAY,
+  MICROS_PER_DOLLAR,
+  MODEL_JOB_KINDS,
+  type AutomationSettings,
+  type AutomationSettingsChange,
+  type ModelJobKind,
+  type SpendSummary,
+} from "./usage.ts";
+export {
+  BRIEF_MODES,
+  BRIEF_SOURCES,
+  BRIEF_STATUSES,
+  MAX_BRIEF_LENGTH,
+  MAX_RESEARCH_DOMAIN_LENGTH,
+  MAX_RESEARCH_DOMAINS,
+  MAX_RESEARCH_PROFILE_LENGTH,
+  parseResearchDomains,
+  RESEARCH_DEFAULTS,
+  researchSettingsChangeSchema,
+  type Brief,
+  type BriefAuthor,
+  type BriefMode,
+  type BriefSource,
+  type BriefStatus,
+  type ResearchSettings,
+  type ResearchSettingsChange,
+} from "./research.ts";
+export {
+  LESSON_QUIZ_CHOICES,
+  LESSON_SKIP_KINDS,
+  LESSON_SOURCES,
+  LESSON_STATUSES,
+  MAX_LESSON_LENGTH,
+  MAX_LESSON_RECAP_LENGTH,
+  MAX_LESSON_TOPIC_LENGTH,
+  type Lesson,
+  type LessonAuthor,
+  type LessonQuiz,
+  type LessonSkipKind,
+  type LessonSourceItem,
+  type LessonStatus,
+} from "./lessons.ts";

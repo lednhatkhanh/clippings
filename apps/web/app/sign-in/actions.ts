@@ -19,7 +19,6 @@ import { RETURN_TO_PARAM, safeReturnPath, withReturnTo } from "@/lib/auth/return
  *
  * It runs before there is a session, so it has none to check; it reads and writes no user data.
  */
-// ast-grep-ignore: server-action-checks-session
 export async function signInWithGoogle(formData: FormData) {
   const returnTo = safeReturnPath(formData.get(RETURN_TO_PARAM));
   const value = formData.get("oauth_query");

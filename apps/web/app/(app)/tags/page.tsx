@@ -13,6 +13,8 @@ import { TagsEmptyState } from "@/components/tags/empty-state.tsx";
 import { TagList } from "@/components/tags/tag-list.tsx";
 import { getSession, signInRedirect } from "@/lib/auth/session.ts";
 import { getClippings } from "@/lib/clippings/service.ts";
+import { getLibrary } from "@/lib/librarian/library.ts";
+import type { TagPlacement } from "@clippings/db";
 import type { TagSummary } from "@clippings/shared";
 
 async function Tags() {
@@ -20,14 +22,18 @@ async function Tags() {
   if (!session) redirect(await signInRedirect());
 
   let tags: TagSummary[];
+  let placements: TagPlacement[];
   try {
-    tags = await getClippings().listTagSummaries(session.user.id);
+    [tags, placements] = await Promise.all([
+      getClippings().listTagSummaries(session.user.id),
+      getLibrary().listTagPlacements(session.user.id),
+    ]);
   } catch (error) {
     unstable_rethrow(error);
     return <LoadError message="Couldn't load your tags." />;
   }
 
-  return tags.length === 0 ? <TagsEmptyState /> : <TagList tags={tags} />;
+  return tags.length === 0 ? <TagsEmptyState /> : <TagList tags={tags} placements={placements} />;
 }
 
 export default function TagsPage() {

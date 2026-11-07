@@ -6,6 +6,7 @@ import { getClippings } from "@/lib/clippings/service.ts";
 import type { Clipping } from "@clippings/shared";
 
 import { Favicon } from "./favicon.tsx";
+import { NoteMark } from "./note-mark.tsx";
 
 /**
  * The user's clippings nearest in meaning to this one. Shows nothing while there are none, or when
@@ -43,11 +44,11 @@ export async function RelatedClippings({
               href={`/c/${clipping.id}`}
               className="flex lift items-center gap-3 rounded-md paper px-3.5 py-3"
             >
-              <Favicon url={clipping.url} />
+              {clipping.url === null ? <NoteMark /> : <Favicon url={clipping.url} />}
               <span className="flex min-w-0 flex-col gap-row-gap">
                 <span className="truncate typescale-clipping-title">{clipping.title}</span>
                 <span className="typescale-label-sm font-mono text-ink-faint">
-                  {domainOf(clipping.url)}
+                  {clipping.url === null ? "Note" : domainOf(clipping.url)}
                 </span>
               </span>
             </Link>

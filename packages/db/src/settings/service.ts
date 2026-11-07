@@ -3,9 +3,18 @@ import type pg from "pg";
 
 import {
   APPEARANCE_DEFAULTS,
+  AUTO_TAG_DEFAULT,
   APPEARANCE_KEYS,
+  AUTOMATION_DEFAULTS,
+  automationSettingsChangeSchema,
   isAppearanceValue,
+  RESEARCH_DEFAULTS,
+  researchSettingsChangeSchema,
   type Appearance,
+  type AutomationSettings,
+  type AutomationSettingsChange,
+  type ResearchSettings,
+  type ResearchSettingsChange,
 } from "@clippings/shared";
 
 import type { Clock } from "../clippings/ports.ts";
@@ -89,7 +98,116 @@ export function createSettingsService({ pool, clock }: SettingsServiceDeps) {
     return saved!.on;
   }
 
-  return { getSettings, updateSettings, getSuggestTags, setSuggestTags };
+  /** Whether auto-tagging is on: the stored choice, or the default for a user with no settings. */
+  async function getAutoTag(userId: string): Promise<boolean> {
+    const [row] = await db
+      .select({ on: userSettings.autoTag })
+      .from(userSettings)
+      .where(eq(userSettings.userId, userId));
+    return row?.on ?? AUTO_TAG_DEFAULT;
+  }
+
+  /** Turns the user's auto-tagging on or off, and returns the setting as it now stands. */
+  async function setAutoTag(userId: string, on: boolean): Promise<boolean> {
+    const updatedAt = clock.now();
+    const [saved] = await db
+      .insert(userSettings)
+      .values({ userId, autoTag: on, updatedAt })
+      .onConflictDoUpdate({ target: userSettings.userId, set: { autoTag: on, updatedAt } })
+      .returning({ on: userSettings.autoTag });
+    return saved!.on;
+  }
+
+  const automationColumns = {
+    dailyCapMicros: userSettings.dailyCapMicros,
+    researchJobsPerDay: userSettings.researchJobsPerDay,
+  };
+
+  /** The user's daily cap and research-job limit, or the defaults when they never changed one. */
+  async function getAutomationSettings(userId: string): Promise<AutomationSettings> {
+    const [row] = await db
+      .select(automationColumns)
+      .from(userSettings)
+      .where(eq(userSettings.userId, userId));
+    return row ?? AUTOMATION_DEFAULTS;
+  }
+
+  /**
+   * Saves the cap and/or research-job limit named in `changes`; the other keeps its value.
+   * Returns both as they now stand. A change that isn't valid (not a whole number, out of range,
+   * an unknown key, empty) throws `InvalidSettingsError` and saves nothing.
+   */
+  async function updateAutomationSettings(
+    userId: string,
+    changes: AutomationSettingsChange,
+  ): Promise<AutomationSettings> {
+    const parsed = automationSettingsChangeSchema.safeParse(changes);
+    if (!parsed.success) {
+      throw new InvalidSettingsError("automation settings", parsed.error.issues[0]?.message);
+    }
+    const updatedAt = clock.now();
+    const [saved] = await db
+      .insert(userSettings)
+      .values({ userId, ...parsed.data, updatedAt })
+      .onConflictDoUpdate({ target: userSettings.userId, set: { ...parsed.data, updatedAt } })
+      .returning(automationColumns);
+    return saved!;
+  }
+
+  const researchColumns = {
+    profile: userSettings.researchProfile,
+    domains: userSettings.researchDomains,
+  };
+
+  /** The user's research profile and domains, or the defaults when they never changed one. */
+  async function getResearchSettings(userId: string): Promise<ResearchSettings> {
+    const [row] = await db
+      .select(researchColumns)
+      .from(userSettings)
+      .where(eq(userSettings.userId, userId));
+    return row ?? { ...RESEARCH_DEFAULTS, domains: [...RESEARCH_DEFAULTS.domains] };
+  }
+
+  /**
+   * Saves the profile and/or domains named in `changes`; the other keeps its value. Domains are
+   * trimmed and deduplicated, and an empty list turns research off. Returns both as they now
+   * stand. A change that isn't valid (too long, too many domains, an unknown key, empty) throws
+   * `InvalidSettingsError` and saves nothing.
+   */
+  async function updateResearchSettings(
+    userId: string,
+    changes: ResearchSettingsChange,
+  ): Promise<ResearchSettings> {
+    const parsed = researchSettingsChangeSchema.safeParse(changes);
+    if (!parsed.success) {
+      throw new InvalidSettingsError("research settings", parsed.error.issues[0]?.message);
+    }
+    const { profile, domains } = parsed.data;
+    const given = {
+      ...(profile === undefined ? {} : { researchProfile: profile }),
+      ...(domains === undefined ? {} : { researchDomains: domains }),
+    };
+    const updatedAt = clock.now();
+    const [saved] = await db
+      .insert(userSettings)
+      .values({ userId, ...given, updatedAt })
+      .onConflictDoUpdate({ target: userSettings.userId, set: { ...given, updatedAt } })
+      .returning(researchColumns);
+    return saved!;
+  }
+
+  return {
+    getSettings,
+    updateSettings,
+    getSuggestTags,
+    setSuggestTags,
+    getAutoTag,
+    setAutoTag,
+    getAutomationSettings,
+    updateAutomationSettings,
+    getResearchSettings,
+    updateResearchSettings,
+  };
 }
 
 export type SettingsService = ReturnType<typeof createSettingsService>;

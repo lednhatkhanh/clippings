@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { hrefWithTag, loadBrowseParams, toQueryString } from "./browse-params.ts";
+import { hrefWithFolder, hrefWithTag, loadBrowseParams, toQueryString } from "./browse-params.ts";
 
 describe("browse params", () => {
   it("reads the query, sources and sort from the URL", () => {
     expect(
       loadBrowseParams(new URLSearchParams("q=soup+recipes&source=mcp,web&sort=date")),
-    ).toEqual({ q: "soup recipes", tags: [], sources: ["web", "mcp"], sort: "date" });
+    ).toEqual({ q: "soup recipes", tags: [], sources: ["web", "mcp"], folder: null, sort: "date" });
   });
 
   it("falls back to everything, by relevance, for missing or unknown values", () => {
@@ -14,6 +14,7 @@ describe("browse params", () => {
       q: "",
       tags: [],
       sources: ["web"],
+      folder: null,
       sort: "relevance",
     });
   });
@@ -23,15 +24,24 @@ describe("browse params", () => {
       q: "tea",
       tags: [],
       sources: ["digest"],
+      folder: null,
       sort: "relevance",
     });
   });
 
   it("writes only what differs from the defaults, in a stable order", () => {
-    expect(toQueryString({ q: "", tags: [], sources: [], sort: "relevance" })).toBe("");
-    expect(toQueryString({ q: " ", tags: [], sources: [], sort: "date" })).toBe("");
+    expect(toQueryString({ q: "", tags: [], sources: [], folder: null, sort: "relevance" })).toBe(
+      "",
+    );
+    expect(toQueryString({ q: " ", tags: [], sources: [], folder: null, sort: "date" })).toBe("");
     expect(
-      toQueryString({ q: " soup ", tags: ["work"], sources: ["mcp", "web"], sort: "date" }),
+      toQueryString({
+        q: " soup ",
+        tags: ["work"],
+        sources: ["mcp", "web"],
+        folder: null,
+        sort: "date",
+      }),
     ).toBe("q=soup&tag=work&source=web,mcp&sort=date");
   });
 
@@ -41,11 +51,26 @@ describe("browse params", () => {
     ).toEqual(["work", "to read"]);
   });
 
+  it("reads a folder only when it is an id, and keeps it in the query", () => {
+    const id = "0b9f9a7e-1c1d-4a53-9a8e-2f6f1c5d7e10";
+    expect(loadBrowseParams(new URLSearchParams(`folder=${id.toUpperCase()}`)).folder).toBe(id);
+    expect(loadBrowseParams(new URLSearchParams("folder=reading")).folder).toBeNull();
+    expect(
+      toQueryString(loadBrowseParams(new URLSearchParams(`tag=work&folder=${id}&source=web`))),
+    ).toBe(`tag=work&source=web&folder=${id}`);
+  });
+
+  it("leads a folder chip to the whole list filtered by that folder", () => {
+    const id = "0b9f9a7e-1c1d-4a53-9a8e-2f6f1c5d7e10";
+    expect(hrefWithFolder(id)).toBe(`/?folder=${id}`);
+  });
+
   it("round-trips", () => {
     const params = {
       q: "was ist",
       tags: ["a, b & c", "work"],
       sources: ["extension" as const],
+      folder: null,
       sort: "relevance" as const,
     };
     expect(loadBrowseParams(new URLSearchParams(toQueryString(params)))).toEqual(params);

@@ -26,8 +26,8 @@ export function DetailActions({
   status,
 }: {
   clippingId: string;
-  /** The original page's address. */
-  url: string;
+  /** The original page's address; null on a note, which has no page to share, copy or read again. */
+  url: string | null;
   /** The title shown, which Share sends. */
   title: string;
   pinned: boolean;
@@ -67,17 +67,19 @@ export function DetailActions({
         {pinned ? <PinOff className="size-4.5" /> : <Pin className="size-4.5" />}
         {pinned ? "Unpin" : "Pin"}
       </Button>
-      {canShare ? (
+      {canShare && url !== null ? (
         <Button variant="text" onPress={() => void shareLinkWithToast({ title, url })}>
           <Share2 className="size-4.5" />
           Share
         </Button>
       ) : null}
-      <Button variant="text" onPress={() => void copyLinkWithToast(url)}>
-        <Copy className="size-4.5" />
-        Copy link
-      </Button>
-      {status === "ready" ? (
+      {url !== null ? (
+        <Button variant="text" onPress={() => void copyLinkWithToast(url)}>
+          <Copy className="size-4.5" />
+          Copy link
+        </Button>
+      ) : null}
+      {status === "ready" && url !== null ? (
         <Button
           variant="text"
           isPending={reading}

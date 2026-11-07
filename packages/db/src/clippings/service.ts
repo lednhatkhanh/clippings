@@ -1,9 +1,11 @@
+import { utc } from "@date-fns/utc";
 import {
   constructNow,
   isAfter,
   isBefore,
   isValid,
   parseISO,
+  startOfDay,
   subDays,
   subHours,
   subSeconds,
@@ -29,7 +31,11 @@ import {
 import type pg from "pg";
 
 import {
+  AUTO_TAG_DEFAULT,
+  AUTOMATION_DEFAULTS,
+  RESEARCH_DEFAULTS,
   formatIsoUtc,
+  MAX_NOTE_BODY_LENGTH,
   MAX_NOTE_LENGTH,
   MAX_QUERY_LENGTH,
   MAX_TITLE_LENGTH,
@@ -51,25 +57,32 @@ import {
   type TextSegment,
 } from "@clippings/shared";
 
+import { applyAutoTags } from "../changes/auto-tag.ts";
 import { createDatabase, type Database } from "../database.ts";
+import { createResearchService } from "../research/service.ts";
 import {
   clippings,
   clippingTags,
   clippingTagSuggestions,
   clippingTexts,
   EMBEDDING_DIMENSIONS,
+  modelUsage,
   tags,
   userSettings,
 } from "../schema.ts";
-import type {
-  Clock,
-  Embedder,
-  EmbeddingPurpose,
-  FetchedPage,
-  JobPublisher,
-  PageFetcher,
-  PageSummary,
-  Summarizer,
+import { noteTitle } from "./note-title.ts";
+import {
+  CapReachedError,
+  type BudgetGate,
+  type Clock,
+  type Embedder,
+  type EmbeddingOwner,
+  type EmbeddingPurpose,
+  type FetchedPage,
+  type JobPublisher,
+  type PageFetcher,
+  type PageSummary,
+  type Summarizer,
 } from "./ports.ts";
 import { isWorthEmbedding } from "./query-embedding.ts";
 
@@ -94,6 +107,16 @@ export interface SaveClippingInput {
 
 export type SaveClippingResult = { status: "created" | "existing"; clipping: Clipping };
 
+/** A note to save: text the user wrote, with no URL. */
+export interface SaveNoteInput {
+  /** The note's text, as Markdown source. Kept exactly as given, so it must not be blank. */
+  body: string;
+  /** Tag names, created for the user when they have no such tag yet. */
+  tags?: readonly string[];
+  source: ClippingSource;
+  clientId?: string;
+}
+
 /** What the user can change on a clipping. A field left out stays as it is. */
 export interface UpdateClippingInput {
   /**
@@ -102,6 +125,13 @@ export interface UpdateClippingInput {
    */
   title?: string | null;
   note?: string;
+  /**
+   * A note's text, as Markdown source (not blank). Only a note has one: this throws
+   * `NotANoteError` for a link. The note's title follows its first line, and its summary and
+   * excerpt, which described the old text, are cleared. The new text is embedded in the same
+   * call, as enrichment embeds it (ADR 0005).
+   */
+  body?: string;
   /** Every tag the clipping should carry, by name: the ones left out are taken off. */
   tags?: readonly string[];
 }
@@ -113,6 +143,8 @@ export interface ListClippingsInput {
   tags?: readonly string[];
   /** Only clippings saved from these; all of them when empty or left out. */
   sources?: readonly ClippingSource[];
+  /** Only clippings filed in this folder; an id that is not a folder id matches nothing. */
+  folderId?: string;
 }
 
 /** A filtered list of the user's clippings, newest saved first, pinned or not. */
@@ -158,6 +190,8 @@ export interface SearchClippingsInput {
   tags?: readonly string[];
   /** Only clippings saved from these; all of them when empty or left out. */
   sources?: readonly ClippingSource[];
+  /** Only clippings filed in this folder; an id that is not a folder id matches nothing. */
+  folderId?: string;
   sort?: SearchSort;
   limit?: number;
   /**
@@ -245,6 +279,8 @@ export interface ClippingsServiceDeps {
   fetcher: PageFetcher;
   summarizer: Summarizer;
   embedder: Embedder;
+  /** Asked before a page is fetched, so a user past their cap costs no fetch. */
+  budget: BudgetGate;
 }
 
 export interface EnrichClippingOptions {
@@ -262,7 +298,12 @@ export type EnrichmentOutcome =
   /** The clipping was not pending (already read, failed, or gone), so nothing was done. */
   | "skipped"
   /** Reading failed on the last attempt, so the clipping is now failed. */
-  | "failed";
+  | "failed"
+  /**
+   * The model gateway refused the call: the user's daily cap is reached. The clipping stays
+   * pending, the job is done (no retry), and the daily sweep requests it again on a later day.
+   */
+  | "held";
 
 // Every column but `search_tsv` and `embedding`, which only search reads.
 const { searchTsv, embedding, ...clippingColumns } = getColumns(clippings);
@@ -304,8 +345,10 @@ const statusChange = (status: ClippingRow["status"], at: Date) => ({
 
 const toClipping = (row: ClippingRow, tagList: Tag[] = []): Clipping => ({
   id: row.id,
+  kind: row.kind,
   url: row.url,
   urlNormalized: row.urlNormalized,
+  body: row.body,
   title: row.userTitle ?? row.title,
   pageTitle: row.title,
   titleEdited: row.userTitle !== null,
@@ -324,6 +367,14 @@ const toClipping = (row: ClippingRow, tagList: Tag[] = []): Clipping => ({
 
 /** The title to show, in SQL: the user's own, else the page's. */
 const shownTitle = sql`coalesce(${clippings.userTitle}, ${clippings.title})`;
+
+/** The user's clippings filed in this folder; undefined when no folder is asked for. */
+const inFolder = (folderId: string | undefined) =>
+  folderId === undefined
+    ? undefined
+    : UUID.test(folderId)
+      ? eq(clippings.folderId, folderId)
+      : sql`false`;
 
 const fromSources = (sources: readonly ClippingSource[] = []) =>
   sources.length > 0 ? inArray(clippings.source, [...sources]) : undefined;
@@ -456,17 +507,22 @@ const SAVE_PUBLISH_TIMEOUT = { timeoutMs: 3000 };
 const closeInMeaning = (distance: SQL) =>
   and(isNotNull(embedding), sql`${distance} < ${MAX_SEMANTIC_DISTANCE}`);
 
-/** What enrichment embeds: what the page is, not the user's note, which they can edit at will. */
+/**
+ * What enrichment embeds: for a link, what the page is, not the user's comment on it, which they
+ * can edit at will; for a note, its body, which is the note (ADR 0005).
+ */
 const documentText = ({
+  kind,
+  body,
   title,
   summary,
   excerpt,
-}: Pick<ClippingRow, "title" | "summary" | "excerpt">) =>
-  [title, summary, excerpt].filter(Boolean).join("\n\n");
+}: Pick<ClippingRow, "kind" | "body" | "title" | "summary" | "excerpt">) =>
+  kind === "note" ? (body ?? "") : [title, summary, excerpt].filter(Boolean).join("\n\n");
 
 /** How long a clipping can sit pending or failed before the sweep requests it again. */
 const STUCK_AFTER_HOURS = 1;
-const SWEEP_BATCH_SIZE = 100;
+export const SWEEP_BATCH_SIZE = 100;
 /**
  * How many times the sweep starts a failed clipping over before it leaves it failed: a page that
  * is gone or refuses us would otherwise cost a read and a model call every day, forever. The
@@ -499,6 +555,17 @@ export const IMPORT_DAILY_BUDGET = 400;
  * are published immediately, so they are never queued behind the backlog.
  */
 export const IMPORT_SPREAD_SECONDS = 20 * 60 * 60;
+/**
+ * Whether the clipping's owner can still spend today: their UTC-day spend is below their daily
+ * cap, as the gateway reads it for `enrich` calls (a cap of 0 never is). The sweep and the drain
+ * leave out everyone else, so a user who is held back neither fills a batch nor costs a page
+ * fetch for a call the gateway will refuse.
+ */
+function ownerCanSpend(now: Date): SQL {
+  const today = startOfDay(now, { in: utc });
+  return sql`coalesce((select ${userSettings.dailyCapMicros} from ${userSettings} where ${userSettings.userId} = ${clippings.userId}), ${AUTOMATION_DEFAULTS.dailyCapMicros}) > coalesce((select sum(${modelUsage.costMicros}) from ${modelUsage} where ${modelUsage.userId} = ${clippings.userId} and ${modelUsage.createdAt} >= ${today}), 0)`;
+}
+
 /** Rows per insert, so a statement stays far below Postgres's 65,535 parameters. */
 const IMPORT_CHUNK_SIZE = 500;
 /** Bookmarks dated before this are taken for a bad ADD_DATE: the web had no bookmarks then. */
@@ -564,6 +631,28 @@ export class NoteTooLongError extends Error {
   }
 }
 
+export class NoteBodyTooLongError extends Error {
+  constructor() {
+    super(`A note can be at most ${MAX_NOTE_BODY_LENGTH} characters`);
+    this.name = "NoteBodyTooLongError";
+  }
+}
+
+export class EmptyNoteBodyError extends Error {
+  constructor() {
+    super("A note needs some text");
+    this.name = "EmptyNoteBodyError";
+  }
+}
+
+/** The clipping is a link, which has no body to change. */
+export class NotANoteError extends Error {
+  constructor() {
+    super("Only a note has a body");
+    this.name = "NotANoteError";
+  }
+}
+
 export class TitleTooLongError extends Error {
   constructor() {
     super(`A title can be at most ${MAX_TITLE_LENGTH} characters`);
@@ -588,6 +677,13 @@ function checkedTagNames(names: readonly string[]): string[] {
     throw new InvalidTagsError(`A clipping can have at most ${MAX_TAGS_PER_CLIPPING} tags`);
   }
   return kept;
+}
+
+/** A note's body as stored: exactly as written, but not blank and not too long. */
+function checkedBody(body: string): string {
+  if (body.trim() === "") throw new EmptyNoteBodyError();
+  if (body.length > MAX_NOTE_BODY_LENGTH) throw new NoteBodyTooLongError();
+  return body;
 }
 
 export class TooManyClippingsError extends Error {
@@ -638,21 +734,28 @@ export function createClippingsService({
   fetcher,
   summarizer,
   embedder,
+  budget,
 }: ClippingsServiceDeps) {
   const db = createDatabase(pool);
+  const { queueBrief } = createResearchService({ pool, clock });
 
   /** The embedder's vector, checked to fit the column, so a wrong model fails here and not in SQL. */
   async function embed(
     text: string,
     purpose: EmbeddingPurpose,
+    owner: EmbeddingOwner,
     signal?: AbortSignal,
   ): Promise<number[]> {
-    return checkedVector(await embedder.embed(text, purpose, signal));
+    return checkedVector(await embedder.embed(text, purpose, owner, signal));
   }
 
   /** `embed` for several texts in one call: one vector each, in order. */
-  async function embedMany(texts: readonly string[], purpose: EmbeddingPurpose) {
-    const vectors = await embedder.embedMany(texts, purpose);
+  async function embedMany(
+    texts: readonly string[],
+    purpose: EmbeddingPurpose,
+    owner: EmbeddingOwner,
+  ) {
+    const vectors = await embedder.embedMany(texts, purpose, owner);
     if (vectors.length !== texts.length) {
       throw new Error(`Expected ${texts.length} embeddings, got ${vectors.length}`);
     }
@@ -849,14 +952,15 @@ export function createClippingsService({
 
   /**
    * Gives the tag one of `TAG_COLORS`, by name. Returns the tag as it now stands, or null when
-   * the user has no such tag. Throws on a name that isn't a tag color.
+   * the user has no such tag. Throws on a name that isn't a tag color. A color set here is the
+   * user's choice, so the librarian leaves it alone.
    */
   async function setTagColor(userId: string, tagId: string, color: string): Promise<Tag | null> {
     if (!isTagColor(color)) throw new InvalidTagColorError(color);
     if (!UUID.test(tagId)) return null;
     const [updated] = await db
       .update(tags)
-      .set({ color })
+      .set({ color, colorOverridden: true })
       .where(and(eq(tags.id, tagId), eq(tags.userId, userId)))
       .returning(tagColumns);
     return updated ?? null;
@@ -998,15 +1102,53 @@ export function createClippingsService({
     return current;
   }
 
+  /**
+   * Saves a note: text the user wrote, with no URL. It is pending, titled by the start of its
+   * body, and its enrichment is requested (a reading for its summary and tag suggestions, and the
+   * embedding of the body). Notes never collide with each other or with links: duplicate detection
+   * is for links. Throws `EmptyNoteBodyError` for a blank body, `NoteBodyTooLongError` past
+   * `MAX_NOTE_BODY_LENGTH`.
+   */
+  async function saveNote(userId: string, input: SaveNoteInput): Promise<Clipping> {
+    const body = checkedBody(input.body);
+    const tagNames = checkedTagNames(input.tags ?? []);
+    const now = clock.now();
+    const created = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(clippings)
+        .values({
+          userId,
+          kind: "note",
+          url: null,
+          urlNormalized: null,
+          body,
+          title: noteTitle(body),
+          source: input.source,
+          clientId: input.clientId ?? null,
+          createdAt: now,
+          ...statusChange("pending", now),
+        })
+        .returning(clippingColumns);
+      await setTags(tx, userId, row!.id, tagNames);
+      return row!;
+    });
+    // The save stands even if the queue is down: the daily sweep requests the job again.
+    await jobs.requestEnrichment(created.id, SAVE_PUBLISH_TIMEOUT).catch((error: unknown) => {
+      console.error(`Couldn't request enrichment of note ${created.id}`, error);
+    });
+    return oneWithTags(userId, created);
+  }
+
   async function listClippings(
     userId: string,
-    { cursor, limit = 20, sources, tags: tagNames }: ListClippingsInput,
+    { cursor, limit = 20, sources, folderId, tags: tagNames }: ListClippingsInput,
   ): Promise<ClippingsPage> {
     const after = cursor ? decodeCursor(cursor) : null;
     const matching = and(
       eq(clippings.userId, userId),
       live,
       fromSources(sources),
+      inFolder(folderId),
       taggedWithAll(db, userId, tagNames),
     );
     const [pinnedRows, rows] = await Promise.all([
@@ -1101,6 +1243,7 @@ export function createClippingsService({
       q,
       tags: tagNames,
       sources,
+      folderId,
       sort = "relevance",
       limit = SEARCH_RESULT_LIMIT,
       words = "all",
@@ -1115,12 +1258,17 @@ export function createClippingsService({
     // A query still being typed may have no meaning to find yet: words alone.
     const queryVector =
       !typeahead || isWorthEmbedding(text)
-        ? await embed(text, "query", signal).catch((error: unknown) => {
-            // A cancelled search is not a failed embedding.
-            signal?.throwIfAborted();
-            console.error("Couldn't embed the search query; searching by words alone", error);
-            return null;
-          })
+        ? await embed(text, "query", { userId, jobKind: "search" }, signal).catch(
+            (error: unknown) => {
+              // A cancelled search is not a failed embedding.
+              signal?.throwIfAborted();
+              // A reached cap is expected: say nothing, search by words alone.
+              if (!(error instanceof CapReachedError)) {
+                console.error("Couldn't embed the search query; searching by words alone", error);
+              }
+              return null;
+            },
+          )
         : null;
     signal?.throwIfAborted();
 
@@ -1129,6 +1277,7 @@ export function createClippingsService({
       eq(clippings.userId, userId),
       live,
       fromSources(sources),
+      inFolder(folderId),
       taggedWithAll(db, userId, tagNames),
     );
 
@@ -1164,6 +1313,7 @@ export function createClippingsService({
     const fused = sql<number>`coalesce(1.0 / (${RRF_K} + ${byWords.rank}), 0) + coalesce(1.0 / (${RRF_K} + ${byMeaning.rank}), 0)`;
     const matches = (column: SQLWrapper) => sql`to_tsvector('simple', ${column}) @@ ${query}`;
     const excerpt = sql`coalesce(${clippings.excerpt}, '')`;
+    const body = sql`coalesce(${clippings.body}, '')`;
     const rows = await db
       .with(byWords, byMeaning)
       .select({
@@ -1172,6 +1322,8 @@ export function createClippingsService({
         snippetHeadline: sql<string | null>`case
           when ${matches(clippings.note)}
             then ts_headline('simple', ${unmarked(clippings.note)}, ${query}, ${SNIPPET_HEADLINE})
+          when ${matches(body)}
+            then ts_headline('simple', ${unmarked(body)}, ${query}, ${SNIPPET_HEADLINE})
           when ${matches(excerpt)}
             then ts_headline('simple', ${unmarked(excerpt)}, ${query}, ${SNIPPET_HEADLINE})
         end`,
@@ -1322,31 +1474,69 @@ export function createClippingsService({
         ),
       );
     for (const row of rows) {
-      texts.set(row.id, { ...row, fetchedAt: formatIsoUtc(row.fetchedAt) });
+      texts.set(row.id, { ...row, url: row.url ?? "", fetchedAt: formatIsoUtc(row.fetchedAt) });
     }
     return texts;
   }
 
   /**
-   * Changes what the user wrote on their clipping: its title, note, tags or any of them. Returns
-   * it as it now stands, or null when the user has no such clipping.
+   * Embeds a note's new body for `updateClipping`. Null when it can't be (the daily cap is
+   * reached, or the provider is down): the note is saved without an embedding, and the daily
+   * `embedMissing` run embeds it later.
+   */
+  async function embedBody(userId: string, body: string): Promise<number[] | null> {
+    try {
+      return await embed(body, "document", { userId, jobKind: "enrich" });
+    } catch (error) {
+      if (!(error instanceof CapReachedError)) {
+        console.error("Couldn't embed an edited note; saving it without an embedding", error);
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Changes what the user wrote on their clipping: its title, note, a note's body, tags or any of
+   * them. Returns it as it now stands, or null when the user has no such clipping. Throws
+   * `NotANoteError` when `body` is given for a link.
    */
   async function updateClipping(
     userId: string,
     clippingId: string,
-    { title, note, tags: tagList }: UpdateClippingInput,
+    { title, note, body, tags: tagList }: UpdateClippingInput,
   ): Promise<Clipping | null> {
     const userTitle = title === undefined ? undefined : (title?.trim() ?? "") || null;
     if (userTitle && userTitle.length > MAX_TITLE_LENGTH) throw new TitleTooLongError();
     if (note !== undefined && note.length > MAX_NOTE_LENGTH) throw new NoteTooLongError();
+    const newBody = body === undefined ? undefined : checkedBody(body);
     const tagNames = tagList === undefined ? undefined : checkedTagNames(tagList);
     if (!UUID.test(clippingId)) return null;
+
+    let bodyChange: Partial<typeof clippings.$inferInsert> = {};
+    if (newBody !== undefined) {
+      const [current] = await db
+        .select({ kind: clippings.kind })
+        .from(clippings)
+        .where(and(eq(clippings.id, clippingId), eq(clippings.userId, userId), live));
+      if (!current) return null;
+      if (current.kind !== "note") throw new NotANoteError();
+      // The summary and excerpt described the old text. The embedding is made before the
+      // transaction: a provider call has no place inside one.
+      bodyChange = {
+        body: newBody,
+        title: noteTitle(newBody),
+        summary: null,
+        excerpt: null,
+        embedding: await embedBody(userId, newBody),
+      };
+    }
     const updated = await db.transaction(async (tx) => {
       const [row] = await tx
         .update(clippings)
         .set({
           ...(userTitle === undefined ? {} : { userTitle }),
           ...(note === undefined ? {} : { note }),
+          ...bodyChange,
           updatedAt: clock.now(),
         })
         .where(and(eq(clippings.id, clippingId), eq(clippings.userId, userId), live))
@@ -1832,8 +2022,11 @@ export function createClippingsService({
   /**
    * Reads a pending clipping's page and fills in its title, summary and excerpt. Safe to repeat:
    * only a pending clipping is touched, so a redelivered job does nothing, and the user's title,
-   * note and tags are never written. For a user with tag suggestions on, it also stores the tags
-   * it suggests (see `replaceSuggestions`), in the transaction that makes the clipping ready.
+   * note and tags are never written by the reading itself. For a user with tag suggestions on, it
+   * also stores the tags it suggests (see `replaceSuggestions`), in the transaction that makes
+   * the clipping ready. For a user with auto-tagging on, the tags the model is confident in are
+   * put on the clipping in that same transaction and logged (see `applyAutoTags`), and the rest
+   * are the suggestions.
    *
    * A clipping saved from the extension with its page has that text (origin "browser"). While no
    * reading has used it (`read_at` is null) it is the text for this reading and the page is not
@@ -1842,6 +2035,17 @@ export function createClippingsService({
    * when the fetch fails or finds no text (not a PDF), since a site that turns servers away is why
    * it was kept. Only a clipping with no usable text fails. The link verdict is reset only by a
    * reading that fetched the page: one from the browser's text says nothing about the link.
+   *
+   * A note has no page: its body is what the summarizer reads and what is embedded, the title made
+   * from the body stays, and it has no link verdict or page text. The reading only lands if the
+   * body is still the one it read, so an edit made meanwhile (which embeds the new body itself) is
+   * not overwritten; the note then waits for the sweep.
+   *
+   * When the model gateway refuses the reading (the user's daily cap is reached, or Anthropic's
+   * spend limit or credit), the clipping is held: it stays pending, nothing is thrown (so the
+   * queue doesn't retry) and no sweep attempt is spent. The daily sweep requests it again later.
+   * The budget is looked at before the page is fetched, so a held clipping costs no fetch; the
+   * gateway's own check at the call stays the one that counts.
    */
   async function enrichClipping(
     clippingId: string,
@@ -1853,14 +2057,36 @@ export function createClippingsService({
       .from(clippings)
       .where(eq(clippings.id, clippingId));
     if (!row || row.status !== "pending") return "skipped";
+    const note = row.kind === "note" ? row : null;
+    // A link always has an address (`clippings_kind_shape_check`).
+    const url = row.url;
+    if (!note && url === null) return "skipped";
 
-    // Only a user with suggestions on has their tag names sent to the model.
+    // Only a user with suggestions or auto-tagging on has their tag names sent to the model.
     const [settings] = await db
-      .select({ on: userSettings.suggestTags })
+      .select({
+        suggest: userSettings.suggestTags,
+        auto: userSettings.autoTag,
+        researchProfile: userSettings.researchProfile,
+        researchDomains: userSettings.researchDomains,
+      })
       .from(userSettings)
       .where(eq(userSettings.userId, row.userId));
-    const suggesting = settings?.on === true;
-    const userTags = suggesting ? await mostUsedTagNames(row.userId) : undefined;
+    const suggesting = settings?.suggest === true;
+    const autoTagging = settings?.auto ?? AUTO_TAG_DEFAULT;
+    const userTags = suggesting || autoTagging ? await mostUsedTagNames(row.userId) : undefined;
+    // No domains means research is off: nothing about it goes to the model, and nothing is queued.
+    // A bookmark import saves hundreds of old links at once: those are never researched.
+    const researchDomains = settings?.researchDomains ?? RESEARCH_DEFAULTS.domains;
+    const research =
+      researchDomains.length > 0 && row.source !== "import"
+        ? {
+            profile: settings?.researchProfile ?? RESEARCH_DEFAULTS.profile,
+            domains: researchDomains,
+          }
+        : undefined;
+
+    if (!(await budget.canSpend(row.userId, "enrich"))) return "held";
 
     // The text the user's browser sent with a save, if that is what the clipping has.
     const [stored] = await db
@@ -1873,7 +2099,8 @@ export function createClippingsService({
       })
       .from(clippingTexts)
       .where(and(eq(clippingTexts.clippingId, clippingId), eq(clippingTexts.userId, row.userId)));
-    const browser = stored?.origin === "browser" && stored.text !== "" ? stored : undefined;
+    const browser =
+      !note && stored?.origin === "browser" && stored.text !== "" ? stored : undefined;
 
     let read: PageSummary;
     let pageText = "";
@@ -1881,13 +2108,15 @@ export function createClippingsService({
     let meaning: number[] | null = null;
     try {
       let page: FetchedPage;
-      if (browser && browser.readAt === null) {
+      if (note) {
+        page = { title: null, text: note.body ?? "" };
+      } else if (browser && browser.readAt === null) {
         page = { title: browser.title, text: browser.text };
         readFromBrowser = true;
       } else if (browser) {
         // A site that turns servers away, or one that answers with an empty page, still has the
         // text the browser once gave.
-        const fetched = await fetcher.fetchPage(row.url).catch((error: unknown) => {
+        const fetched = await fetcher.fetchPage(url!).catch((error: unknown) => {
           console.error(`Couldn't fetch clipping ${clippingId}; reading its browser text`, error);
           return undefined;
         });
@@ -1898,21 +2127,32 @@ export function createClippingsService({
           readFromBrowser = true;
         }
       } else {
-        page = await fetcher.fetchPage(row.url);
+        page = await fetcher.fetchPage(url!);
       }
-      pageText = page.text;
+      pageText = note ? "" : page.text;
       read = await summarizer.summarize({
-        url: row.url,
+        kind: row.kind,
+        url,
+        userId: row.userId,
         ...page,
         ...(userTags === undefined ? {} : { userTags }),
+        ...(research ? { research } : {}),
       });
       // The reading stands without an embedding: search finds the clipping by its words, and the
       // daily sweep embeds it later. A retry would only read the page and call Haiku again.
-      meaning = await embed(documentText(read), "document").catch((error: unknown) => {
-        console.error(`Couldn't embed clipping ${clippingId}; saving it without`, error);
+      const text = documentText({ kind: row.kind, body: row.body, ...read });
+      meaning = await embed(text, "document", {
+        userId: row.userId,
+        jobKind: "enrich",
+      }).catch((error: unknown) => {
+        if (!(error instanceof CapReachedError)) {
+          console.error(`Couldn't embed clipping ${clippingId}; saving it without`, error);
+        }
         return null;
       });
     } catch (error) {
+      // The cap is not a failure: the clipping stays pending, and no retry or restart is spent.
+      if (error instanceof CapReachedError) return "held";
       if (!lastAttempt) throw error;
       const now = clock.now();
       await db
@@ -1936,18 +2176,27 @@ export function createClippingsService({
       const [ready] = await tx
         .update(clippings)
         .set({
-          // Never `user_title`: a rename is the user's.
-          title: read.title,
+          // Never `user_title`: a rename is the user's. A note keeps the title made from its body.
+          ...(note ? {} : { title: read.title }),
           summary: read.summary,
           excerpt: read.excerpt,
           embedding: meaning,
-          // A fetch just got a 2xx: the link is alive as of now. The browser's text says nothing.
-          ...(readFromBrowser ? {} : { linkCheckedAt: now, linkFailures: 0, linkDeadSince: null }),
+          // A fetch just got a 2xx: the link is alive as of now. The browser's text says nothing,
+          // and a note has no link.
+          ...(readFromBrowser || note
+            ? {}
+            : { linkCheckedAt: now, linkFailures: 0, linkDeadSince: null }),
           ...statusChange("ready", now),
         })
-        .where(and(eq(clippings.id, clippingId), eq(clippings.status, "pending")))
+        .where(
+          and(
+            eq(clippings.id, clippingId),
+            eq(clippings.status, "pending"),
+            note ? eq(clippings.body, note.body ?? "") : undefined,
+          ),
+        )
         .returning({ id: clippings.id });
-      if (ready) {
+      if (ready && !note) {
         // The browser's text keeps its origin, title and time, however the reading came to use it;
         // the reading marks it read.
         await replacePageText(
@@ -1965,14 +2214,29 @@ export function createClippingsService({
             : { text: pageText, origin: "fetch", title: null, at: now, readAt: now },
         );
       }
-      if (ready && suggesting) {
-        await replaceSuggestions(
-          tx,
-          row.userId,
+      // What the model proposed and the tags did not take: all of it, unless auto-tagging is on
+      // and the model said how sure it was.
+      let proposed = read.suggestedTags;
+      if (ready && autoTagging && read.tagProposals) {
+        const outcome = await applyAutoTags(tx, {
+          userId: row.userId,
           clippingId,
-          { model: read.suggestedTags, neighbours },
-          now,
-        );
+          proposals: read.tagProposals,
+          at: now,
+        });
+        proposed = outcome.suggested;
+      }
+      if (ready && suggesting) {
+        await replaceSuggestions(tx, row.userId, clippingId, { model: proposed, neighbours }, now);
+      }
+      // A clipping that already has a brief keeps it, so reading a page again queues no second one.
+      if (ready && research && read.research?.worth) {
+        await queueBrief(tx, {
+          userId: row.userId,
+          clippingId,
+          domain: read.research.domain,
+          reason: read.research.reason,
+        });
       }
       return ready;
     });
@@ -1981,17 +2245,22 @@ export function createClippingsService({
 
   /**
    * Reads the page again: a ready or failed clipping goes back to pending and the job is
-   * requested. Its title, note and tags stay the user's. Returns the clipping as it stands
-   * (unchanged when it was already pending), or null when the user has no such clipping.
+   * requested. Its title, note and tags stay the user's. A ready note has no page and stays as it
+   * is; a failed one starts over. Returns the clipping as it stands (unchanged when it was already
+   * pending), or null when the user has no such clipping.
    */
   async function reEnrichClipping(userId: string, clippingId: string): Promise<Clipping | null> {
     if (!UUID.test(clippingId)) return null;
     const [current] = await db
-      .select({ status: clippings.status })
+      .select({ status: clippings.status, kind: clippings.kind })
       .from(clippings)
       .where(and(eq(clippings.id, clippingId), eq(clippings.userId, userId), live));
     if (!current) return null;
     if (current.status === "pending") return getClipping(userId, clippingId);
+    // A note has no page to read again; only one that failed to be read starts over (Retry).
+    if (current.kind === "note" && current.status === "ready") {
+      return getClipping(userId, clippingId);
+    }
 
     const [restarted] = await db
       .update(clippings)
@@ -2026,7 +2295,10 @@ export function createClippingsService({
    * for more than an hour, starting failed ones over. Returns the ids it requested. A batch is
    * capped, so a backlog drains over several days instead of one long run. Imports waiting their
    * turn are pending on purpose: `drainImports` takes those. A failed clipping is started over at
-   * most `MAX_SWEEP_RESTARTS` times; after that it stays failed until the user retries it.
+   * most `MAX_SWEEP_RESTARTS` times; after that it stays failed until the user retries it. A
+   * clipping held by the spend cap is pending, so each day's request is free of that count. Owners
+   * who can't spend today (a cap of 0, or today's spend at the cap) are left out, and the oldest
+   * status time goes first, so held clippings don't crowd out other users' stuck ones.
    *
    * The jobs go out as one batch. If the queue can't be reached the clippings stay pending, and
    * the next daily sweep takes them again.
@@ -2043,9 +2315,12 @@ export function createClippingsService({
           lt(clippings.statusChangedAt, stuckBefore),
           or(ne(clippings.source, "import"), ne(clippings.status, "pending")),
           or(eq(clippings.status, "pending"), lt(clippings.sweepAttempts, MAX_SWEEP_RESTARTS)),
+          ownerCanSpend(now),
           live,
         ),
       )
+      // The restart stamps the status time, so what was taken moves to the back of the line.
+      .orderBy(asc(clippings.statusChangedAt), asc(clippings.id))
       .limit(SWEEP_BATCH_SIZE);
     const restarted = await db
       .update(clippings)
@@ -2082,7 +2357,8 @@ export function createClippingsService({
    * It claims the batch in one statement that stamps `import_requested_at` and the status time, so
    * two overlapping runs never take the same clipping. The budget counts what was requested in
    * the last `IMPORT_SPREAD_SECONDS`, so a second run the same day takes only the remainder; a
-   * lock keeps two runs from both counting before either claims. A clipping whose job is lost
+   * lock keeps two runs from both counting before either claims. Imports of owners who can't spend
+   * today are left out (see `ownerCanSpend`), so they neither use the budget nor block others. A clipping whose job is lost
    * (still pending a spread window later) is taken again, behind the others. Throws when the
    * queue can't be reached, after giving the budget back.
    */
@@ -2109,6 +2385,7 @@ export function createClippingsService({
               eq(clippings.source, "import"),
               eq(clippings.status, "pending"),
               or(isNull(clippings.importRequestedAt), lt(clippings.importRequestedAt, windowStart)),
+              ownerCanSpend(now),
               live,
             ),
           )
@@ -2293,7 +2570,11 @@ export function createClippingsService({
               },
               setWhere: isNotNull(clippings.deletedAt),
             })
-            .returning({ id: clippings.id, urlNormalized: clippings.urlNormalized })),
+            // An imported page is a link, so it always has a normalized URL.
+            .returning({
+              id: clippings.id,
+              urlNormalized: sql<string>`${clippings.urlNormalized}`,
+            })),
         );
       }
       if (rows.length === 0) return rows;
@@ -2378,23 +2659,40 @@ export function createClippingsService({
       .where(and(eq(clippings.status, "ready"), isNull(embedding), live))
       .orderBy(desc(clippings.createdAt))
       .limit(EMBED_BATCH_SIZE);
+    // A call is billed to one user, so each call holds one user's clippings.
+    const byUser = new Map<string, (typeof missing)[number][]>();
+    for (const row of missing) byUser.set(row.userId, [...(byUser.get(row.userId) ?? []), row]);
     let count = 0;
-    for (const group of chunks(missing, EMBED_CALL_SIZE)) {
-      let vectors: number[][];
-      try {
-        vectors = await embedMany(group.map(documentText), "document");
-      } catch (error) {
-        console.error(`Couldn't embed ${group.length} clippings; stopping for today`, error);
-        break;
-      }
-      for (const [index, row] of group.entries()) {
-        // Only while still missing: enrichment may have written one in the meantime.
-        const [updated] = await db
-          .update(clippings)
-          .set({ embedding: vectors[index]! })
-          .where(and(eq(clippings.id, row.id), isNull(embedding)))
-          .returning({ id: clippings.id });
-        if (updated) count += 1;
+    for (const [userId, rows] of byUser) {
+      for (const group of chunks(rows, EMBED_CALL_SIZE)) {
+        let vectors: number[][];
+        try {
+          vectors = await embedMany(group.map(documentText), "document", {
+            userId,
+            jobKind: "enrich",
+          });
+        } catch (error) {
+          // A user at their cap waits for tomorrow; the others go on.
+          if (error instanceof CapReachedError) break;
+          console.error(`Couldn't embed ${group.length} clippings; stopping for today`, error);
+          return count;
+        }
+        for (const [index, row] of group.entries()) {
+          // Only while still missing (enrichment may have written one in the meantime) and for
+          // the body that was embedded: an edit made since embeds, or leaves unembedded, the new one.
+          const [updated] = await db
+            .update(clippings)
+            .set({ embedding: vectors[index]! })
+            .where(
+              and(
+                eq(clippings.id, row.id),
+                isNull(embedding),
+                row.body === null ? isNull(clippings.body) : eq(clippings.body, row.body),
+              ),
+            )
+            .returning({ id: clippings.id });
+          if (updated) count += 1;
+        }
       }
     }
     return count;
@@ -2439,11 +2737,17 @@ export function createClippingsService({
   }): Promise<{ checked: number; dead: number }> {
     const now = clock.now();
     const due = await db
-      .select({ id: clippings.id, url: clippings.url, checkedAt: clippings.linkCheckedAt })
+      .select({
+        id: clippings.id,
+        url: sql<string>`${clippings.url}`,
+        checkedAt: clippings.linkCheckedAt,
+      })
       .from(clippings)
       .where(
         and(
           eq(clippings.status, "ready"),
+          // A note has no link to check.
+          eq(clippings.kind, "link"),
           live,
           or(
             isNull(clippings.linkCheckedAt),
@@ -2498,6 +2802,7 @@ export function createClippingsService({
 
   return {
     saveClipping,
+    saveNote,
     listTags,
     listTagSummaries,
     findTagByName,

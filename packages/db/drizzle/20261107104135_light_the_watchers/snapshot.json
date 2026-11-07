@@ -1,0 +1,619 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "06bea7eb-4c8d-4e40-b875-85a924c1ff45",
+  "prevIds": ["942740bc-5c2c-409a-9021-3eb8b91e1b90"],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "library_changes"],
+      "writes": [
+        "s|tbl|public.library_changes",
+        "n|tbl|public.library_changes",
+        "e|tbl|public.library_changes",
+        "n|rel|public.library_changes",
+        "n|type|public.library_changes",
+        "n|rel|public.library_changes_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "clippings", "kind"],
+      "writes": [
+        "s|col|public.clippings.kind",
+        "n|col|public.clippings.kind",
+        "e|col|public.clippings.kind"
+      ],
+      "reads": ["n|tbl|public.clippings", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "clippings", "body"],
+      "writes": [
+        "s|col|public.clippings.body",
+        "n|col|public.clippings.body",
+        "e|col|public.clippings.body"
+      ],
+      "reads": ["n|tbl|public.clippings", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "user_settings", "auto_tag"],
+      "writes": [
+        "s|col|public.user_settings.auto_tag",
+        "n|col|public.user_settings.auto_tag",
+        "e|col|public.user_settings.auto_tag"
+      ],
+      "reads": ["n|tbl|public.user_settings", "n|sch|public"]
+    },
+    {
+      "statementType": "recreate_column",
+      "statementTarget": ["column", "public", "clippings", "search_tsv"],
+      "writes": [
+        "s|col|public.clippings.search_tsv",
+        "n|col|public.clippings.search_tsv",
+        "e|col|public.clippings.search_tsv"
+      ],
+      "reads": ["n|tbl|public.clippings", "n|sch|public"],
+      "sqlHash": "4dfbe6d4c99e936c"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "clippings", "url"],
+      "writes": ["s|colprop|public.clippings.url.notNull"],
+      "reads": ["n|tbl|public.clippings", "n|sch|public", "n|col|public.clippings.url"],
+      "sqlHash": "0a333de114f67c27"
+    },
+    {
+      "statementType": "alter_column",
+      "statementTarget": ["column", "public", "clippings", "url_normalized"],
+      "writes": ["s|colprop|public.clippings.url_normalized.notNull"],
+      "reads": ["n|tbl|public.clippings", "n|sch|public", "n|col|public.clippings.url_normalized"],
+      "sqlHash": "cf43d44fcfa627fd"
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "library_changes", "library_changes_user_created_idx"],
+      "writes": [
+        "s|idx|public.library_changes_user_created_idx",
+        "n|idx|public.library_changes_user_created_idx",
+        "e|idx|public.library_changes_user_created_idx",
+        "n|rel|public.library_changes_user_created_idx"
+      ],
+      "reads": [
+        "n|tbl|public.library_changes",
+        "n|sch|public",
+        "n|col|public.library_changes.user_id",
+        "n|col|public.library_changes.created_at",
+        "n|col|public.library_changes.id"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "library_changes", "library_changes_suggested_idx"],
+      "writes": [
+        "s|idx|public.library_changes_suggested_idx",
+        "n|idx|public.library_changes_suggested_idx",
+        "e|idx|public.library_changes_suggested_idx",
+        "n|rel|public.library_changes_suggested_idx"
+      ],
+      "reads": [
+        "n|tbl|public.library_changes",
+        "n|sch|public",
+        "n|col|public.library_changes.user_id",
+        "n|col|public.library_changes.created_at"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "library_changes", "library_changes_target_ids_idx"],
+      "writes": [
+        "s|idx|public.library_changes_target_ids_idx",
+        "n|idx|public.library_changes_target_ids_idx",
+        "e|idx|public.library_changes_target_ids_idx",
+        "n|rel|public.library_changes_target_ids_idx"
+      ],
+      "reads": [
+        "n|tbl|public.library_changes",
+        "n|sch|public",
+        "n|col|public.library_changes.target_ids"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "clippings", "clippings_search_tsv_idx"],
+      "writes": [
+        "s|idx|public.clippings_search_tsv_idx",
+        "n|idx|public.clippings_search_tsv_idx",
+        "e|idx|public.clippings_search_tsv_idx",
+        "n|rel|public.clippings_search_tsv_idx"
+      ],
+      "reads": ["n|tbl|public.clippings", "n|sch|public", "n|col|public.clippings.search_tsv"]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "library_changes"],
+      "writes": [
+        "s|fk|public.library_changes.library_changes_user_id_user_id_fkey",
+        "n|fk|public.library_changes.library_changes_user_id_user_id_fkey",
+        "e|fk|public.library_changes.library_changes_user_id_user_id_fkey",
+        "n|con|public.library_changes.library_changes_user_id_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.library_changes",
+        "n|sch|public",
+        "n|tbl|public.user",
+        "n|sch|public",
+        "n|col|public.library_changes.user_id",
+        "n|col|public.user.id",
+        "e|uniqueness|public.user.id"
+      ]
+    },
+    {
+      "statementType": "add_check",
+      "statementTarget": ["table", "public", "clippings"],
+      "writes": [
+        "s|ck|public.clippings.clippings_kind_check",
+        "n|ck|public.clippings.clippings_kind_check",
+        "e|ck|public.clippings.clippings_kind_check",
+        "n|con|public.clippings.clippings_kind_check"
+      ],
+      "reads": [
+        "n|tbl|public.clippings",
+        "n|sch|public",
+        "n|col|public.clippings.kind",
+        "n|col|public.clippings.note"
+      ]
+    },
+    {
+      "statementType": "add_check",
+      "statementTarget": ["table", "public", "clippings"],
+      "writes": [
+        "s|ck|public.clippings.clippings_kind_shape_check",
+        "n|ck|public.clippings.clippings_kind_shape_check",
+        "e|ck|public.clippings.clippings_kind_shape_check",
+        "n|con|public.clippings.clippings_kind_shape_check"
+      ],
+      "reads": [
+        "n|tbl|public.clippings",
+        "n|sch|public",
+        "n|col|public.clippings.kind",
+        "n|col|public.clippings.url",
+        "n|col|public.clippings.url_normalized",
+        "n|col|public.clippings.body",
+        "n|col|public.clippings.note"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "library_changes",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clippings",
+        "name": "kind",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'link'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clippings",
+        "name": "body",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "library_changes",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "gen_random_uuid()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "library_changes",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "library_changes",
+        "name": "actor",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "library_changes",
+        "name": "action",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "library_changes",
+        "name": "target_ids",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 1,
+        "default": "'{}'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "library_changes",
+        "name": "before",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "library_changes",
+        "name": "after",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "library_changes",
+        "name": "confidence",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "library_changes",
+        "name": "status",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'applied'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "library_changes",
+        "name": "reason",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "''",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "library_changes",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "user_settings",
+        "name": "auto_tag",
+        "type": "boolean",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "true",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "library_changes",
+        "name": "library_changes_user_created_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "user_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "created_at",
+            "isExpression": false,
+            "asc": false,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "id",
+            "isExpression": false,
+            "asc": false,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "library_changes",
+        "name": "library_changes_suggested_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "user_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "created_at",
+            "isExpression": false,
+            "asc": false,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": "\"status\" = 'suggested'",
+        "with": "",
+        "method": "btree",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "library_changes",
+        "name": "library_changes_target_ids_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "target_ids",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "gin",
+        "concurrently": false,
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "library_changes",
+        "name": "library_changes_user_id_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["user_id"],
+        "schemaTo": "public",
+        "tableTo": "user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "library_changes",
+        "name": "library_changes_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clippings",
+        "name": "clippings_kind_check",
+        "value": "\"kind\" in ('link', 'note')",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "clippings",
+        "name": "clippings_kind_shape_check",
+        "value": "(\"kind\" = 'link' and \"url\" is not null and \"url_normalized\" is not null and \"body\" is null) or (\"kind\" = 'note' and \"url\" is null and \"url_normalized\" is null and \"body\" is not null)",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "library_changes",
+        "name": "library_changes_actor_check",
+        "value": "\"actor\" in ('auto_tag', 'librarian', 'user_via_mcp')",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "library_changes",
+        "name": "library_changes_confidence_check",
+        "value": "\"confidence\" is null or \"confidence\" in ('high', 'low')",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "library_changes",
+        "name": "library_changes_status_check",
+        "value": "\"status\" in ('applied', 'suggested', 'dismissed', 'undone')",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"clippings\",\"url\"]",
+      "set": {
+        "notNull": false
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"clippings\",\"url_normalized\"]",
+      "set": {
+        "notNull": false
+      }
+    },
+    {
+      "op": "alter",
+      "key": "columns\u0000[\"public\",\"clippings\",\"search_tsv\"]",
+      "set": {
+        "generated": {
+          "as": "setweight(to_tsvector('simple', \"clippings\".\"title\"), 'A') || setweight(to_tsvector('simple', coalesce(\"clippings\".\"user_title\", '')), 'A') || setweight(to_tsvector('simple', \"clippings\".\"note\"), 'B') || setweight(to_tsvector('simple', coalesce(\"clippings\".\"body\", '')), 'B') || setweight(to_tsvector('simple', coalesce(\"clippings\".\"excerpt\", '')), 'C')",
+          "type": "stored"
+        }
+      }
+    }
+  ]
+}

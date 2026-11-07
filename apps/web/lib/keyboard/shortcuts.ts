@@ -1,5 +1,5 @@
 /** Where `g` then a key goes. */
-const GO_TO = { c: "/", t: "/tags", s: "/settings" } as const;
+const GO_TO = { c: "/", t: "/tags", l: "/lessons", s: "/settings" } as const;
 
 export type GoToPath = (typeof GO_TO)[keyof typeof GO_TO];
 

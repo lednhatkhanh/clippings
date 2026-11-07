@@ -16,13 +16,20 @@ export async function GET() {
 
   const data = await getClippings().exportClippings(session.user.id);
   const day = format(new UTCDate(parseISO(data.exportedAt)), "yyyy-MM-dd");
+  // A note has no address, so a bookmarks file leaves it out.
   const html = serializeBookmarksHtml(
-    data.clippings.map((clipping) => ({
-      url: clipping.url,
-      title: clipping.title,
-      createdAt: clipping.createdAt,
-      tags: clipping.tags,
-    })),
+    data.clippings.flatMap((clipping) =>
+      clipping.url === null
+        ? []
+        : [
+            {
+              url: clipping.url,
+              title: clipping.title,
+              createdAt: clipping.createdAt,
+              tags: clipping.tags,
+            },
+          ],
+    ),
   );
   return new Response(html, {
     headers: {

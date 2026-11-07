@@ -71,14 +71,12 @@ type-aware) and types (`tsc`); this file holds what none of them says.
 `apps/web/proxy.ts` only checks that a session cookie exists. Server code that reads or writes user
 data validates the session itself, as the `(app)` layout does.
 
-An ast-grep rule (`ast-grep/rules/server-action-checks-session.yml`, run by `apps/web`'s `lint`)
-requires every export of a `"use server"` file, types aside, to be `export async function` whose
-first statement is `await requireUserId();`, `const userId = await requireUserId();` or
-`const session = await getSession();` followed by an `if (!session …)`. `export { x }`,
-`export … from` and `export const x = …` hide the check, so they fail too. An action that reads or
-writes no user data (sign-in, sign-out, the consent page's redirects) opts out with a
-`// ast-grep-ignore: server-action-checks-session` comment above it and a reason in the doc
-comment.
+Every export of a `"use server"` file, types aside, is an `export async function` whose first
+statement is `await requireUserId();`, `const userId = await requireUserId();` or
+`const session = await getSession();` followed by an `if (!session …)`. Avoid `export { x }`,
+`export … from` and `export const x = …`: they hide whether the check is there. An action that
+reads or writes no user data (sign-in, sign-out, the consent page's redirects) skips the check and
+says why in its doc comment.
 
 ## Tests
 

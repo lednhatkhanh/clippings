@@ -24,6 +24,7 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { label: "New clipping", keys: ["N"] },
       { label: "Go to Clippings", keys: ["G", "C"], between: "then" },
       { label: "Go to Tags", keys: ["G", "T"], between: "then" },
+      { label: "Go to Lessons", keys: ["G", "L"], between: "then" },
       { label: "Go to Settings", keys: ["G", "S"], between: "then" },
       { label: "Toggle light and dark", keys: ["⇧", "D"] },
       { label: "Show this sheet", keys: ["?"] },

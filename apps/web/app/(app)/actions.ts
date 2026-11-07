@@ -2,25 +2,34 @@
 
 import { constructNow } from "date-fns";
 import { revalidatePath } from "next/cache";
+import { createElement, type ReactNode } from "react";
 
+import { Markdown } from "@/components/markdown.tsx";
 import { requireUserId } from "@/lib/auth/session.ts";
+import { getChanges } from "@/lib/changes/service.ts";
 import { loadBrowseParams } from "@/lib/clippings/browse-params.ts";
 import { loadRows, toRow, type ClippingRowData, type RowsPage } from "@/lib/clippings/rows.ts";
 import { getClippings } from "@/lib/clippings/service.ts";
 import {
+  ChangeConflictError,
+  ChangeNotFoundError,
+  ChangeNotUndoableError,
+  EmptyNoteBodyError,
   InvalidTagsError,
   InvalidUrlError,
+  NoteBodyTooLongError,
+  NotANoteError,
   NoteTooLongError,
   TitleTooLongError,
 } from "@clippings/db";
-import { formatAbsoluteDate, type Tag } from "@clippings/shared";
+import { formatAbsoluteDate, MAX_NOTE_BODY_LENGTH, type Tag } from "@clippings/shared";
 
 export type SaveOutcome =
   | { status: "created"; clippingId: string }
   | {
       status: "existing";
       clippingId: string;
-      url: string;
+      url: string | null;
       note: string;
       tags: Tag[];
       savedOn: string;
@@ -81,6 +90,78 @@ export async function saveClippingAction(formData: FormData): Promise<SaveOutcom
     }
     throw error;
   }
+}
+
+/** How saving a new note ended. */
+export type SaveNoteOutcome =
+  | { status: "created"; clippingId: string }
+  | { status: "invalid"; field: "body" | "tags"; message: string };
+
+/** Saves a note: text the user wrote, with no address. */
+export async function saveNoteAction(formData: FormData): Promise<SaveNoteOutcome> {
+  const userId = await requireUserId();
+  const body = readString(formData, "body");
+  const tags = readStrings(formData, "tags");
+
+  try {
+    const note = await getClippings().saveNote(userId, { body, tags, source: "web" });
+    revalidatePath("/");
+    return { status: "created", clippingId: note.id };
+  } catch (error) {
+    if (error instanceof EmptyNoteBodyError) {
+      return { status: "invalid", field: "body", message: "Write something to save." };
+    }
+    if (error instanceof NoteBodyTooLongError) {
+      return { status: "invalid", field: "body", message: "That note is too long." };
+    }
+    if (error instanceof InvalidTagsError) {
+      return { status: "invalid", field: "tags", message: `${error.message}.` };
+    }
+    throw error;
+  }
+}
+
+/** How editing a note's text ended. `rendered` is the saved text as formatted Markdown. */
+export type UpdateNoteBodyOutcome =
+  | { status: "saved"; rendered: ReactNode }
+  | { status: "invalid"; message: string }
+  | { status: "failed" };
+
+/**
+ * Saves the text of one of the user's notes, which is embedded again. "failed" when the clipping
+ * isn't theirs or isn't a note.
+ */
+export async function updateNoteBodyAction(
+  clippingId: string,
+  body: string,
+): Promise<UpdateNoteBodyOutcome> {
+  const userId = await requireUserId();
+  // A server action takes whatever a client sends.
+  if (typeof clippingId !== "string" || typeof body !== "string") return { status: "failed" };
+
+  try {
+    const updated = await getClippings().updateClipping(userId, clippingId, { body });
+    if (!updated || updated.body === null) return { status: "failed" };
+    revalidatePath("/");
+    revalidatePath(`/c/${clippingId}`);
+    return { status: "saved", rendered: createElement(Markdown, { source: updated.body }) };
+  } catch (error) {
+    if (error instanceof EmptyNoteBodyError) {
+      return { status: "invalid", message: "A note needs some text. Delete it to remove it." };
+    }
+    if (error instanceof NoteBodyTooLongError) {
+      return { status: "invalid", message: "That note is too long." };
+    }
+    if (error instanceof NotANoteError) return { status: "failed" };
+    throw error;
+  }
+}
+
+/** The Markdown source as formatted text, for the note editor's Preview of what isn't saved yet. */
+export async function previewMarkdownAction(source: string): Promise<ReactNode> {
+  await requireUserId();
+  if (typeof source !== "string") return null;
+  return createElement(Markdown, { source: source.slice(0, MAX_NOTE_BODY_LENGTH) });
 }
 
 /** Saves the note on one of the user's clippings. False when it isn't theirs or is too long. */
@@ -185,6 +266,35 @@ export async function dismissTagSuggestionsAction(
   const dismissed = await getClippings().dismissTagSuggestions(userId, clippingId, names);
   revalidatePath(`/c/${clippingId}`);
   return dismissed;
+}
+
+/** How undoing an automatic tag ended: done, or why it wasn't. */
+export type UndoAutoTagOutcome =
+  | { status: "undone"; tagId: string }
+  | { status: "refused"; message: string };
+
+/**
+ * Takes back a tag that auto-tagging put on one of the user's clippings. Refused, with a message
+ * to show, when the change is gone or already undone, or a later change touched the same tag.
+ */
+export async function undoAutoTagAction(changeId: string): Promise<UndoAutoTagOutcome> {
+  const userId = await requireUserId();
+  if (typeof changeId !== "string") return { status: "refused", message: "That change is gone." };
+
+  try {
+    const undone = await getChanges().undoChange(userId, changeId);
+    revalidatePath("/");
+    revalidatePath(`/c/${undone.clippingId}`);
+    return { status: "undone", tagId: undone.tagId };
+  } catch (error) {
+    if (error instanceof ChangeNotFoundError) {
+      return { status: "refused", message: "That change is gone." };
+    }
+    if (error instanceof ChangeNotUndoableError || error instanceof ChangeConflictError) {
+      return { status: "refused", message: error.message };
+    }
+    throw error;
+  }
 }
 
 /**

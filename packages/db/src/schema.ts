@@ -22,9 +22,31 @@ import {
 import {
   APPEARANCE_DEFAULTS,
   APPEARANCE_VALUES,
+  AUTO_TAG_DEFAULT,
+  AUTOMATION_DEFAULTS,
+  BRIEF_MODES,
+  BRIEF_SOURCES,
+  BRIEF_STATUSES,
+  CLIPPING_KINDS,
   CLIPPING_SOURCES,
   CLIPPING_STATUSES,
+  ITEM_LINK_CREATORS,
+  LIBRARY_CHANGE_ACTORS,
+  LIBRARY_CHANGE_CONFIDENCES,
+  LESSON_SKIP_KINDS,
+  LESSON_SOURCES,
+  LESSON_STATUSES,
+  LIBRARY_CHANGE_STATUSES,
+  MAX_BRIEF_LENGTH,
+  MAX_LESSON_LENGTH,
+  MAX_LESSON_RECAP_LENGTH,
+  MAX_LESSON_TOPIC_LENGTH,
+  MAX_FOLDER_NAME_LENGTH,
+  MAX_LINK_REASON_LENGTH,
+  MAX_TOPIC_PAGE_LENGTH,
+  RESEARCH_DEFAULTS,
   TAG_COLORS,
+  TOPIC_PAGE_SOURCES,
 } from "@clippings/shared";
 
 /**
@@ -352,8 +374,15 @@ export const clippings = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    url: text("url").notNull(),
-    urlNormalized: text("url_normalized").notNull(),
+    // A link or a note: a note is text the user wrote, with no URL (`clippings_kind_shape_check`).
+    kind: text("kind", { enum: CLIPPING_KINDS }).notNull().default("link"),
+    // Null on a note. Duplicate detection (`clippings_user_id_url_normalized_key`) applies to links
+    // only, since Postgres treats nulls as distinct.
+    url: text("url"),
+    urlNormalized: text("url_normalized"),
+    // A note's text, as Markdown source exactly as written (distinct from `note`, the comment on a
+    // link). Null on a link. Embedded and searched like a link's summary.
+    body: text("body"),
     // The page's title, as enrichment wrote it. The title to show is `user_title` when set.
     title: text("title").notNull(),
     // The user's own title; null shows the page's. Enrichment never writes it.
@@ -389,6 +418,9 @@ export const clippings = pgTable(
     // When the user pinned it above the newest-first list; null when not pinned. Deleting and
     // undoing leave it alone.
     pinnedAt: timestamptz("pinned_at"),
+    // The one folder it sits in; null until the librarian files it (existing rows have none).
+    // The foreign key, with the user id, is in the table's extra config.
+    folderId: uuid("folder_id"),
     // When the weekly link check last looked at the page; null before the first look.
     linkCheckedAt: timestamptz("link_checked_at"),
     // Checks in a row that found the page gone. Any live answer resets it to 0.
@@ -397,18 +429,35 @@ export const clippings = pgTable(
     // while it answers. The first time stays through further failures.
     linkDeadSince: timestamptz("link_dead_since"),
     // What keyword search matches, kept up to date by Postgres. `simple` doesn't stem, so words
-    // in any language are matched as written. The weights rank both titles over note over excerpt.
+    // in any language are matched as written. The weights rank both titles over note and body over excerpt.
     searchTsv: tsvector("search_tsv").generatedAlwaysAs(
       (): SQL =>
-        sql`setweight(to_tsvector('simple', ${clippings.title}), 'A') || setweight(to_tsvector('simple', coalesce(${clippings.userTitle}, '')), 'A') || setweight(to_tsvector('simple', ${clippings.note}), 'B') || setweight(to_tsvector('simple', coalesce(${clippings.excerpt}, '')), 'C')`,
+        sql`setweight(to_tsvector('simple', ${clippings.title}), 'A') || setweight(to_tsvector('simple', coalesce(${clippings.userTitle}, '')), 'A') || setweight(to_tsvector('simple', ${clippings.note}), 'B') || setweight(to_tsvector('simple', coalesce(${clippings.body}, '')), 'B') || setweight(to_tsvector('simple', coalesce(${clippings.excerpt}, '')), 'C')`,
     ),
   },
   (table) => [
     unique("clippings_user_id_url_normalized_key").on(table.userId, table.urlNormalized),
     // What `clipping_tags` points at, so a link can only join a user's clipping to their own tag.
     unique("clippings_id_user_id_key").on(table.id, table.userId),
+    // Only the folder id is nulled when the folder goes: the user id stays (`SET NULL (folder_id)`,
+    // written by hand in the migration, since Drizzle can't say it).
+    foreignKey({
+      name: "clippings_folder_fkey",
+      columns: [table.folderId, table.userId],
+      foreignColumns: [folders.id, folders.userId],
+    }).onDelete("set null"),
+    // A folder's clippings.
+    index("clippings_folder_idx")
+      .on(table.folderId)
+      .where(sql`${table.folderId} is not null`),
     check("clippings_status_check", sql`${table.status} in (${inList(CLIPPING_STATUSES)})`),
     check("clippings_source_check", sql`${table.source} in (${inList(CLIPPING_SOURCES)})`),
+    check("clippings_kind_check", sql`${table.kind} in (${inList(CLIPPING_KINDS)})`),
+    // A link has a URL and no body; a note has a body and no URL.
+    check(
+      "clippings_kind_shape_check",
+      sql`(${table.kind} = 'link' and ${table.url} is not null and ${table.urlNormalized} is not null and ${table.body} is null) or (${table.kind} = 'note' and ${table.url} is null and ${table.urlNormalized} is null and ${table.body} is not null)`,
+    ),
     index("clippings_user_newest_idx").on(table.userId, table.createdAt.desc(), table.id.desc()),
     index("clippings_search_tsv_idx").using("gin", table.searchTsv),
     // Typo tolerance on the title to show: `<%` (word similarity) uses it, and the expression
@@ -461,12 +510,27 @@ export const tags = pgTable(
     name: text("name").notNull(),
     // A name from `TAG_COLORS`, never a hex value: each palette renders it.
     color: text("color", { enum: TAG_COLORS }).notNull().default("none"),
+    // True once the user chose the color themselves: the librarian then leaves it alone.
+    colorOverridden: boolean("color_overridden").notNull().default(false),
+    // The one folder it sits in; null until the librarian files it. The foreign key, with the user
+    // id, is in the extra config.
+    folderId: uuid("folder_id"),
     // No default: the service stamps it from its clock.
     createdAt: timestamptz("created_at").notNull(),
   },
   (table) => [
     uniqueIndex("tags_user_id_name_key").on(table.userId, sql`lower(${table.name})`),
     unique("tags_id_user_id_key").on(table.id, table.userId),
+    // As `clippings_folder_fkey`: the migration nulls only `folder_id`.
+    foreignKey({
+      name: "tags_folder_fkey",
+      columns: [table.folderId, table.userId],
+      foreignColumns: [folders.id, folders.userId],
+    }).onDelete("set null"),
+    // A folder's tags.
+    index("tags_folder_idx")
+      .on(table.folderId)
+      .where(sql`${table.folderId} is not null`),
     check("tags_color_check", sql`${table.color} in (${inList(TAG_COLORS)})`),
   ],
 );
@@ -597,10 +661,34 @@ export const userSettings = pgTable(
       .default(APPEARANCE_DEFAULTS.density),
     // Whether enrichment proposes tags for the user's clippings. Off until they turn it on.
     suggestTags: boolean("suggest_tags").notNull().default(false),
+    // Whether enrichment applies tags itself (high-confidence ones, logged in `library_changes`)
+    // instead of only suggesting them. On for every user, including one with no row.
+    autoTag: boolean("auto_tag").notNull().default(AUTO_TAG_DEFAULT),
+    // What automation may spend: the model gateway refuses calls past the daily cap (in
+    // micro-dollars, per UTC day), and research jobs are submitted at most this many a day.
+    dailyCapMicros: integer("daily_cap_micros")
+      .notNull()
+      .default(AUTOMATION_DEFAULTS.dailyCapMicros),
+    researchJobsPerDay: integer("research_jobs_per_day")
+      .notNull()
+      .default(AUTOMATION_DEFAULTS.researchJobsPerDay),
+    // The "About me" text the research briefs are aimed at.
+    researchProfile: text("research_profile").notNull().default(RESEARCH_DEFAULTS.profile),
+    // The topics worth researching; empty means research is off. The default is spelled out in
+    // SQL (`RESEARCH_DEFAULTS.domains`).
+    researchDomains: text("research_domains")
+      .array()
+      .notNull()
+      .default(sql`'{shipping,logistics}'::text[]`),
+    // When the user's first librarian run finished, which stored its suggestions for them to
+    // judge. Null until then, so a first run cut off partway and redelivered is still a first run.
+    librarianFirstRunAt: timestamptz("librarian_first_run_at"),
     // No default: the service stamps it from its clock.
     updatedAt: timestamptz("updated_at").notNull(),
   },
   (table) => [
+    check("user_settings_daily_cap_check", sql`${table.dailyCapMicros} >= 0`),
+    check("user_settings_research_jobs_check", sql`${table.researchJobsPerDay} >= 0`),
     check("user_settings_theme_check", sql`${table.theme} in (${inList(APPEARANCE_VALUES.theme)})`),
     check(
       "user_settings_palette_check",
@@ -636,5 +724,367 @@ export const weeklyDigests = pgTable(
   },
   (table) => [
     primaryKey({ name: "weekly_digests_pkey", columns: [table.userId, table.weekStart] }),
+  ],
+);
+
+/**
+ * The ledger of paid model calls (Claude and Voyage AI), one row per call, written by the model
+ * gateway from the response's own usage. Spend is summed from it by user and UTC day, which is
+ * what the daily cap checks. `job_kind` is a `ModelJobKind`, and `cost_micros` is in micro-dollars
+ * priced from the gateway's rate table at the time of the call. `job_kind` and `model` carry no
+ * check constraint: a new job or model must not need a migration to be recorded.
+ */
+export const modelUsage = pgTable(
+  "model_usage",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    jobKind: text("job_kind").notNull(),
+    model: text("model").notNull(),
+    // Whether the call ran through the Batch API, at half price.
+    batch: boolean("batch").notNull().default(false),
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
+    cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
+    webSearches: integer("web_searches").notNull().default(0),
+    costMicros: bigint("cost_micros", { mode: "number" }).notNull(),
+    // Names the request a row was written for, so recording it twice (a batch collected again)
+    // writes one row. Null for a call that is recorded once by construction.
+    requestKey: text("request_key"),
+    // No default: the service stamps it from its clock.
+    createdAt: timestamptz("created_at").notNull(),
+  },
+  (table) => [
+    // "Spend by user since the start of a UTC day or month".
+    index("model_usage_user_created_idx").on(table.userId, table.createdAt),
+    uniqueIndex("model_usage_request_key_uidx")
+      .on(table.requestKey)
+      .where(sql`${table.requestKey} is not null`),
+    check("model_usage_cost_check", sql`${table.costMicros} >= 0`),
+  ],
+);
+
+/**
+ * The log of changes automation makes to a user's library, and of the ones it proposes. One row
+ * per change: applied changes, suggestions waiting for a decision, and those dismissed or undone
+ * (applying a suggestion or undoing a change flips `status`; the row stays). `before` and `after`
+ * hold what the change replaced and wrote, enough to undo it. `action` and `target_ids` have no
+ * check constraint (an action is a `LibraryChangeAction`; a target is a clipping, tag or folder
+ * id, none of them a foreign key, since a merged tag's id outlives the tag), so a new action needs
+ * no migration.
+ */
+export const libraryChanges = pgTable(
+  "library_changes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    actor: text("actor", { enum: LIBRARY_CHANGE_ACTORS }).notNull(),
+    action: text("action").notNull(),
+    targetIds: uuid("target_ids")
+      .array()
+      .notNull()
+      .default(sql`'{}'::uuid[]`),
+    before: jsonb("before"),
+    after: jsonb("after"),
+    // Null when the change carries no judgement, such as one the user asked for.
+    confidence: text("confidence", { enum: LIBRARY_CHANGE_CONFIDENCES }),
+    status: text("status", { enum: LIBRARY_CHANGE_STATUSES }).notNull().default("applied"),
+    reason: text("reason").notNull().default(""),
+    // When the change took effect: the creation time for an applied change, the time of the
+    // decision for an accepted suggestion; null while it waits or when it was never applied. Undo
+    // compares it with later changes to the same targets.
+    appliedAt: timestamptz("applied_at"),
+    // No default: the service stamps it from its clock.
+    createdAt: timestamptz("created_at").notNull(),
+  },
+  (table) => [
+    check("library_changes_actor_check", sql`${table.actor} in (${inList(LIBRARY_CHANGE_ACTORS)})`),
+    check(
+      "library_changes_confidence_check",
+      sql`${table.confidence} is null or ${table.confidence} in (${inList(LIBRARY_CHANGE_CONFIDENCES)})`,
+    ),
+    check(
+      "library_changes_status_check",
+      sql`${table.status} in (${inList(LIBRARY_CHANGE_STATUSES)})`,
+    ),
+    // "This user's recent changes", newest first.
+    index("library_changes_user_created_idx").on(
+      table.userId,
+      table.createdAt.desc(),
+      table.id.desc(),
+    ),
+    // "This user's suggestions", newest first.
+    index("library_changes_suggested_idx")
+      .on(table.userId, table.createdAt.desc())
+      .where(sql`${table.status} = 'suggested'`),
+    // "Did a later change touch this target": undo refuses when one did.
+    index("library_changes_target_ids_idx").using("gin", table.targetIds),
+  ],
+);
+
+/**
+ * A folder the librarian files clippings and tags under: one per item, unlike tags. Names are
+ * unique per user, ignoring case. The color is a `TAG_COLORS` name, never a hex value.
+ */
+export const folders = pgTable(
+  "folders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    color: text("color", { enum: TAG_COLORS }).notNull().default("none"),
+    // No default: the service stamps both from its clock.
+    createdAt: timestamptz("created_at").notNull(),
+    updatedAt: timestamptz("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("folders_user_id_name_key").on(table.userId, sql`lower(${table.name})`),
+    // What `clippings` and `tags` point at, so an item can only sit in its owner's folder.
+    unique("folders_id_user_id_key").on(table.id, table.userId),
+    check("folders_color_check", sql`${table.color} in (${inList(TAG_COLORS)})`),
+    check(
+      "folders_name_check",
+      sql`char_length(${table.name}) between 1 and ${sql.raw(String(MAX_FOLDER_NAME_LENGTH))}`,
+    ),
+  ],
+);
+
+/**
+ * A link between two of a user's clippings, with why. A pair has at most one link whichever way
+ * it points, and nothing links to itself. A link goes when either clipping is deleted for good.
+ */
+export const itemLinks = pgTable(
+  "item_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    fromId: uuid("from_id").notNull(),
+    toId: uuid("to_id").notNull(),
+    reason: text("reason").notNull(),
+    createdBy: text("created_by", { enum: ITEM_LINK_CREATORS }).notNull(),
+    // No default: the service stamps it from its clock.
+    createdAt: timestamptz("created_at").notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "item_links_from_fkey",
+      columns: [table.fromId, table.userId],
+      foreignColumns: [clippings.id, clippings.userId],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "item_links_to_fkey",
+      columns: [table.toId, table.userId],
+      foreignColumns: [clippings.id, clippings.userId],
+    }).onDelete("cascade"),
+    // One link per unordered pair: (a, b) and (b, a) collide.
+    uniqueIndex("item_links_user_pair_key").on(
+      table.userId,
+      sql`least(${table.fromId}, ${table.toId})`,
+      sql`greatest(${table.fromId}, ${table.toId})`,
+    ),
+    check("item_links_no_self_check", sql`${table.fromId} <> ${table.toId}`),
+    check(
+      "item_links_created_by_check",
+      sql`${table.createdBy} in (${inList(ITEM_LINK_CREATORS)})`,
+    ),
+    check(
+      "item_links_reason_check",
+      sql`char_length(${table.reason}) between 1 and ${sql.raw(String(MAX_LINK_REASON_LENGTH))}`,
+    ),
+    // Each side's lookup ("what links to this clipping").
+    index("item_links_from_idx").on(table.fromId),
+    index("item_links_to_idx").on(table.toId),
+  ],
+);
+
+/** The page the librarian writes for a tag: one per tag, replaced on every rewrite. */
+export const topicPages = pgTable(
+  "topic_pages",
+  {
+    tagId: uuid("tag_id").primaryKey(),
+    userId: text("user_id").notNull(),
+    // Markdown.
+    body: text("body").notNull(),
+    source: text("source", { enum: TOPIC_PAGE_SOURCES }).notNull().default("ai"),
+    // No default: the service stamps it from its clock.
+    updatedAt: timestamptz("updated_at").notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "topic_pages_tag_fkey",
+      columns: [table.tagId, table.userId],
+      foreignColumns: [tags.id, tags.userId],
+    }).onDelete("cascade"),
+    check("topic_pages_source_check", sql`${table.source} in (${inList(TOPIC_PAGE_SOURCES)})`),
+    check(
+      "topic_pages_body_check",
+      sql`char_length(${table.body}) <= ${sql.raw(String(MAX_TOPIC_PAGE_LENGTH))}`,
+    ),
+  ],
+);
+
+/**
+ * The research brief written for a clipping: at most one each. Queued by enrichment when its
+ * verdict says the save is worth researching, or made by hand; a batch or a "write it now" job
+ * writes it. AI content: a brief is never a clipping, so it is never enriched or researched in turn.
+ */
+export const researchBriefs = pgTable(
+  "research_briefs",
+  {
+    // Also the `custom_id` of the brief's request in a batch.
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    clippingId: uuid("clipping_id").notNull(),
+    // The research domain the verdict named; empty for a brief asked for by hand.
+    domain: text("domain").notNull(),
+    // The verdict's one-line reason, or "Asked for by hand".
+    reason: text("reason").notNull().default(""),
+    status: text("status", { enum: BRIEF_STATUSES }).notNull(),
+    mode: text("mode", { enum: BRIEF_MODES }).notNull().default("batch"),
+    // Submissions made. One that failed or expired is retried once (attempts < 2), then dropped.
+    attempts: integer("attempts").notNull().default(0),
+    // The Anthropic batch holding the request while `submitted`.
+    batchId: text("batch_id"),
+    // Markdown; set when ready.
+    body: text("body"),
+    // `{ url, title }[]` the brief drew on.
+    sources: jsonb("sources")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    // Why the brief was dropped or put back in the queue, shown to the user.
+    note: text("note"),
+    source: text("source", { enum: BRIEF_SOURCES }).notNull().default("ai"),
+    // No default: the service stamps all of these from its clock.
+    createdAt: timestamptz("created_at").notNull(),
+    updatedAt: timestamptz("updated_at").notNull(),
+    // The last submission; when a `submitted` brief never got a batch, or a `writing` one lost its
+    // job, this is what the daily run measures the wait from.
+    submittedAt: timestamptz("submitted_at"),
+    // When a job took up a `writing` brief; a job delivered twice finds it set and stands down.
+    // Null in every other state.
+    writerStartedAt: timestamptz("writer_started_at"),
+    completedAt: timestamptz("completed_at"),
+  },
+  (table) => [
+    unique("research_briefs_clipping_id_key").on(table.clippingId),
+    foreignKey({
+      name: "research_briefs_clipping_fkey",
+      columns: [table.clippingId, table.userId],
+      foreignColumns: [clippings.id, clippings.userId],
+    }).onDelete("cascade"),
+    // The collector's lookup of what is in flight.
+    index("research_briefs_submitted_idx")
+      .on(table.status, table.batchId)
+      .where(sql`${table.status} = 'submitted'`),
+    index("research_briefs_user_status_idx").on(table.userId, table.status, table.createdAt),
+    check("research_briefs_status_check", sql`${table.status} in (${inList(BRIEF_STATUSES)})`),
+    check("research_briefs_mode_check", sql`${table.mode} in (${inList(BRIEF_MODES)})`),
+    check("research_briefs_source_check", sql`${table.source} in (${inList(BRIEF_SOURCES)})`),
+    check(
+      "research_briefs_body_check",
+      sql`char_length(${table.body}) <= ${sql.raw(String(MAX_BRIEF_LENGTH))}`,
+    ),
+  ],
+);
+
+/**
+ * One row per submission of a brief to the model (the daily batch or "write it now"), which is
+ * what the research-job limit counts: a user's rows since 00:00 UTC. A submission the gateway
+ * turned away is removed again. Deleting the brief deletes its rows.
+ */
+export const researchSubmissions = pgTable(
+  "research_submissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    briefId: uuid("brief_id")
+      .notNull()
+      .references(() => researchBriefs.id, { onDelete: "cascade" }),
+    // No default: the service stamps it from its clock.
+    submittedAt: timestamptz("submitted_at").notNull(),
+  },
+  (table) => [
+    // "A user's submissions since the start of a UTC day".
+    index("research_submissions_user_submitted_idx").on(table.userId, table.submittedAt),
+    index("research_submissions_brief_idx").on(table.briefId),
+  ],
+);
+
+/**
+ * A lesson, written twice a week from the user's recent saves and the gaps in their topic pages:
+ * one per user per UTC day (`day`), so a cron that fires twice or a job delivered twice writes one.
+ * A job claims the day as `writing`; it ends `ready` or `skipped` with a reason for the Lessons
+ * page. AI content: a lesson is never a clipping, so it is never enriched, researched or taught
+ * from in turn. `source_ids` are the clippings and notes it drew on; not foreign keys, so deleting
+ * one leaves the lesson, and readers show only those still there.
+ */
+export const lessons = pgTable(
+  "lessons",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    day: date("day", { mode: "string" }).notNull(),
+    status: text("status", { enum: LESSON_STATUSES }).notNull(),
+    topic: text("topic").notNull().default(""),
+    // The tag the lesson was about, when it was about one: topic picking leaves recently taught
+    // tags alone. Not a foreign key, so a deleted or merged tag leaves the lesson.
+    tagId: uuid("tag_id"),
+    // Markdown; set when ready.
+    body: text("body"),
+    // `LessonQuiz`; set when ready.
+    quiz: jsonb("quiz"),
+    // Markdown recap of the previous lesson; empty when there was none.
+    recap: text("recap").notNull().default(""),
+    sourceIds: uuid("source_ids")
+      .array()
+      .notNull()
+      .default(sql`'{}'::uuid[]`),
+    // Set together when skipped, null otherwise.
+    skipKind: text("skip_kind", { enum: LESSON_SKIP_KINDS }),
+    skipReason: text("skip_reason"),
+    source: text("source", { enum: LESSON_SOURCES }).notNull().default("ai"),
+    // No default: the service stamps all of these from its clock.
+    createdAt: timestamptz("created_at").notNull(),
+    updatedAt: timestamptz("updated_at").notNull(),
+    // When a job took up a `writing` lesson; a redelivery finds it recent and stands down, or
+    // stale and takes over.
+    writerStartedAt: timestamptz("writer_started_at"),
+  },
+  (table) => [
+    // Also "this user's lessons, newest first", read backwards.
+    unique("lessons_user_id_day_key").on(table.userId, table.day),
+    check("lessons_status_check", sql`${table.status} in (${inList(LESSON_STATUSES)})`),
+    check(
+      "lessons_skip_kind_check",
+      sql`${table.skipKind} is null or ${table.skipKind} in (${inList(LESSON_SKIP_KINDS)})`,
+    ),
+    check("lessons_source_check", sql`${table.source} in (${inList(LESSON_SOURCES)})`),
+    check(
+      "lessons_body_check",
+      sql`char_length(${table.body}) <= ${sql.raw(String(MAX_LESSON_LENGTH))}`,
+    ),
+    check(
+      "lessons_recap_check",
+      sql`char_length(${table.recap}) <= ${sql.raw(String(MAX_LESSON_RECAP_LENGTH))}`,
+    ),
+    check(
+      "lessons_topic_check",
+      sql`char_length(${table.topic}) <= ${sql.raw(String(MAX_LESSON_TOPIC_LENGTH))}`,
+    ),
   ],
 );

@@ -6,7 +6,8 @@ import { useEffect, useSyncExternalStore } from "react";
 export interface CurrentClipping {
   /** The shown title and the original address, for Share and Copy link. */
   title: string;
-  url: string;
+  /** Null on a note, which has no page to share or link to. */
+  url: string | null;
   pinned: boolean;
   /** Pins or unpins it, the same way the page's own button does. */
   togglePin: () => void;

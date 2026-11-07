@@ -6,12 +6,26 @@ import type { Tag } from "./tag.ts";
 export const CLIPPING_SOURCES = ["web", "extension", "mcp", "digest", "import"] as const;
 export type ClippingSource = (typeof CLIPPING_SOURCES)[number];
 
+/**
+ * What a clipping is: a saved page (`link`, with a URL) or a text the user wrote (`note`, with a
+ * Markdown body and no URL).
+ */
+export const CLIPPING_KINDS = ["link", "note"] as const;
+export type ClippingKind = (typeof CLIPPING_KINDS)[number];
+
 /** Where a clipping is in enrichment. */
 export const CLIPPING_STATUSES = ["pending", "ready", "failed"] as const;
 export type ClippingStatus = (typeof CLIPPING_STATUSES)[number];
 
 /** Longest note a clipping can carry, in characters. */
 export const MAX_NOTE_LENGTH = 10_000;
+
+/**
+ * Longest body of a note-kind clipping (Markdown source), in characters. Distinct from
+ * `MAX_NOTE_LENGTH`, the comment a user adds to a saved link. Kept to what one embedding call and
+ * `MAX_PAGE_TEXT` already take.
+ */
+export const MAX_NOTE_BODY_LENGTH = 20_000;
 
 /** Longest title the user can give a clipping, in characters: as long as enrichment writes. */
 export const MAX_TITLE_LENGTH = 300;
@@ -39,12 +53,23 @@ export interface ClippingStatuses {
 /** A clipping as every delivery surface sees it. JSON-safe, so it crosses the server/client line. */
 export interface Clipping {
   id: string;
-  url: string;
-  /** What duplicate detection compares: `url` without tracking parameters, fragment and the like. */
-  urlNormalized: string;
+  /** A saved page or a note the user wrote. */
+  kind: ClippingKind;
+  /** The page's address. Null on a note, which has none. */
+  url: string | null;
+  /**
+   * What duplicate detection compares: `url` without tracking parameters, fragment and the like.
+   * Null on a note: duplicates are for links only.
+   */
+  urlNormalized: string | null;
+  /**
+   * A note's text, as Markdown source exactly as written. Null on a link, whose `note` is the
+   * comment on why it was kept.
+   */
+  body: string | null;
   /**
    * The title to show: the user's own when they renamed the clipping, otherwise the page's. The
-   * URL until enrichment reads the page.
+   * URL until enrichment reads the page. A note's is made from the start of its body.
    */
   title: string;
   /** The page's title as enrichment wrote it, whether or not the user renamed the clipping. */
