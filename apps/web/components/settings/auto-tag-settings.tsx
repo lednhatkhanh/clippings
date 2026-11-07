@@ -34,7 +34,7 @@ export function AutoTagSettings({ initial }: { initial: boolean }) {
     <SettingsCard title="Auto-tagging">
       <SettingsRow
         title="Tag new clippings automatically"
-        description="When on, the model puts your existing tags on a new clipping when it is sure they fit, and adds a new tag only when it is sure and none of yours does. Each one is marked on the clipping with an Undo. Anything less certain stays a suggestion. Off, nothing is added without you. On for new accounts; an account that existed before auto-tagging began starts off."
+        description="When on, the model puts your existing tags on a new clipping when it is sure they fit, and adds a new tag only when it is sure and none of yours does. Each one is marked on the clipping with an Undo. Anything less certain stays a suggestion. Off, nothing is added without you."
       >
         <SegmentedButtons
           aria-label="Tag new clippings automatically"

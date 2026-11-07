@@ -617,8 +617,7 @@ export const userSettings = pgTable(
     // Whether enrichment proposes tags for the user's clippings. Off until they turn it on.
     suggestTags: boolean("suggest_tags").notNull().default(false),
     // Whether enrichment applies tags itself (high-confidence ones, logged in `library_changes`)
-    // instead of only suggesting them. On for a user with no row; the migration that added the
-    // column gave every user who existed then a row with it off.
+    // instead of only suggesting them. On for every user, including one with no row.
     autoTag: boolean("auto_tag").notNull().default(AUTO_TAG_DEFAULT),
     // What automation may spend: the model gateway refuses calls past the daily cap (in
     // micro-dollars, per UTC day), and research jobs are submitted at most this many a day.

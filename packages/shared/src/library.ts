@@ -1,9 +1,8 @@
 import * as z from "zod";
 
 /**
- * Whether automation applies tags itself, for a user with no `user_settings` row (a user created
- * after the migration that added `auto_tag`). The column's default is the same. Users who existed
- * then were given a row with `auto_tag` false, so they keep suggestions only until they turn it on.
+ * Whether automation applies tags itself, for a user with no `user_settings` row. The column's
+ * default is the same, so it holds for every user, those who existed before auto-tagging included.
  */
 export const AUTO_TAG_DEFAULT = true;
 

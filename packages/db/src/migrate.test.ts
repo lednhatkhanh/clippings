@@ -170,18 +170,15 @@ describe.skipIf(!TEST_DATABASE_URL)("migrate", () => {
     });
   });
 
-  it("turns auto-tagging off for every user who exists, and on for one created after", async () => {
+  it("leaves auto-tagging on for every user, those who existed before the migration included", async () => {
     await migrate({
       connectionString: database.url,
       migrationsFolder: foldersWithout("_light_the_watchers"),
     });
     await withClient(database.url, async (client) => {
-      for (const id of ["with-row", "no-row"]) {
-        await client.query(
-          `insert into "user" ("id", "name", "email", "emailVerified") values ($1, $1, $1 || '@example.com', true)`,
-          [id],
-        );
-      }
+      await client.query(
+        `insert into "user" ("id", "name", "email", "emailVerified") values ('with-row', 'with-row', 'with-row@example.com', true)`,
+      );
       await client.query(
         `insert into user_settings (user_id, suggest_tags, updated_at) values ('with-row', true, now())`,
       );
@@ -201,8 +198,7 @@ describe.skipIf(!TEST_DATABASE_URL)("migrate", () => {
       }>(`select user_id, auto_tag, suggest_tags from user_settings order by user_id`);
       expect(rows).toEqual([
         { user_id: "later", auto_tag: true, suggest_tags: false },
-        { user_id: "no-row", auto_tag: false, suggest_tags: false },
-        { user_id: "with-row", auto_tag: false, suggest_tags: true },
+        { user_id: "with-row", auto_tag: true, suggest_tags: true },
       ]);
     });
   });

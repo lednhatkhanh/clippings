@@ -254,7 +254,11 @@ describe.skipIf(!TEST_DATABASE_URL)("auto-tagging", () => {
 
       const applied = await fixture.changes.listAutoApplied(ana, id);
 
-      expect(applied.map(({ name, reason, confidence }) => [name, reason, confidence])).toEqual([
+      // Both changes carry the same timestamp, so their order is not defined.
+      const byName = applied
+        .map(({ name, reason, confidence }) => [name, reason, confidence])
+        .toSorted(([a], [b]) => (a ?? "").localeCompare(b ?? ""));
+      expect(byName).toEqual([
         ["css", "A page on CSS", "high"],
         ["layout", "About layout", "high"],
       ]);

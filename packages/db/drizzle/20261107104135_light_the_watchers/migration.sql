@@ -17,13 +17,9 @@ CREATE TABLE "library_changes" (
 --> statement-breakpoint
 ALTER TABLE "clippings" ADD COLUMN "kind" text DEFAULT 'link' NOT NULL;--> statement-breakpoint
 ALTER TABLE "clippings" ADD COLUMN "body" text;--> statement-breakpoint
--- Auto-tagging is on for a new user and off for every user who exists now, who keeps suggestions
--- only until they turn it on. The column is added with default false (so every existing row is
--- false), the users with no settings row get one so the code's "no row means on" never reaches
--- them, and only then the default becomes true.
-ALTER TABLE "user_settings" ADD COLUMN "auto_tag" boolean DEFAULT false NOT NULL;--> statement-breakpoint
-INSERT INTO "user_settings" ("user_id", "auto_tag", "updated_at") SELECT "id", false, now() FROM "user" ON CONFLICT ("user_id") DO NOTHING;--> statement-breakpoint
-ALTER TABLE "user_settings" ALTER COLUMN "auto_tag" SET DEFAULT true;--> statement-breakpoint
+-- Auto-tagging is on for every user, existing users included. A user with no settings row is on
+-- through the column default and the code's fallback, so no row is backfilled.
+ALTER TABLE "user_settings" ADD COLUMN "auto_tag" boolean DEFAULT true NOT NULL;--> statement-breakpoint
 -- A note's body is searched like the comment on a link. Changed in place, not dropped and re-added,
 -- so the previous app version keeps its `search_tsv` (and the index on it) while this runs.
 ALTER TABLE "clippings" ALTER COLUMN "search_tsv" SET EXPRESSION AS (setweight(to_tsvector('simple', "clippings"."title"), 'A') || setweight(to_tsvector('simple', coalesce("clippings"."user_title", '')), 'A') || setweight(to_tsvector('simple', "clippings"."note"), 'B') || setweight(to_tsvector('simple', coalesce("clippings"."body", '')), 'B') || setweight(to_tsvector('simple', coalesce("clippings"."excerpt", '')), 'C'));--> statement-breakpoint
