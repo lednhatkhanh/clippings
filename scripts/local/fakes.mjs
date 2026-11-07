@@ -39,6 +39,11 @@
 // folder named for their first tag (items with none in "Notes"), the first two items that share a
 // tag are linked, and each tag with 3+ items gets a topic page. Every change is "high" confidence
 // unless the library (a note's text, say) holds [fake-confidence low].
+//
+// A lesson request (a forced write_lesson tool) gets a short lesson on the topic named in the
+// message (inside <topic>, else "recent reading"), headed by a level-two heading, with a four-choice quiz, a recap when
+// the message holds a <previous_lesson> (empty when not), and the first two saved items it lists
+// (C1, C2) as its sources.
 import { createHash, createHmac } from "node:crypto";
 import http from "node:http";
 
@@ -239,6 +244,50 @@ function replyUsage(message, requestBody) {
     cache_read_input_tokens: count("cache_read"),
     cache_creation_input_tokens: count("cache_write"),
     server_tool_use: { web_search_requests: count("searches") },
+  };
+}
+
+/** The input a forced `write_lesson` call gets, read off the lesson request's message. */
+function lessonInput(message) {
+  // With no tag to teach, there is no <topic> and the message asks the model to choose.
+  const topic = /<topic>\n([\s\S]*?)\n<\/topic>/.exec(message)?.[1]?.trim() || "recent reading";
+  const refs = [...message.matchAll(/^(C\d+) \((?:link|note), saved/gm)].map((m) => m[1]);
+  const previous = /^Topic: (.*)$/m.exec(
+    /<previous_lesson>\n([\s\S]*?)\n<\/previous_lesson>/.exec(message)?.[1] ?? "",
+  )?.[1];
+  return {
+    topic: `A first look at ${topic}`,
+    body: [
+      `## Why ${topic} matters`,
+      "",
+      `A stand-in lesson about ${topic}. It explains the main idea in plain words, then shows where it shows up in practice.`,
+      "",
+      "## The key idea",
+      "",
+      "Start from the smallest example that works, then add one constraint at a time.",
+      "",
+      "- First, name the thing you are building on.",
+      "- Then, change one part and watch what moves.",
+      "",
+      "## Where to go next",
+      "",
+      "Read the saved items again with this frame in mind.",
+    ].join("\n"),
+    quiz: {
+      question: `What is the best way to start learning ${topic}?`,
+      choices: [
+        "Start from the smallest working example",
+        "Read everything before trying anything",
+        "Skip the basics",
+        "Memorise the terms",
+      ],
+      answer_index: 0,
+      explanation: "A small working example gives you something to change and observe.",
+    },
+    recap: previous
+      ? `Last time was ${previous}. This lesson builds on it: the same habit of starting small applies here.`
+      : "",
+    source_refs: refs.slice(0, 2),
   };
 }
 
@@ -553,6 +602,29 @@ listen(ANTHROPIC_PORT, "fake anthropic", (request, response, body) => {
     console.log(`[anthropic] ${request.url} model=${payload.model} brief`);
     response.writeHead(200, { "content-type": "application/json" });
     return response.end(JSON.stringify(briefReply(payload, message, body)));
+  }
+  if (payload.tool_choice?.name === "write_lesson") {
+    console.log(`[anthropic] ${request.url} model=${payload.model} lesson`);
+    response.writeHead(200, { "content-type": "application/json" });
+    return response.end(
+      JSON.stringify({
+        id: "msg_local",
+        type: "message",
+        role: "assistant",
+        model: payload.model,
+        stop_reason: "tool_use",
+        stop_sequence: null,
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu_local",
+            name: "write_lesson",
+            input: lessonInput(message),
+          },
+        ],
+        usage: replyUsage(message, body),
+      }),
+    );
   }
   if (LIBRARIAN_TOOLS.has(payload.tool_choice?.name)) {
     console.log(

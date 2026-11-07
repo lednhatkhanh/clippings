@@ -6,6 +6,7 @@
   "crons": [
     { "path": "/api/cron/sweep", "schedule": "0 4 * * *" },
     { "path": "/api/cron/briefs", "schedule": "0 5 * * *" },
-    { "path": "/api/cron/librarian", "schedule": "0 22 * * 1" }
+    { "path": "/api/cron/librarian", "schedule": "0 22 * * 1" },
+    { "path": "/api/cron/lessons", "schedule": "0 7 * * 2,5" }
   ]
 }

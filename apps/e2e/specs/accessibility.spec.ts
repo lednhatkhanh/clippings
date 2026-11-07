@@ -63,6 +63,34 @@ test.describe("accessibility (WCAG 2.0 and 2.1, A and AA)", () => {
     expect(await wcagViolations(page)).toEqual([]);
   });
 
+  test("the Lessons pages have no violations", async ({ page, user, lessons }) => {
+    const claim = await lessons.claimLesson(user.id, "2026-11-04");
+    if (claim.status !== "claimed") throw new Error("Couldn't claim the lesson");
+    await lessons.completeLesson(user.id, claim.lessonId, {
+      topic: "How sourdough starters work",
+      tagId: null,
+      body: "## Wild yeast\n\nA starter is flour and water left to ferment.",
+      quiz: {
+        question: "What feeds the yeast in a starter?",
+        choices: ["Salt", "Flour", "Butter"],
+        answerIndex: 1,
+        explanation: "The flour's starch breaks down into sugars.",
+      },
+      recap: "",
+      sourceIds: [],
+    });
+
+    await page.goto("/lessons");
+    await expect(page.getByRole("list", { name: "Your lessons" })).toBeVisible();
+    expect(await wcagViolations(page)).toEqual([]);
+
+    await page.getByRole("link", { name: /How sourdough starters work/ }).click();
+    await page.getByText("Salt", { exact: true }).click();
+    await page.getByRole("button", { name: "Check answer" }).click();
+    await expect(page.getByText("Not quite.")).toBeVisible();
+    expect(await wcagViolations(page)).toEqual([]);
+  });
+
   test("the Library review page has no violations", async ({
     page,
     user,

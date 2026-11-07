@@ -34,13 +34,13 @@ const row = (page: Page) =>
     .getByRole("grid", { name: "Your clippings" })
     .getByRole("row", { name: /example\.com\/instant/ });
 
-/** What every app page shows at once: the navigation, with its three places. */
+/** What every app page shows at once: the navigation, with its four places. */
 function expectAppShell(page: Page) {
   return test.step(
     "the navigation is on screen",
     async () => {
       await expect(nav(page)).toBeVisible();
-      for (const name of ["Clippings", "Tags", "Settings"]) {
+      for (const name of ["Clippings", "Tags", "Lessons", "Settings"]) {
         await expect(navLink(page, name)).toBeVisible();
       }
     },
@@ -223,6 +223,50 @@ test.describe("Tags (/tags)", () => {
     });
 
     await expect(tagList(page)).toBeVisible();
+  });
+});
+
+test.describe("Lessons (/lessons)", () => {
+  const lessonList = (page: Page) => page.getByRole("list", { name: "Your lessons" });
+
+  test.beforeEach(async ({ user, clippings, lessons }) => {
+    await clippings.saveClipping(user.id, { url: URL_ON_LIST, source: "web" });
+    const claim = await lessons.claimLesson(user.id, "2026-11-06");
+    if (claim.status !== "claimed") throw new Error("Couldn't claim the lesson");
+    await lessons.skipLesson(user.id, claim.lessonId, {
+      kind: "nothing_to_teach",
+      reason: "Nothing saved yet to build a lesson from.",
+    });
+  });
+
+  test("is instant on a first load", async ({ page, baseURL }) => {
+    await instant(
+      page,
+      async () => {
+        const serveLive = await serveStaticShell(page, "/lessons", "lessons.html");
+        await page.goto("/lessons");
+        await expectAppShell(page);
+        await expect(lessonList(page)).toHaveCount(0);
+        await serveLive();
+      },
+      { baseURL },
+    );
+
+    await expect(lessonList(page)).toBeVisible();
+  });
+
+  test("is instant on a navigation from the list", async ({ page }) => {
+    await startOn(page, "/", row(page));
+
+    await instant(page, async () => {
+      await navLink(page, "Lessons").click();
+      await page.waitForURL((url) => url.pathname === "/lessons");
+      await expectAppShell(page);
+      await expect(page.getByRole("heading", { name: "Lessons", level: 1 })).toBeVisible();
+      await expect(lessonList(page)).toHaveCount(0);
+    });
+
+    await expect(lessonList(page)).toBeVisible();
   });
 });
 

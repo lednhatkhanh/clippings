@@ -77,6 +77,7 @@ describe("g then a key", () => {
   it.each([
     ["c", "/"],
     ["t", "/tags"],
+    ["l", "/lessons"],
     ["s", "/settings"],
     ["T", "/tags"],
   ] as const)("g then %s goes to %s", (key, path) => {

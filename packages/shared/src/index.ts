@@ -160,3 +160,18 @@ export {
   type ResearchSettings,
   type ResearchSettingsChange,
 } from "./research.ts";
+export {
+  LESSON_QUIZ_CHOICES,
+  LESSON_SKIP_KINDS,
+  LESSON_SOURCES,
+  LESSON_STATUSES,
+  MAX_LESSON_LENGTH,
+  MAX_LESSON_RECAP_LENGTH,
+  MAX_LESSON_TOPIC_LENGTH,
+  type Lesson,
+  type LessonAuthor,
+  type LessonQuiz,
+  type LessonSkipKind,
+  type LessonSourceItem,
+  type LessonStatus,
+} from "./lessons.ts";

@@ -142,3 +142,18 @@ export {
   type RequestBriefNowResult,
   type ResearchService,
 } from "./research/index.ts";
+export { createLessonsService, type LessonsServiceDeps } from "./lessons/service.ts";
+export {
+  LESSON_NOTE_EXCERPT_LENGTH,
+  LESSON_PAST_LIMIT,
+  LESSON_RECENT_DAYS,
+  LESSON_RECENT_LIMIT,
+  LESSON_WRITER_STALE_MS,
+  type ClaimLessonResult,
+  type CompletedLesson,
+  type LessonMaterial,
+  type LessonMaterialItem,
+  type LessonMaterialTag,
+  type LessonsService,
+  type PastLesson,
+} from "./lessons/types.ts";
