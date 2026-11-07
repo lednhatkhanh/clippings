@@ -66,7 +66,9 @@ for going offline; a second build gets a new build id, so it triggers the update
 - **Anthropic** answers the page-reading tool call after four seconds, so the pending state is
   visible. Its title is the page's own, prefixed with `Read:`. When the request asks for tag
   suggestions, it suggests the user's first two tags and one new tag, the first long word of the
-  page title.
+  page title, each with `low` confidence (a suggestion). A `[fake-confidence high]` marker in the
+  message makes them `high`, which auto-tagging (on by default for a user created after the
+  migration) applies and logs.
   Every reply carries `usage` (input is the request's characters over four, output 10), which the
   model gateway prices into the ledger. Markers in the message text set it or make the call fail:
   `[fake-usage input=1000 output=200 cache_read=5000 cache_write=300 searches=2]`, and

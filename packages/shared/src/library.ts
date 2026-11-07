@@ -7,6 +7,12 @@ import * as z from "zod";
  */
 export const AUTO_TAG_DEFAULT = true;
 
+/** A change to the auto-tagging setting, as a client sends it. Anything else is refused. */
+export const autoTagChangeSchema = z.strictObject({
+  autoTag: z.boolean("Auto-tagging is on or off"),
+});
+export type AutoTagChange = z.infer<typeof autoTagChangeSchema>;
+
 /** Who made a change to the library. */
 export const LIBRARY_CHANGE_ACTORS = ["auto_tag", "librarian", "user_via_mcp"] as const;
 export type LibraryChangeActor = (typeof LIBRARY_CHANGE_ACTORS)[number];

@@ -92,6 +92,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
           },
           summarizer: { summarize: unavailable("Summarizing") },
           embedder: { embed: unavailable("Embedding"), embedMany: unavailable("Embedding") },
+          budget: { canSpend: unavailable("Spending") },
         }),
       );
     },

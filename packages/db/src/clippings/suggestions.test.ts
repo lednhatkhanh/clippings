@@ -50,6 +50,8 @@ describe.skipIf(!TEST_DATABASE_URL)("tag suggestions", () => {
   describe("with the setting off", () => {
     it("is off by default, sends no tag names to the model and stores and returns nothing", async () => {
       const ana = await fixture.createUser("ana");
+      // Auto-tagging is on for a new user and sends tag names too; this is suggestions alone.
+      await fixture.settings.setAutoTag(ana, false);
       await fixture.service.saveClipping(ana, {
         url: "https://example.com/other",
         tags: ["css"],

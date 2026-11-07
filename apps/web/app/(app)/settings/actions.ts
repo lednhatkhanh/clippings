@@ -16,6 +16,7 @@ import {
 } from "@/lib/settings/import.ts";
 import { getSettings } from "@/lib/settings/service.ts";
 import {
+  autoTagChangeSchema,
   automationSettingsChangeSchema,
   pickAppearance,
   type Appearance,
@@ -58,6 +59,20 @@ export async function setSuggestTagsAction(on: boolean): Promise<boolean> {
   const userId = await requireUserId();
   if (typeof on !== "boolean") throw new Error("Invalid setting");
   return getSettings().setSuggestTags(userId, on);
+}
+
+/**
+ * Turns auto-tagging on or off for the user and returns what was saved. On, the tags the model is
+ * confident in are applied to new clippings (and logged, so each can be undone); off, they wait
+ * as suggestions. The change is checked with the shared schema.
+ */
+export async function setAutoTagAction(change: unknown): Promise<boolean> {
+  const userId = await requireUserId();
+  const parsed = autoTagChangeSchema.safeParse(change);
+  if (!parsed.success) throw new Error("Invalid setting");
+  const on = await getSettings().setAutoTag(userId, parsed.data.autoTag);
+  revalidatePath("/settings");
+  return on;
 }
 
 /** The outcome of saving the automation limits: what is now stored, or why nothing was. */

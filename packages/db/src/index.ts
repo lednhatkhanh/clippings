@@ -21,6 +21,7 @@ export {
 } from "./schema.ts";
 export {
   CapReachedError,
+  type BudgetGate,
   type Clock,
   type Embedder,
   type EmbeddingOwner,
@@ -31,7 +32,17 @@ export {
   type PageSummary,
   type Summarizer,
   type SummarizerInput,
+  type TagProposal,
 } from "./clippings/ports.ts";
+export {
+  ChangeConflictError,
+  ChangeNotFoundError,
+  ChangeNotUndoableError,
+  createChangesService,
+  type AutoAppliedTag,
+  type ChangesService,
+  type UndoResult,
+} from "./changes/service.ts";
 export {
   createClippingsService,
   IMPORT_DAILY_BUDGET,

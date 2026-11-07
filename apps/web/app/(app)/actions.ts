@@ -4,10 +4,14 @@ import { constructNow } from "date-fns";
 import { revalidatePath } from "next/cache";
 
 import { requireUserId } from "@/lib/auth/session.ts";
+import { getChanges } from "@/lib/changes/service.ts";
 import { loadBrowseParams } from "@/lib/clippings/browse-params.ts";
 import { loadRows, toRow, type ClippingRowData, type RowsPage } from "@/lib/clippings/rows.ts";
 import { getClippings } from "@/lib/clippings/service.ts";
 import {
+  ChangeConflictError,
+  ChangeNotFoundError,
+  ChangeNotUndoableError,
   InvalidTagsError,
   InvalidUrlError,
   NoteTooLongError,
@@ -185,6 +189,35 @@ export async function dismissTagSuggestionsAction(
   const dismissed = await getClippings().dismissTagSuggestions(userId, clippingId, names);
   revalidatePath(`/c/${clippingId}`);
   return dismissed;
+}
+
+/** How undoing an automatic tag ended: done, or why it wasn't. */
+export type UndoAutoTagOutcome =
+  | { status: "undone"; tagId: string }
+  | { status: "refused"; message: string };
+
+/**
+ * Takes back a tag that auto-tagging put on one of the user's clippings. Refused, with a message
+ * to show, when the change is gone or already undone, or a later change touched the same tag.
+ */
+export async function undoAutoTagAction(changeId: string): Promise<UndoAutoTagOutcome> {
+  const userId = await requireUserId();
+  if (typeof changeId !== "string") return { status: "refused", message: "That change is gone." };
+
+  try {
+    const undone = await getChanges().undoChange(userId, changeId);
+    revalidatePath("/");
+    revalidatePath(`/c/${undone.clippingId}`);
+    return { status: "undone", tagId: undone.tagId };
+  } catch (error) {
+    if (error instanceof ChangeNotFoundError) {
+      return { status: "refused", message: "That change is gone." };
+    }
+    if (error instanceof ChangeNotUndoableError || error instanceof ChangeConflictError) {
+      return { status: "refused", message: error.message };
+    }
+    throw error;
+  }
 }
 
 /**

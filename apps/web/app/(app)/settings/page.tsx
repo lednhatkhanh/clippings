@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/page-header.tsx";
 import { PageTransition, RevealTransition } from "@/components/page-transition.tsx";
 import { AccountSettings } from "@/components/settings/account-settings.tsx";
 import { AppearanceSettings } from "@/components/settings/appearance-settings.tsx";
+import { AutoTagSettings } from "@/components/settings/auto-tag-settings.tsx";
 import { AutomationSettings } from "@/components/settings/automation-settings.tsx";
 import {
   ConnectionsSettings,
@@ -21,7 +22,12 @@ import { getSession, signInRedirect } from "@/lib/auth/session.ts";
 import { getClippings } from "@/lib/clippings/service.ts";
 import { formatLastUsed } from "@/lib/format-date.ts";
 import { getUsage } from "@/lib/gateway/service.ts";
-import { getAppearance, getAutomation, getSuggestTags } from "@/lib/settings/service.ts";
+import {
+  getAppearance,
+  getAutomation,
+  getAutoTag,
+  getSuggestTags,
+} from "@/lib/settings/service.ts";
 import { formatIsoUtc } from "@clippings/shared";
 import type { Appearance, AutomationSettings as Automation, SpendSummary } from "@clippings/shared";
 import { Tab, TabList, TabPanel, TabPanels, Tabs } from "@clippings/ui";
@@ -35,20 +41,23 @@ async function SettingsTabs() {
   let appearance: Appearance;
   let connections: ConnectionRow[];
   let suggestTags: boolean;
+  let autoTag: boolean;
   let pendingImports: number;
   let automation: Automation;
   let spend: SpendSummary;
   try {
-    const [settings, connected, suggest, pending, limits, spent] = await Promise.all([
+    const [settings, connected, suggest, auto, pending, limits, spent] = await Promise.all([
       getAppearance(session.user.id),
       getConnections().listConnections(session.user.id),
       getSuggestTags(session.user.id),
+      getAutoTag(session.user.id),
       getClippings().countPendingImports(session.user.id),
       getAutomation(session.user.id),
       getUsage().getSpend(session.user.id),
     ]);
     appearance = settings;
     suggestTags = suggest;
+    autoTag = auto;
     pendingImports = pending;
     automation = limits;
     spend = spent;
@@ -86,7 +95,10 @@ async function SettingsTabs() {
           </div>
         </TabPanel>
         <TabPanel id="automation">
-          <AutomationSettings spend={spend} initial={automation} />
+          <div className="flex flex-col gap-4">
+            <AutoTagSettings initial={autoTag} />
+            <AutomationSettings spend={spend} initial={automation} />
+          </div>
         </TabPanel>
         <TabPanel id="connections">
           <ConnectionsSettings connections={connections} />

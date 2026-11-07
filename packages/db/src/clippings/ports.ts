@@ -1,3 +1,5 @@
+import type { LibraryChangeConfidence, ModelJobKind } from "@clippings/shared";
+
 /** Time, injected so tests decide what "now" is. */
 export interface Clock {
   now: () => Date;
@@ -48,6 +50,26 @@ export interface PageFetcher {
   checkLink: (url: string) => Promise<"alive" | "dead" | "unknown">;
 }
 
+/**
+ * Whether a user's budget allows a model call, asked before the work that leads up to it. A cheap
+ * look at the ledger, not the gateway's own check, which stays authoritative at the call.
+ */
+export interface BudgetGate {
+  /** False when the user's daily cap leaves no room for a call of this kind. */
+  canSpend: (userId: string, jobKind: ModelJobKind) => Promise<boolean>;
+}
+
+/** A tag the model proposes for a page, with how sure it is. */
+export interface TagProposal {
+  /** Spelled as the user spells it when `existing`. */
+  name: string;
+  /** Whether the name is one of the user's own tags (as listed to the model). */
+  existing: boolean;
+  confidence: LibraryChangeConfidence;
+  /** One line on why the tag fits, for the change log. */
+  reason: string;
+}
+
 /** What the summarizer makes of a page. */
 export interface PageSummary {
   title: string;
@@ -59,6 +81,11 @@ export interface PageSummary {
    * unusable.
    */
   suggestedTags?: string[];
+  /**
+   * The same tags with the model's confidence in each and its reason, in the same order. Left
+   * out when the model gave no confidence (every tag in `suggestedTags` is then a suggestion).
+   */
+  tagProposals?: TagProposal[];
 }
 
 /**

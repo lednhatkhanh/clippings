@@ -31,6 +31,7 @@ import {
 import type pg from "pg";
 
 import {
+  AUTO_TAG_DEFAULT,
   AUTOMATION_DEFAULTS,
   formatIsoUtc,
   MAX_NOTE_LENGTH,
@@ -54,6 +55,7 @@ import {
   type TextSegment,
 } from "@clippings/shared";
 
+import { applyAutoTags } from "../changes/auto-tag.ts";
 import { createDatabase, type Database } from "../database.ts";
 import {
   clippings,
@@ -67,6 +69,7 @@ import {
 } from "../schema.ts";
 import {
   CapReachedError,
+  type BudgetGate,
   type Clock,
   type Embedder,
   type EmbeddingOwner,
@@ -251,6 +254,8 @@ export interface ClippingsServiceDeps {
   fetcher: PageFetcher;
   summarizer: Summarizer;
   embedder: Embedder;
+  /** Asked before a page is fetched, so a user past their cap costs no fetch. */
+  budget: BudgetGate;
 }
 
 export interface EnrichClippingOptions {
@@ -661,6 +666,7 @@ export function createClippingsService({
   fetcher,
   summarizer,
   embedder,
+  budget,
 }: ClippingsServiceDeps) {
   const db = createDatabase(pool);
 
@@ -1865,8 +1871,11 @@ export function createClippingsService({
   /**
    * Reads a pending clipping's page and fills in its title, summary and excerpt. Safe to repeat:
    * only a pending clipping is touched, so a redelivered job does nothing, and the user's title,
-   * note and tags are never written. For a user with tag suggestions on, it also stores the tags
-   * it suggests (see `replaceSuggestions`), in the transaction that makes the clipping ready.
+   * note and tags are never written by the reading itself. For a user with tag suggestions on, it
+   * also stores the tags it suggests (see `replaceSuggestions`), in the transaction that makes
+   * the clipping ready. For a user with auto-tagging on, the tags the model is confident in are
+   * put on the clipping in that same transaction and logged (see `applyAutoTags`), and the rest
+   * are the suggestions.
    *
    * A clipping saved from the extension with its page has that text (origin "browser"). While no
    * reading has used it (`read_at` is null) it is the text for this reading and the page is not
@@ -1879,6 +1888,8 @@ export function createClippingsService({
    * When the model gateway refuses the reading (the user's daily cap is reached, or Anthropic's
    * spend limit or credit), the clipping is held: it stays pending, nothing is thrown (so the
    * queue doesn't retry) and no sweep attempt is spent. The daily sweep requests it again later.
+   * The budget is looked at before the page is fetched, so a held clipping costs no fetch; the
+   * gateway's own check at the call stays the one that counts.
    */
   async function enrichClipping(
     clippingId: string,
@@ -1894,13 +1905,16 @@ export function createClippingsService({
     const url = row.url;
     if (url === null) return "skipped";
 
-    // Only a user with suggestions on has their tag names sent to the model.
+    // Only a user with suggestions or auto-tagging on has their tag names sent to the model.
     const [settings] = await db
-      .select({ on: userSettings.suggestTags })
+      .select({ suggest: userSettings.suggestTags, auto: userSettings.autoTag })
       .from(userSettings)
       .where(eq(userSettings.userId, row.userId));
-    const suggesting = settings?.on === true;
-    const userTags = suggesting ? await mostUsedTagNames(row.userId) : undefined;
+    const suggesting = settings?.suggest === true;
+    const autoTagging = settings?.auto ?? AUTO_TAG_DEFAULT;
+    const userTags = suggesting || autoTagging ? await mostUsedTagNames(row.userId) : undefined;
+
+    if (!(await budget.canSpend(row.userId, "enrich"))) return "held";
 
     // The text the user's browser sent with a save, if that is what the clipping has.
     const [stored] = await db
@@ -2013,14 +2027,20 @@ export function createClippingsService({
             : { text: pageText, origin: "fetch", title: null, at: now, readAt: now },
         );
       }
-      if (ready && suggesting) {
-        await replaceSuggestions(
-          tx,
-          row.userId,
+      // What the model proposed and the tags did not take: all of it, unless auto-tagging is on
+      // and the model said how sure it was.
+      let proposed = read.suggestedTags;
+      if (ready && autoTagging && read.tagProposals) {
+        const outcome = await applyAutoTags(tx, {
+          userId: row.userId,
           clippingId,
-          { model: read.suggestedTags, neighbours },
-          now,
-        );
+          proposals: read.tagProposals,
+          at: now,
+        });
+        proposed = outcome.suggested;
+      }
+      if (ready && suggesting) {
+        await replaceSuggestions(tx, row.userId, clippingId, { model: proposed, neighbours }, now);
       }
       return ready;
     });

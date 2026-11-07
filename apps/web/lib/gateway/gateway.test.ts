@@ -220,6 +220,79 @@ describe.skipIf(!TEST_DATABASE_URL)("model gateway against the local fakes", () 
     });
   });
 
+  describe("a paid Voyage AI reply that can't be used", () => {
+    const embedOnce = (userId: string, text = "x".repeat(400)) =>
+      gateway.embed({
+        userId,
+        jobKind: "enrich",
+        texts: [text],
+        purpose: "document",
+        timeoutMs: 5_000,
+      });
+
+    it("still reaches the ledger when the body has the wrong number of embeddings", async () => {
+      const ana = await fixture.createUser("ana");
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        Response.json({ data: [], usage: { total_tokens: 250 } }),
+      );
+
+      await expect(embedOnce(ana)).rejects.toThrow(/wrong number of embeddings/);
+
+      // 250 tokens at $0.06 per MTok is 15 micro-dollars.
+      expect(await ledger()).toMatchObject([
+        { user_id: ana, model: "voyage-4", input_tokens: 250, cost_micros: 15 },
+      ]);
+    });
+
+    it("still reaches the ledger, priced from the text, when the 2xx body isn't JSON", async () => {
+      const ana = await fixture.createUser("ana");
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("<html>oops</html>"));
+
+      await expect(embedOnce(ana)).rejects.toThrow(/wrong number of embeddings/);
+
+      expect(await ledger()).toMatchObject([
+        { user_id: ana, model: "voyage-4", input_tokens: 100 },
+      ]);
+    });
+
+    it("records nothing for a reply that isn't a 2xx", async () => {
+      const ana = await fixture.createUser("ana");
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("down", { status: 503 }));
+
+      await expect(embedOnce(ana)).rejects.toThrow(/answered 503/);
+
+      expect(await ledger()).toEqual([]);
+    });
+  });
+
+  describe("looking ahead with canSpend", () => {
+    it("says no past the limit for the job kind, and yes below it, without calling anyone", async () => {
+      const ana = await fixture.createUser("ana");
+      await setCap(ana, 1_000_000);
+      await spend(ana, 800_000);
+      const create = vi.spyOn(anthropic.messages, "create");
+      const fetch = vi.spyOn(globalThis, "fetch");
+
+      expect(await gateway.canSpend(ana, "enrich")).toBe(true);
+      expect(await gateway.canSpend(ana, "librarian")).toBe(false);
+
+      await spend(ana, 200_000);
+      expect(await gateway.canSpend(ana, "enrich")).toBe(false);
+      expect(create).not.toHaveBeenCalled();
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it("keeps users apart", async () => {
+      const ana = await fixture.createUser("ana");
+      const ben = await fixture.createUser("ben");
+      await setCap(ana, 100_000);
+      await spend(ana, 100_000);
+
+      expect(await gateway.canSpend(ana, "enrich")).toBe(false);
+      expect(await gateway.canSpend(ben, "enrich")).toBe(true);
+    });
+  });
+
   describe("the cap", () => {
     it("refuses a call past the cap without making it", async () => {
       const ana = await fixture.createUser("ana");
