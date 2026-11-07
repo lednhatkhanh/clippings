@@ -15,7 +15,7 @@ import { InvalidTagsError, TagNameTakenError } from "../clippings/service.ts";
 import { createDatabase } from "../database.ts";
 import { clippings, folders, libraryChanges, tags } from "../schema.ts";
 import { gateChange } from "./gate.ts";
-import { readLibraryView, type LibraryView } from "./library.ts";
+import { readLibraryView, type LibraryView } from "./library-view.ts";
 import {
   effectiveAt,
   latestChangeAt,

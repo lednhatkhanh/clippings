@@ -92,7 +92,7 @@ export function toRow(
  */
 export async function loadRows(
   userId: string,
-  { q, tags, sources, sort }: BrowseParams,
+  { q, tags, sources, folder, sort }: BrowseParams,
   cursor?: string,
   signal?: AbortSignal,
 ): Promise<RowsPage> {
@@ -102,6 +102,7 @@ export async function loadRows(
       q,
       tags,
       sources,
+      folderId: folder ?? undefined,
       sort,
       // The list searches as the reader types, so a few letters are not worth embedding.
       typeahead: true,
@@ -113,7 +114,12 @@ export async function loadRows(
       nextCursor: null,
     };
   }
-  const page = await getClippings().listClippings(userId, { cursor, tags, sources });
+  const page = await getClippings().listClippings(userId, {
+    cursor,
+    tags,
+    sources,
+    folderId: folder ?? undefined,
+  });
   return {
     pinned: page.pinned.map((clipping) => toRow(clipping, now)),
     rows: page.items.map((clipping) => toRow(clipping, now)),

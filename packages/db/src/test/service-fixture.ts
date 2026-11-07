@@ -16,6 +16,7 @@ import {
 } from "../clippings/ports.ts";
 import { createClippingsService } from "../clippings/service.ts";
 import { createConnectionsService } from "../connections/service.ts";
+import { createLibraryService } from "../librarian/library.ts";
 import { createLibrarianService } from "../librarian/service.ts";
 import { createPool } from "../pool.ts";
 import { EMBEDDING_DIMENSIONS } from "../schema.ts";
@@ -180,6 +181,7 @@ export async function createServiceFixture() {
     settings: createSettingsService({ pool, clock }),
     changes: createChangesService({ pool }),
     librarian: createLibrarianService({ pool, clock }),
+    library: createLibraryService({ pool }),
     usage: createUsageService({ pool, clock }),
     connections: createConnectionsService({ pool, clock }),
     /** The fixture's pool, for tests that set up rows no service writes (Better Auth's). */

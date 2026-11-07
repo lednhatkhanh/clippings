@@ -1,6 +1,6 @@
 "use client";
 
-import { Ellipsis, Merge, Palette, Pencil, Trash2 } from "lucide-react";
+import { BookOpenText, Ellipsis, Merge, Palette, Pencil, Trash2 } from "lucide-react";
 import { useState, useTransition, type FormEvent } from "react";
 import { Button as AriaButton, Link } from "react-aria-components";
 import { useFormStatus } from "react-dom";
@@ -13,6 +13,7 @@ import {
 } from "@/app/(app)/tags/actions.ts";
 import { refreshTags } from "@/components/clippings/use-tags.ts";
 import { hrefWithTag, loadBrowseParams } from "@/lib/clippings/browse-params.ts";
+import type { TagPlacement } from "@clippings/db";
 import { MAX_TAG_LENGTH, TAG_COLORS, type TagColor, type TagSummary } from "@clippings/shared";
 import {
   Button,
@@ -170,8 +171,8 @@ function TagDialog({
             onDone={onDone}
           >
             {tag.clippingCount === 0
-              ? `“${tag.name}” will be removed. No clippings carry it.`
-              : `Its ${clippings} will be tagged “${pending.target.name}” instead, and “${tag.name}” will be removed.`}
+              ? `“${tag.name}” will be removed. No clippings carry it. You can undo this in Library review, under Settings.`
+              : `Its ${clippings} will be tagged “${pending.target.name}” instead, and “${tag.name}” will be removed. You can undo this in Library review, under Settings.`}
           </ConfirmForm>
         </Dialog>
       );
@@ -194,7 +195,15 @@ function TagDialog({
   }
 }
 
-function TagRow({ tag, others }: { tag: TagSummary; others: readonly TagSummary[] }) {
+function TagRow({
+  tag,
+  placement,
+  others,
+}: {
+  tag: TagSummary;
+  placement: TagPlacement | undefined;
+  others: readonly TagSummary[];
+}) {
   const [pending, setPending] = useState<Pending>({ kind: "rename" });
   const [isOpen, setIsOpen] = useState(false);
 
@@ -224,6 +233,13 @@ function TagRow({ tag, others }: { tag: TagSummary; others: readonly TagSummary[
           <TagDot color={tag.color} />
           <span className="truncate">{tag.name}</span>
         </span>
+        {placement?.folder || placement?.colorOverridden ? (
+          <span className="min-w-0 truncate typescale-label-md text-ink-faint">
+            {placement.folder ? `In ${placement.folder.name}` : null}
+            {placement.folder && placement.colorOverridden ? " · " : null}
+            {placement.colorOverridden ? "Your color" : null}
+          </span>
+        ) : null}
         <span className="ms-auto typescale-body-md text-ink-faint tabular-nums">
           {tag.clippingCount}
           <span className="sr-only"> {countLabel(tag.clippingCount)}</span>
@@ -237,6 +253,11 @@ function TagRow({ tag, others }: { tag: TagSummary; others: readonly TagSummary[
           <Ellipsis className="size-5" />
         </AriaButton>
         <Menu aria-label={`Actions for ${tag.name}`}>
+          {placement?.hasTopicPage ? (
+            <MenuItem icon={BookOpenText} href={`/tags/${tag.id}`}>
+              Topic page
+            </MenuItem>
+          ) : null}
           <MenuItem icon={Pencil} onAction={() => open({ kind: "rename" })}>
             Rename…
           </MenuItem>
@@ -285,15 +306,30 @@ function TagRow({ tag, others }: { tag: TagSummary; others: readonly TagSummary[
   );
 }
 
-/** The user's tags, each with its color, count and a menu to rename, recolor, merge or delete. */
-export function TagList({ tags }: { tags: readonly TagSummary[] }) {
+/**
+ * The user's tags, each with its color, folder, count and a menu to rename, recolor, merge or
+ * delete, and to open its topic page when the librarian has written one. A color picked here
+ * becomes the user's own: the librarian no longer changes it.
+ */
+export function TagList({
+  tags,
+  placements = [],
+}: {
+  tags: readonly TagSummary[];
+  placements?: readonly TagPlacement[];
+}) {
   return (
     <ul
       aria-label="Your tags"
       className="flex flex-col divide-y divide-line rounded-xl paper p-1.5"
     >
       {tags.map((tag) => (
-        <TagRow key={tag.id} tag={tag} others={tags.filter((other) => other.id !== tag.id)} />
+        <TagRow
+          key={tag.id}
+          tag={tag}
+          placement={placements.find((placement) => placement.tagId === tag.id)}
+          others={tags.filter((other) => other.id !== tag.id)}
+        />
       ))}
     </ul>
   );

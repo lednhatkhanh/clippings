@@ -49,7 +49,7 @@ export {
   type LibraryView,
   type LibraryViewItem,
   type LibraryViewTag,
-} from "./librarian/library.ts";
+} from "./librarian/library-view.ts";
 export {
   LibrarianInputError,
   LibrarianInvalidError,
@@ -57,6 +57,15 @@ export {
   type ProposedChange,
   type ProposingActor,
 } from "./librarian/plans.ts";
+export {
+  createLibraryService,
+  type AppliedChange,
+  type ClippingPlacement,
+  type LibraryService,
+  type LinkedClipping,
+  type TagPlacement,
+  type TagTopic,
+} from "./librarian/library.ts";
 export {
   ChangeNotSuggestedError,
   createLibrarianService,
