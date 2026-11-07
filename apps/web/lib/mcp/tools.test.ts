@@ -23,15 +23,18 @@ import { WRITE_SCOPE } from "./scopes.ts";
 import type { McpCaller } from "./tools.ts";
 
 const WRITE_TOOLS = [
+  "accept_tag_suggestions",
   "apply_suggestion",
   "create_folder",
   "delete_clipping",
   "dismiss_suggestion",
+  "dismiss_tag_suggestions",
   "get_clipping",
   "get_page_text",
   "link_items",
   "list_folders",
   "list_suggestions",
+  "list_tag_suggestions",
   "list_tags",
   "merge_tag",
   "move_to_folder",
@@ -61,6 +64,8 @@ interface ToolClipping {
   pageTitle?: string;
   excerpt: string | null;
   tags: string[];
+  suggestedTags?: string[];
+  pinned?: boolean;
   note: string | null;
   source: string;
   savedAt: string;
@@ -821,6 +826,176 @@ describe.skipIf(!TEST_DATABASE_URL)("the MCP tools", () => {
       expect(await fixture.service.getClipping(ada.userId, id)).toMatchObject({
         note: "",
         tags: [],
+      });
+    });
+
+    it("changes a note's text, and refuses text for a saved page or a blank or too long one", async () => {
+      const made = (
+        await callTool(ada, "save_note", { body: "# Gearbox\n\nfirst draft" })
+      ).json() as { clipping: ToolClipping };
+      const id = made.clipping.id;
+
+      const updated = (
+        await callTool(ada, "update_clipping", { id, body: "# Gearbox v2\n\n- wider ratio" })
+      ).json() as { clipping: ToolClipping };
+      expect(updated.clipping).toMatchObject({
+        title: "Gearbox v2",
+        body: "# Gearbox v2\n\n- wider ratio",
+      });
+
+      const link = await save(ada, "https://example.com/page");
+      const refused = await callTool(ada, "update_clipping", { id: link.id, body: "text" });
+      expect(refused).toMatchObject({ isError: true, text: expect.stringContaining("note") });
+      for (const body of ["   ", "x".repeat(MAX_NOTE_BODY_LENGTH + 1)]) {
+        expect((await callTool(ada, "update_clipping", { id, body })).isError).toBe(true);
+      }
+      expect(await fixture.service.getClipping(ada.userId, id)).toMatchObject({
+        body: "# Gearbox v2\n\n- wider ratio",
+      });
+      // Not another user's note.
+      expect((await callTool(bob, "update_clipping", { id, body: "mine now" })).isError).toBe(true);
+      expect(await fixture.service.getClipping(ada.userId, id)).toMatchObject({
+        body: "# Gearbox v2\n\n- wider ratio",
+      });
+    });
+
+    it("pins and unpins, alone or with other changes, and only the caller's clippings", async () => {
+      const { id } = await save(ada, "https://example.com/pin");
+
+      const pinned = (await callTool(ada, "update_clipping", { id, pinned: true })).json() as {
+        clipping: ToolClipping;
+      };
+      expect(pinned.clipping.pinned).toBe(true);
+      const both = (
+        await callTool(ada, "update_clipping", { id, pinned: false, note: "kept" })
+      ).json() as { clipping: ToolClipping };
+      expect(both.clipping).toMatchObject({ pinned: false, note: "kept" });
+
+      expect((await callTool(bob, "update_clipping", { id, pinned: true })).isError).toBe(true);
+      expect((await fixture.service.getClipping(ada.userId, id))?.pinned).toBe(false);
+      // A change that fails leaves the pin alone.
+      const failed = await callTool(ada, "update_clipping", { id, pinned: true, body: "text" });
+      expect(failed.isError).toBe(true);
+      expect((await fixture.service.getClipping(ada.userId, id))?.pinned).toBe(false);
+    });
+
+    describe("tag suggestions", () => {
+      /** Saves a page that Clippings reads and suggests `names` for. */
+      async function suggested(caller: McpCaller, path: string, names: string[], tags?: string[]) {
+        await fixture.settings.setSuggestTags(caller.userId, true);
+        const url = `https://example.com/${path}`;
+        fixture.web.set(url, {
+          page: { title: path, text: "" },
+          summary: { title: path, summary: "", excerpt: "", suggestedTags: names },
+        });
+        const { id } = await save(caller, url);
+        if (tags) await callTool(caller, "update_clipping", { id, tags });
+        await fixture.service.enrichClipping(id);
+        fixture.advanceClock(1000);
+        return id;
+      }
+
+      type Result = { clipping: ToolClipping };
+      const read = async (caller: McpCaller, id: string) =>
+        ((await callTool(caller, "get_clipping", { id })).json() as Result).clipping;
+
+      it("shows the suggestions a clipping waits on in get_clipping, empty when none", async () => {
+        const id = await suggested(ada, "a", ["layout", "css"], ["web"]);
+        const plain = await save(ada, "https://example.com/plain");
+
+        expect((await read(ada, id)).suggestedTags).toEqual(["css", "layout"]);
+        expect((await read(ada, plain.id)).suggestedTags).toEqual([]);
+      });
+
+      it("accepts the named suggestions or all of them, and returns the clipping", async () => {
+        const id = await suggested(ada, "a", ["css", "layout", "grid"], ["web"]);
+
+        const some = (
+          await callTool(ada, "accept_tag_suggestions", { id, names: ["Layout", "nope"] })
+        ).json() as Result;
+        expect(some.clipping).toMatchObject({
+          tags: ["layout", "web"],
+          suggestedTags: ["css", "grid"],
+        });
+
+        const all = (await callTool(ada, "accept_tag_suggestions", { id })).json() as Result;
+        expect(all.clipping).toMatchObject({
+          tags: ["css", "grid", "layout", "web"],
+          suggestedTags: [],
+        });
+      });
+
+      it("dismisses the named suggestions or all of them, for good", async () => {
+        const id = await suggested(ada, "a", ["css", "layout", "grid"]);
+
+        const some = (
+          await callTool(ada, "dismiss_tag_suggestions", { id, names: ["css"] })
+        ).json() as Result;
+        expect(some.clipping).toMatchObject({ tags: [], suggestedTags: ["grid", "layout"] });
+        const all = (await callTool(ada, "dismiss_tag_suggestions", { id })).json() as Result;
+        expect(all.clipping.suggestedTags).toEqual([]);
+        expect((await callTool(ada, "accept_tag_suggestions", { id })).json()).toMatchObject({
+          clipping: { tags: [] },
+        });
+      });
+
+      it("fails, changing nothing, when accepting would pass the tag limit", async () => {
+        const full = Array.from({ length: MAX_TAGS_PER_CLIPPING - 1 }, (_, i) => `tag ${i}`);
+        const id = await suggested(ada, "a", ["css", "layout"], full);
+
+        const refused = await callTool(ada, "accept_tag_suggestions", { id });
+
+        expect(refused.isError).toBe(true);
+        expect((await read(ada, id)).suggestedTags).toEqual(["css", "layout"]);
+        expect((await read(ada, id)).tags).toHaveLength(MAX_TAGS_PER_CLIPPING - 1);
+      });
+
+      it("lists the clippings with suggestions a page at a time, with their tags and names", async () => {
+        const first = await suggested(ada, "a", ["css"], ["web"]);
+        const second = await suggested(ada, "b", ["layout", "css"]);
+        const settled = await suggested(ada, "c", ["grid"]);
+        await callTool(ada, "dismiss_tag_suggestions", { id: settled });
+        await save(ada, "https://example.com/plain");
+        type Page = {
+          clippings: ToolClipping[];
+          nextCursor: string | null;
+        };
+
+        const page = (await callTool(ada, "list_tag_suggestions", { limit: 1 })).json() as Page;
+        const next = (
+          await callTool(ada, "list_tag_suggestions", { limit: 1, cursor: page.nextCursor })
+        ).json() as Page;
+
+        expect(page.clippings).toMatchObject([
+          { id: second, kind: "link", suggestedTags: ["css", "layout"], tags: [] },
+        ]);
+        expect(next.clippings).toMatchObject([
+          {
+            id: first,
+            url: "https://example.com/a",
+            tags: ["web"],
+            suggestedTags: ["css"],
+          },
+        ]);
+        expect(next.nextCursor).toBeNull();
+        expect((await callTool(ada, "list_tag_suggestions", { cursor: "nope" })).isError).toBe(
+          true,
+        );
+      });
+
+      it("keeps users apart", async () => {
+        const id = await suggested(ada, "a", ["css"]);
+        await suggested(bob, "b", ["rust"]);
+
+        const mine = (await callTool(bob, "list_tag_suggestions", {})).json() as {
+          clippings: ToolClipping[];
+        };
+        expect(mine.clippings.map((clipping) => clipping.suggestedTags)).toEqual([["rust"]]);
+        for (const tool of ["accept_tag_suggestions", "dismiss_tag_suggestions"]) {
+          expect((await callTool(bob, tool, { id })).isError).toBe(true);
+        }
+        expect((await read(ada, id)).suggestedTags).toEqual(["css"]);
+        expect((await read(ada, id)).tags).toEqual([]);
       });
     });
 

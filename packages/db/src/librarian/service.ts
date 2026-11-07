@@ -456,7 +456,7 @@ export function createLibrarianService({ pool, clock }: LibrarianServiceDeps) {
       .where(and(eq(libraryChanges.id, changeId), eq(libraryChanges.userId, userId)));
     if (!peek) throw new ChangeNotFoundError();
     if (peek.action === "add_tag" || peek.action === "create_tag") {
-      // Tags put on a clipping by auto-tagging have their own, older way back.
+      // Tags put on a clipping by auto-tagging, and the librarian's add_tag, share one way back.
       await changes.undoChange(userId, changeId);
       return (await getChange(userId, changeId))!;
     }

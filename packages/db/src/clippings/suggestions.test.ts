@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { MAX_TAGS_PER_CLIPPING } from "@clippings/shared";
+
 import { createServiceFixture, type ServiceFixture } from "../test/service-fixture.ts";
 import { TEST_DATABASE_URL } from "../test/temp-database.ts";
+import { InvalidCursorError, InvalidTagsError } from "./service.ts";
 
 describe.skipIf(!TEST_DATABASE_URL)("tag suggestions", () => {
   let fixture: ServiceFixture;
@@ -170,6 +173,128 @@ describe.skipIf(!TEST_DATABASE_URL)("tag suggestions", () => {
       expect(await fixture.service.acceptTagSuggestion(ana, "not-an-id", "css")).toBeNull();
     });
 
+    it("accepts all pending suggestions at once, under the user's own spellings, leaving dismissed ones out", async () => {
+      const ana = await fixture.createUser("ana");
+      await fixture.settings.setSuggestTags(ana, true);
+      await clip(ana, "https://example.com/other", { tags: ["css"] });
+      const id = await clip(ana, "https://example.com/a", {
+        tags: ["web"],
+        suggested: ["CSS", "layout", "grid", "flexbox"],
+      });
+      await fixture.service.dismissTagSuggestions(ana, id, ["flexbox"]);
+
+      const accepted = await fixture.service.acceptTagSuggestions(ana, id);
+
+      expect(accepted?.tags.map((tag) => tag.name)).toEqual(["css", "grid", "layout", "web"]);
+      expect(accepted?.suggestedTags).toEqual([]);
+      expect((await fixture.service.listTags(ana)).map((tag) => tag.name)).toEqual([
+        "css",
+        "grid",
+        "layout",
+        "web",
+      ]);
+      // The dismissed name is not brought back.
+      expect(await tagNamesOf(ana, id)).not.toContain("flexbox");
+    });
+
+    it("accepts the named suggestions only, ignoring names that are not suggestions", async () => {
+      const ana = await fixture.createUser("ana");
+      await fixture.settings.setSuggestTags(ana, true);
+      const id = await clip(ana, "https://example.com/a", {
+        suggested: ["css", "layout", "grid"],
+      });
+
+      const accepted = await fixture.service.acceptTagSuggestions(ana, id, [
+        "Layout",
+        "unrelated",
+        "grid",
+      ]);
+
+      expect(accepted?.tags.map((tag) => tag.name)).toEqual(["grid", "layout"]);
+      expect(accepted?.suggestedTags).toEqual(["css"]);
+      expect(await fixture.service.listTags(ana)).toHaveLength(2);
+      expect(await fixture.service.acceptTagSuggestions(ana, id, [])).toMatchObject({
+        suggestedTags: ["css"],
+      });
+    });
+
+    it("refuses to accept past the tag limit, changing nothing", async () => {
+      const ana = await fixture.createUser("ana");
+      await fixture.settings.setSuggestTags(ana, true);
+      const full = Array.from({ length: MAX_TAGS_PER_CLIPPING - 1 }, (_, i) => `tag${i}`);
+      const id = await clip(ana, "https://example.com/a", {
+        tags: full,
+        suggested: ["css", "layout"],
+      });
+
+      await expect(fixture.service.acceptTagSuggestions(ana, id)).rejects.toBeInstanceOf(
+        InvalidTagsError,
+      );
+      await expect(fixture.service.acceptTagSuggestion(ana, id, "css")).resolves.toMatchObject({
+        suggestedTags: ["layout"],
+      });
+      expect(await tagNamesOf(ana, id)).toHaveLength(MAX_TAGS_PER_CLIPPING);
+      await expect(fixture.service.acceptTagSuggestion(ana, id, "layout")).rejects.toBeInstanceOf(
+        InvalidTagsError,
+      );
+      expect(await suggestedFor(ana, id)).toEqual(["layout"]);
+    });
+
+    it("accepts nothing in bulk while the user has suggestions off", async () => {
+      const ana = await fixture.createUser("ana");
+      await fixture.settings.setSuggestTags(ana, true);
+      const id = await clip(ana, "https://example.com/a", { suggested: ["css"] });
+      await fixture.settings.setSuggestTags(ana, false);
+
+      const result = await fixture.service.acceptTagSuggestions(ana, id);
+
+      expect(result?.tags).toEqual([]);
+      await fixture.settings.setSuggestTags(ana, true);
+      expect(await suggestedFor(ana, id)).toEqual(["css"]);
+    });
+
+    it("lists the clippings with suggestions waiting, newest first and a page at a time, each with its names", async () => {
+      const ana = await fixture.createUser("ana");
+      await fixture.settings.setSuggestTags(ana, true);
+      const oldest = await clip(ana, "https://example.com/1", { suggested: ["css"] });
+      const accepted = await clip(ana, "https://example.com/2", { suggested: ["css"] });
+      const dismissed = await clip(ana, "https://example.com/3", { suggested: ["css"] });
+      await clip(ana, "https://example.com/4");
+      const deleted = await clip(ana, "https://example.com/5", { suggested: ["css"] });
+      const newest = await clip(ana, "https://example.com/6", {
+        tags: ["web"],
+        suggested: ["layout", "css"],
+      });
+      await fixture.service.acceptTagSuggestion(ana, accepted, "css");
+      await fixture.service.dismissTagSuggestions(ana, dismissed);
+      await fixture.service.deleteClipping(ana, deleted);
+
+      const first = await fixture.service.listClippingsWithSuggestions(ana, { limit: 1 });
+      const rest = await fixture.service.listClippingsWithSuggestions(ana, {
+        limit: 5,
+        cursor: first.nextCursor!,
+      });
+
+      expect(first.items.map((item) => [item.id, item.suggestedTags])).toEqual([
+        [newest, ["css", "layout"]],
+      ]);
+      expect(first.items[0]?.tags.map((tag) => tag.name)).toEqual(["web"]);
+      expect(rest.items.map((item) => item.id)).toEqual([oldest]);
+      expect(rest.nextCursor).toBeNull();
+    });
+
+    it("lists nothing while the user has suggestions off, and rejects a cursor it did not give", async () => {
+      const ana = await fixture.createUser("ana");
+      await fixture.settings.setSuggestTags(ana, true);
+      await clip(ana, "https://example.com/a", { suggested: ["css"] });
+      await fixture.settings.setSuggestTags(ana, false);
+
+      expect((await fixture.service.listClippingsWithSuggestions(ana)).items).toEqual([]);
+      await expect(
+        fixture.service.listClippingsWithSuggestions(ana, { cursor: "nope" }),
+      ).rejects.toBeInstanceOf(InvalidCursorError);
+    });
+
     it("dismisses one suggestion or all, and a dismissed name stays gone after the page is read again", async () => {
       const ana = await fixture.createUser("ana");
       await fixture.settings.setSuggestTags(ana, true);
@@ -328,6 +453,12 @@ describe.skipIf(!TEST_DATABASE_URL)("tag suggestions", () => {
     const id = await clip(ana, "https://example.com/a", { suggested: ["css"] });
 
     expect(await fixture.service.acceptTagSuggestion(ben, id, "css")).toBeNull();
+    expect(await fixture.service.acceptTagSuggestions(ben, id)).toBeNull();
+    expect(await fixture.service.acceptTagSuggestions(ben, id, ["css"])).toBeNull();
+    expect((await fixture.service.listClippingsWithSuggestions(ben)).items).toEqual([]);
+    expect(
+      (await fixture.service.listClippingsWithSuggestions(ana)).items.map((item) => item.id),
+    ).toEqual([id]);
     expect(await fixture.service.dismissTagSuggestions(ben, id)).toBe(false);
 
     expect(await suggestedFor(ana, id)).toEqual(["css"]);

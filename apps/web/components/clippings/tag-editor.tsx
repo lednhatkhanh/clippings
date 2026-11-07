@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 
 import {
   acceptTagSuggestionAction,
+  acceptTagSuggestionsAction,
   dismissTagSuggestionsAction,
   undoAutoTagAction,
   updateClippingTagsAction,
@@ -74,14 +75,15 @@ export function TagEditor({
     });
   }
 
-  function accept(name: string) {
-    setGone((current) => [...current, name]);
-    const optimistic = [...value, name];
+  /** Adds suggestions, shown at once; `run` asks the server and answers with the tags as stored. */
+  function acceptWith(names: string[], run: () => Promise<Tag[] | null>) {
+    setGone((current) => [...current, ...names]);
+    const optimistic = [...value, ...names];
     setValue(optimistic);
     latest.current = optimistic;
     setState("saving");
     queue.current = queue.current.then(async () => {
-      const stored = await acceptTagSuggestionAction(clippingId, name).catch(() => null);
+      const stored = await run().catch(() => null);
       // Only the save of the names last chosen may set the status.
       const isLatest = latest.current === optimistic;
       if (stored) {
@@ -89,18 +91,23 @@ export function TagEditor({
         setCarried(stored);
         if (isLatest) {
           // As stored: a suggestion matches an existing tag ignoring case.
-          const names = stored.map((tag) => tag.name);
-          setValue(names);
-          latest.current = names;
+          const storedNames = stored.map((tag) => tag.name);
+          setValue(storedNames);
+          latest.current = storedNames;
         }
       } else {
-        setGone((current) => current.filter((hidden) => hidden !== name));
-        setValue((current) => current.filter((tag) => tag !== name));
-        latest.current = latest.current.filter((tag) => tag !== name);
+        const failed = (name: string) => !names.includes(name);
+        setGone((current) => current.filter(failed));
+        setValue((current) => current.filter(failed));
+        latest.current = latest.current.filter(failed);
       }
       if (isLatest) setState(stored ? "saved" : "failed");
     });
   }
+
+  const accept = (name: string) =>
+    acceptWith([name], () => acceptTagSuggestionAction(clippingId, name));
+  const acceptAll = () => acceptWith(suggestions, () => acceptTagSuggestionsAction(clippingId));
 
   async function dismiss(names?: string[]) {
     const hiding = names ?? suggestions;
@@ -146,6 +153,7 @@ export function TagEditor({
         names={suggestions}
         isDisabled={!online}
         onAccept={accept}
+        onAcceptAll={acceptAll}
         onDismiss={(name) => void dismiss([name])}
         onDismissAll={() => void dismiss()}
       />

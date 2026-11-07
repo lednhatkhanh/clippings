@@ -7,6 +7,7 @@ import {
   MAX_FOLDER_NAME_LENGTH,
   MAX_LINK_REASON_LENGTH,
   MAX_TAG_LENGTH,
+  MAX_TAGS_PER_CLIPPING,
   MAX_TOPIC_PAGE_LENGTH,
   normalizeTagName,
   tagNameKey,
@@ -23,6 +24,7 @@ import type { Database } from "../database.ts";
 import {
   clippings,
   clippingTags,
+  clippingTagSuggestions,
   folders,
   itemLinks,
   libraryChanges,
@@ -46,6 +48,7 @@ export type ProposedChange = {
   reason: string;
   confidence?: LibraryChangeConfidence | null;
 } & (
+  | { action: "add_tag"; clippingId: string; tagId: string }
   | { action: "set_tag_color"; tagId: string; color: TagColor }
   | { action: "create_folder"; name: string; color?: TagColor; id?: string }
   | { action: "move_to_folder"; itemKind: "clipping" | "tag"; itemId: string; folderId: string }
@@ -192,6 +195,8 @@ export async function planChange(
 ): Promise<PlanOutcome> {
   checkedReason(proposal.reason);
   switch (proposal.action) {
+    case "add_tag":
+      return planAddTag(tx, userId, actor, proposal);
     case "set_tag_color":
       return planColor(tx, userId, actor, proposal);
     case "create_folder":
@@ -208,6 +213,91 @@ export async function planChange(
     case "fold_tag":
       return planMerge(tx, userId, proposal);
   }
+}
+
+async function planAddTag(
+  tx: Transaction,
+  userId: string,
+  actor: ProposingActor,
+  proposal: Extract<ProposedChange, { action: "add_tag" }>,
+): Promise<PlanOutcome> {
+  const clipping = await loadLiveClipping(tx, userId, proposal.clippingId);
+  const tag = await loadTag(tx, userId, proposal.tagId);
+  const carried = await tx
+    .select({ id: tags.id, name: tags.name })
+    .from(clippingTags)
+    .innerJoin(tags, and(eq(tags.id, clippingTags.tagId), eq(tags.userId, clippingTags.userId)))
+    .where(and(eq(clippingTags.clippingId, clipping.id), eq(clippingTags.userId, userId)))
+    .orderBy(sql`lower(${tags.name})`, tags.name);
+  if (carried.some((other) => other.id === tag.id)) {
+    return { skip: `It already has the tag "${tag.name}"` };
+  }
+  if (carried.length >= MAX_TAGS_PER_CLIPPING) {
+    return { skip: `It already has ${MAX_TAGS_PER_CLIPPING} tags, the most a clipping can have` };
+  }
+
+  // The librarian doesn't put back a tag the user turned down: dismissed as a suggestion, or
+  // taken off after it was added (the link is gone now, so any earlier add, by anyone, was undone
+  // or removed by hand). The user asking through Claude overrides that.
+  if (actor === "librarian") {
+    const [dismissed] = await tx
+      .select({ name: clippingTagSuggestions.name })
+      .from(clippingTagSuggestions)
+      .where(
+        and(
+          eq(clippingTagSuggestions.clippingId, clipping.id),
+          eq(clippingTagSuggestions.userId, userId),
+          sql`${clippingTagSuggestions.dismissedAt} is not null`,
+          sql`lower(${clippingTagSuggestions.name}) = ${tagNameKey(tag.name)}`,
+        ),
+      );
+    if (dismissed) return { skip: "The user dismissed this tag for this clipping" };
+    const [taken] = await tx
+      .select({ id: libraryChanges.id })
+      .from(libraryChanges)
+      .where(
+        and(
+          eq(libraryChanges.userId, userId),
+          inArray(libraryChanges.action, ["add_tag", "create_tag"]),
+          inArray(libraryChanges.status, ["applied", "undone"]),
+          sql`${libraryChanges.targetIds}[1] = ${clipping.id}::uuid`,
+          sql`${libraryChanges.targetIds}[2] = ${tag.id}::uuid`,
+        ),
+      )
+      .limit(1);
+    if (taken) return { skip: "The user took this tag off this clipping before" };
+  }
+
+  const namesBefore = carried.map((other) => other.name);
+  return {
+    plan: {
+      action: "add_tag",
+      targetIds: [clipping.id, tag.id],
+      before: { tags: namesBefore },
+      after: {
+        tags: [...namesBefore, tag.name],
+        tag: { id: tag.id, name: tag.name },
+        summary: `Add the tag "${tag.name}" to "${clipping.title}"`,
+      },
+      waitingFor: null,
+      write: async (writer) => {
+        await writer
+          .insert(clippingTags)
+          .values({ clippingId: clipping.id, tagId: tag.id, userId })
+          .onConflictDoNothing();
+        // The tag no longer waits as a suggestion.
+        await writer
+          .delete(clippingTagSuggestions)
+          .where(
+            and(
+              eq(clippingTagSuggestions.clippingId, clipping.id),
+              eq(clippingTagSuggestions.userId, userId),
+              sql`lower(${clippingTagSuggestions.name}) = ${tagNameKey(tag.name)}`,
+            ),
+          );
+      },
+    },
+  };
 }
 
 async function planColor(
@@ -629,6 +719,8 @@ export function proposalOf(change: StoredChange): ProposedChange {
   const [first = "", second = ""] = change.targetIds;
   const common = { reason: change.reason, confidence: change.confidence };
   switch (change.action) {
+    case "add_tag":
+      return { ...common, action: "add_tag", clippingId: first, tagId: second };
     case "set_tag_color":
       return { ...common, action: "set_tag_color", tagId: first, color: after.color };
     case "create_folder":

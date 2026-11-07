@@ -1,7 +1,7 @@
 import { differenceInDays, parseISO } from "date-fns";
 
 import type { LibraryView, LibraryViewItem, LibraryViewTag } from "@clippings/db";
-import type { Folder } from "@clippings/shared";
+import { tagNameKey, type Folder } from "@clippings/shared";
 
 /** A tag used at most this many times may be folded into a broader one. */
 export const FOLD_MAX_USAGE = 1;
@@ -47,6 +47,8 @@ export interface LibraryIndex {
   text: string;
   /** Tags that carry this tag's name, to list a topic page's items. */
   itemsOfTag: (tag: LibraryViewTag) => LibraryViewItem[];
+  /** The ones among the user's tags that were suggested for the item and it doesn't carry yet. */
+  suggestedTagsOf: (item: LibraryViewItem) => LibraryViewTag[];
 }
 
 export function indexLibrary(view: LibraryView, now: Date): LibraryIndex {
@@ -60,6 +62,14 @@ export function indexLibrary(view: LibraryView, now: Date): LibraryIndex {
   };
   const folderName = (id: string | null) =>
     id === null ? "no folder" : `folder ${refs.folder.get(id) ?? "?"}`;
+
+  const tagByName = new Map(view.tags.map((tag) => [tagNameKey(tag.name), tag]));
+  /** The user's tags that enrichment suggested for the item and it doesn't carry yet. */
+  const suggestedTagsOf = (item: LibraryViewItem): LibraryViewTag[] =>
+    item.suggestedTags.flatMap((name) => {
+      const tag = tagByName.get(tagNameKey(name));
+      return tag && !item.tags.includes(tag.name) ? [tag] : [];
+    });
 
   const lines: string[] = [];
   lines.push(`## Folders (${view.folders.length})`);
@@ -90,8 +100,12 @@ export function indexLibrary(view: LibraryView, now: Date): LibraryIndex {
   for (const [ref, item] of items) {
     const tagNames = item.tags.length > 0 ? item.tags.join(", ") : "no tags";
     const summary = item.summary ? ` — ${oneLine(item.summary, 160)}` : "";
+    // Only a suggestion that names a tag the user has can be added: name it by its reference.
+    const suggested = suggestedTagsOf(item)
+      .map((tag) => `${refs.tag.get(tag.id)} "${tag.name}"`)
+      .join(", ");
     lines.push(
-      `${ref} ${item.kind} "${oneLine(item.title, 100)}" [${tagNames}] (${folderName(item.folderId)})${summary}`,
+      `${ref} ${item.kind} "${oneLine(item.title, 100)}" [${tagNames}] (${folderName(item.folderId)})${suggested ? ` suggested tags: ${suggested}` : ""}${summary}`,
     );
   }
   if (view.items.length === 0) lines.push("(none yet)");
@@ -108,6 +122,7 @@ export function indexLibrary(view: LibraryView, now: Date): LibraryIndex {
     tagRef: (id) => refs.tag.get(id),
     folderRef: (id) => refs.folder.get(id),
     text,
+    suggestedTagsOf,
     itemsOfTag: (tag) =>
       view.items.filter((item) => item.tags.includes(tag.name)).slice(0, TOPIC_PAGE_ITEM_LIMIT),
   };

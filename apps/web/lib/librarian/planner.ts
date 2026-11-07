@@ -15,9 +15,11 @@ import {
   linkVerdictsSchema,
   PLAN_FOLDERS,
   PLAN_LINKS,
+  PLAN_TAG_ADDITIONS,
   PLAN_TAGS,
   PLAN_TOPIC_PAGES,
   PLANNER_TOOLS,
+  tagAdditionPlanSchema,
   tagPlanSchema,
   topicPagePlanSchema,
   type LibraryPlan,
@@ -31,6 +33,9 @@ export const LINK_CHECK_MODEL = "claude-haiku-5-5";
 /** Items and tags one filing call places. A run files at most `MAX_FILING_CALLS` of them. */
 const FILING_BATCH = 120;
 const MAX_FILING_CALLS = 3;
+/** Items one tag-adding call places tags on. A run makes at most `MAX_TAG_CALLS` of them. */
+const TAG_BATCH = 80;
+const MAX_TAG_CALLS = 3;
 const MAX_LINKS = 25;
 const LINK_CHECK_BATCH = 20;
 const MAX_TOPIC_PAGES = 6;
@@ -44,6 +49,7 @@ const RULES = `You are the librarian of one person's library of saved web pages 
 
 Rules:
 - Reuse first. Prefer the tags and folders that exist. Do not invent a new tag or folder when one fits.
+- An item may list "suggested tags": tags that were suggested for it, named by their reference. When asked to plan tag additions, add a suggested tag to an item when it fits the item, and say "high" only when it is clearly right. You may also add an existing tag that is not suggested when it clearly fits. Add only tags that exist, by their T reference; never one the item already has.
 - Tag names are canonical: lowercase, singular, short, not a near-duplicate of another tag. A rename needs a one-line reason.
 - Merge tags that mean the same thing ("css" and "css layout"): the source is merged into the target and the target should be the clearer, more used tag.
 - Fold a tag into a broader tag only when it is marked fold-eligible (used at most once and older than ${FOLD_GRACE_DAYS} days). Never fold any other tag.
@@ -73,9 +79,9 @@ export interface Planner {
 
 /**
  * Plans a library's tidying with Sonnet 5.5 through the model gateway (job kind `librarian`), in
- * stages that each force one strict tool: tags, then folders (in batches of what is unfiled),
- * links, then topic pages. Haiku 5.5 then confirms each link the plan proposes, and only the
- * ones it keeps stay. Every planning call carries the same tools and the same system blocks,
+ * stages that each ask for one strict tool: tags, then tags to add (in batches of the items with
+ * suggested ones), then folders (in batches of what is unfiled), links, then topic pages.
+ * Haiku 5.5 then confirms each link the plan proposes, and only the ones it keeps stay. Every planning call carries the same tools and the same system blocks,
  * the library last with a cache breakpoint, so a run reads the library from the prompt cache
  * after its first call instead of paying for it again.
  *
@@ -230,7 +236,34 @@ export function createPlanner({
         }
       }
 
-      // 2. Folders, for what has none. A tag a merge or fold removes is not filed.
+      // 2. Tags to put on the items that have suggested ones waiting. A tag a merge or fold
+      // removes is left to the proposals step to drop.
+      const suggestedItems = index.view.items
+        .filter((item) => index.suggestedTagsOf(item).length > 0)
+        .map((item) => index.itemRef(item.id)!);
+      for (
+        let at = 0, n = 0;
+        at < suggestedItems.length && n < MAX_TAG_CALLS;
+        at += TAG_BATCH, n++
+      ) {
+        const batch = suggestedItems.slice(at, at + TAG_BATCH);
+        const additionPlan = await stage("adding tags", tagAdditionPlanSchema, () =>
+          call(
+            PLAN_TAG_ADDITIONS,
+            `Plan tags to put on these items: ${batch.join(" ")}\n\nUse the tags listed as suggested for each, and any other existing tag that clearly fits.`,
+            4096,
+          ),
+        );
+        if (!additionPlan) break;
+        plan.tagAdditions.push(...additionPlan.additions.filter((a) => batch.includes(a.item)));
+      }
+      if (suggestedItems.length > TAG_BATCH * MAX_TAG_CALLS) {
+        notices.push(
+          `Looked at the first ${TAG_BATCH * MAX_TAG_CALLS} items with suggested tags; the rest wait for the next run.`,
+        );
+      }
+
+      // 3. Folders, for what has none. A tag a merge or fold removes is not filed.
       const removed = new Set(
         [...plan.merges.map((m) => m.source), ...plan.folds.map((f) => f.tag)].filter(Boolean),
       );
@@ -270,7 +303,7 @@ export function createPlanner({
         );
       }
 
-      // 3. Links, each checked by Haiku.
+      // 4. Links, each checked by Haiku.
       if (index.view.items.length >= 2) {
         const linkPlan = await stage("linking", linkPlanSchema, () =>
           call(
@@ -286,7 +319,7 @@ export function createPlanner({
         }
       }
 
-      // 4. Topic pages, for tags big enough and without one.
+      // 5. Topic pages, for tags big enough and without one.
       const candidates = index.view.tags
         .filter((tag) => tag.usage >= TOPIC_PAGE_MIN_ITEMS && !tag.hasTopicPage)
         .slice(0, MAX_TOPIC_PAGES);
