@@ -1,10 +1,11 @@
 import { constructNow } from "date-fns";
-import { ChevronLeft, Sparkles } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 import { notFound, redirect, unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 
+import { AiWritten } from "@/components/ai-written.tsx";
 import { ListSkeleton } from "@/components/clippings/list-skeleton.tsx";
 import { LoadError } from "@/components/load-error.tsx";
 import { Markdown } from "@/components/markdown.tsx";
@@ -16,7 +17,6 @@ import {
 } from "@/components/page-transition.tsx";
 import { getSession, signInRedirect } from "@/lib/auth/session.ts";
 import { hrefWithFolder, hrefWithTag, loadBrowseParams } from "@/lib/clippings/browse-params.ts";
-import { formatClippingDate } from "@/lib/format-date.ts";
 import { getLibrary } from "@/lib/librarian/library.ts";
 import type { TagTopic } from "@clippings/db";
 import { LinkButton, TagDot } from "@clippings/ui";
@@ -50,14 +50,7 @@ async function Topic({ params }: Pick<PageProps<"/tags/[id]">, "params">) {
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1.5 typescale-label-md text-ink-faint">
             {page ? (
               <>
-                <span className="inline-flex h-5.5 items-center gap-1 rounded-sm border border-line-strong px-2 typescale-label-sm text-ink-muted">
-                  <Sparkles className="size-3" />
-                  AI-written
-                </span>
-                <span>
-                  Updated{" "}
-                  <time dateTime={page.updatedAt}>{formatClippingDate(page.updatedAt, now)}</time>
-                </span>
+                <AiWritten updatedAt={page.updatedAt} now={now} />
                 <span aria-hidden="true">·</span>
               </>
             ) : null}
@@ -77,7 +70,7 @@ async function Topic({ params }: Pick<PageProps<"/tags/[id]">, "params">) {
         </header>
         {page ? (
           <>
-            <Markdown source={page.body} />
+            <Markdown source={page.body} links="web" />
             <p className="typescale-body-sm text-ink-faint">
               The librarian wrote this page from your clippings and may have it wrong. Your own
               clippings are the source.

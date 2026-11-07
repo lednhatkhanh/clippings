@@ -141,3 +141,22 @@ export {
   type ModelJobKind,
   type SpendSummary,
 } from "./usage.ts";
+export {
+  BRIEF_MODES,
+  BRIEF_SOURCES,
+  BRIEF_STATUSES,
+  MAX_BRIEF_LENGTH,
+  MAX_RESEARCH_DOMAIN_LENGTH,
+  MAX_RESEARCH_DOMAINS,
+  MAX_RESEARCH_PROFILE_LENGTH,
+  parseResearchDomains,
+  RESEARCH_DEFAULTS,
+  researchSettingsChangeSchema,
+  type Brief,
+  type BriefAuthor,
+  type BriefMode,
+  type BriefSource,
+  type BriefStatus,
+  type ResearchSettings,
+  type ResearchSettingsChange,
+} from "./research.ts";

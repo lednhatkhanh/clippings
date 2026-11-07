@@ -8,9 +8,13 @@ import {
   AUTOMATION_DEFAULTS,
   automationSettingsChangeSchema,
   isAppearanceValue,
+  RESEARCH_DEFAULTS,
+  researchSettingsChangeSchema,
   type Appearance,
   type AutomationSettings,
   type AutomationSettingsChange,
+  type ResearchSettings,
+  type ResearchSettingsChange,
 } from "@clippings/shared";
 
 import type { Clock } from "../clippings/ports.ts";
@@ -150,6 +154,48 @@ export function createSettingsService({ pool, clock }: SettingsServiceDeps) {
     return saved!;
   }
 
+  const researchColumns = {
+    profile: userSettings.researchProfile,
+    domains: userSettings.researchDomains,
+  };
+
+  /** The user's research profile and domains, or the defaults when they never changed one. */
+  async function getResearchSettings(userId: string): Promise<ResearchSettings> {
+    const [row] = await db
+      .select(researchColumns)
+      .from(userSettings)
+      .where(eq(userSettings.userId, userId));
+    return row ?? { ...RESEARCH_DEFAULTS, domains: [...RESEARCH_DEFAULTS.domains] };
+  }
+
+  /**
+   * Saves the profile and/or domains named in `changes`; the other keeps its value. Domains are
+   * trimmed and deduplicated, and an empty list turns research off. Returns both as they now
+   * stand. A change that isn't valid (too long, too many domains, an unknown key, empty) throws
+   * `InvalidSettingsError` and saves nothing.
+   */
+  async function updateResearchSettings(
+    userId: string,
+    changes: ResearchSettingsChange,
+  ): Promise<ResearchSettings> {
+    const parsed = researchSettingsChangeSchema.safeParse(changes);
+    if (!parsed.success) {
+      throw new InvalidSettingsError("research settings", parsed.error.issues[0]?.message);
+    }
+    const { profile, domains } = parsed.data;
+    const given = {
+      ...(profile === undefined ? {} : { researchProfile: profile }),
+      ...(domains === undefined ? {} : { researchDomains: domains }),
+    };
+    const updatedAt = clock.now();
+    const [saved] = await db
+      .insert(userSettings)
+      .values({ userId, ...given, updatedAt })
+      .onConflictDoUpdate({ target: userSettings.userId, set: { ...given, updatedAt } })
+      .returning(researchColumns);
+    return saved!;
+  }
+
   return {
     getSettings,
     updateSettings,
@@ -159,6 +205,8 @@ export function createSettingsService({ pool, clock }: SettingsServiceDeps) {
     setAutoTag,
     getAutomationSettings,
     updateAutomationSettings,
+    getResearchSettings,
+    updateResearchSettings,
   };
 }
 

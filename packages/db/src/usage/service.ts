@@ -27,6 +27,11 @@ export interface ModelUsageEntry {
   webSearches: number;
   /** What the call cost, in micro-dollars. */
   costMicros: number;
+  /**
+   * Names the request this row is for. A second row with the same key is not written, so
+   * recording a request again (a batch collected twice) bills it once.
+   */
+  requestKey?: string;
 }
 
 /** What the gateway checks before a call: today's spend against the user's daily cap. */
@@ -51,9 +56,12 @@ export function createUsageService({ pool, clock }: UsageServiceDeps) {
     return Number(row?.total ?? 0);
   }
 
-  /** Writes one row to the user's ledger, stamped from the clock. */
+  /** Writes one row to the user's ledger, stamped from the clock; none if its `requestKey` is already there. */
   async function recordUsage(userId: string, entry: ModelUsageEntry): Promise<void> {
-    await db.insert(modelUsage).values({ userId, ...entry, createdAt: clock.now() });
+    await db
+      .insert(modelUsage)
+      .values({ userId, ...entry, createdAt: clock.now() })
+      .onConflictDoNothing();
   }
 
   /** Today's spend and the user's daily cap (the default for a user who never set one). */

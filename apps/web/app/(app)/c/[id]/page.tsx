@@ -16,6 +16,7 @@ import { NoteBodyEditor } from "@/components/clippings/note-body-editor.tsx";
 import { NoteEditor } from "@/components/clippings/note-editor.tsx";
 import { NoteBadge } from "@/components/clippings/note-mark.tsx";
 import { RelatedClippings } from "@/components/clippings/related-clippings.tsx";
+import { ResearchBrief } from "@/components/clippings/research-brief.tsx";
 import { TagEditor } from "@/components/clippings/tag-editor.tsx";
 import { TitleEditor } from "@/components/clippings/title-editor.tsx";
 import { LoadError } from "@/components/load-error.tsx";
@@ -33,8 +34,14 @@ import { getClippings } from "@/lib/clippings/service.ts";
 import { SOURCE_LABELS } from "@/lib/clippings/source-labels.ts";
 import { getLibrary } from "@/lib/librarian/library.ts";
 import { getLibrarian } from "@/lib/librarian/service.ts";
+import { getResearch } from "@/lib/research/service.ts";
 import type { LinkedClipping } from "@clippings/db";
-import { formatAbsoluteDate, type Clipping, type ClippingStatus } from "@clippings/shared";
+import {
+  formatAbsoluteDate,
+  type Brief as BriefDto,
+  type Clipping,
+  type ClippingStatus,
+} from "@clippings/shared";
 import { Disclosure, LinkButton } from "@clippings/ui";
 
 const STATUS_LABELS: Record<ClippingStatus, string> = {
@@ -234,6 +241,28 @@ async function Linked({ params }: Pick<PageProps<"/c/[id]">, "params">) {
   return <LinkedItems links={links} />;
 }
 
+/**
+ * The research brief, streamed after the sheet. A clipping that has none and is not read yet
+ * offers none to ask for, and when the brief can't be loaded the page shows nothing: the
+ * clipping itself is what it is for.
+ */
+async function Brief({ params }: Pick<PageProps<"/c/[id]">, "params">) {
+  const session = await getSession();
+  if (!session) redirect(await signInRedirect());
+  const { id } = await params;
+  const userId = session.user.id;
+  let brief: BriefDto | null;
+  try {
+    brief = await getResearch().getBrief(userId, id);
+    if (!brief && (await getClippings().getClipping(userId, id))?.status !== "ready") return null;
+  } catch (error) {
+    unstable_rethrow(error);
+    console.error(`Couldn't load the research brief of ${id}`, error);
+    return null;
+  }
+  return <ResearchBrief clippingId={id} brief={brief} now={constructNow(undefined)} />;
+}
+
 /** The neighbours, streamed after the sheet: finding them is a second query. */
 async function Related({ params }: Pick<PageProps<"/c/[id]">, "params">) {
   const session = await getSession();
@@ -302,6 +331,11 @@ export default function ClippingPage({ params }: PageProps<"/c/[id]">) {
               </RevealTransition>
             </Suspense>
           </DetailSheet>
+        </Suspense>
+        <Suspense>
+          <RevealTransition>
+            <Brief params={params} />
+          </RevealTransition>
         </Suspense>
         <Suspense>
           <RevealTransition>

@@ -12,7 +12,7 @@ import {
 } from "@clippings/db/testing";
 import type { ModelJobKind } from "@clippings/shared";
 
-import { createGateway } from "./gateway.ts";
+import { createGateway, type BatchEntry } from "./gateway.ts";
 
 const FAKES = fileURLToPath(new URL("../../../../scripts/local/fakes.mjs", import.meta.url));
 
@@ -25,7 +25,7 @@ async function freePort(): Promise<number> {
 }
 
 /** Starts the local fakes (scripts/local/fakes.mjs) on free ports and waits until they listen. */
-async function startFakes() {
+async function startFakes(env: Record<string, string> = {}) {
   const [qstash, anthropic, voyage] = await Promise.all([freePort(), freePort(), freePort()]);
   const child: ChildProcess = spawn(process.execPath, [FAKES], {
     env: {
@@ -34,6 +34,7 @@ async function startFakes() {
       FAKE_ANTHROPIC_PORT: String(anthropic),
       FAKE_VOYAGE_PORT: String(voyage),
       FAKE_MODEL_DELAY_MS: "0",
+      ...env,
     },
     stdio: ["ignore", "pipe", "inherit"],
   });
@@ -405,6 +406,239 @@ describe.skipIf(!TEST_DATABASE_URL)("model gateway against the local fakes", () 
 
       await expect(ask(ana, `Read this. [fake-error ${marker}]`)).rejects.toMatchObject({
         status,
+      });
+      expect(await ledger()).toEqual([]);
+    });
+  });
+  describe("batches", () => {
+    const entry = (customId: string, userId: string, text: string): BatchEntry => ({
+      customId,
+      userId,
+      jobKind: "brief",
+      request: {
+        model: "claude-sonnet-5-5",
+        max_tokens: 100,
+        messages: [{ role: "user", content: text }],
+        tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 5 }],
+      },
+    });
+    const owners = (...pairs: [string, string][]) =>
+      new Map(pairs.map(([customId, userId]) => [customId, { userId, jobKind: "brief" as const }]));
+
+    it("records a succeeded request at batch prices, with its web searches", async () => {
+      const ana = await fixture.createUser("ana");
+      const submission = await gateway.submitBatch([
+        entry("b1", ana, "Title: A page [fake-usage input=1000 output=500 searches=2]"),
+      ]);
+      expect(submission).toMatchObject({ accepted: ["b1"], held: [] });
+
+      const collected = await gateway.collectBatch(submission.batchId!, owners(["b1", ana]));
+
+      // Half of $0.002 for the input and $0.005 for the output, plus two searches at $0.01.
+      expect(collected).toMatchObject({
+        status: "ended",
+        results: [{ customId: "b1", outcome: "succeeded", costMicros: 23_500 }],
+      });
+      expect(await ledger()).toMatchObject([
+        {
+          user_id: ana,
+          job_kind: "brief",
+          model: "claude-sonnet-5-5",
+          batch: true,
+          input_tokens: 1_000,
+          output_tokens: 500,
+          web_searches: 2,
+          cost_micros: 23_500,
+        },
+      ]);
+    });
+
+    it("bills each request to its own user, and skips a result nobody owns", async () => {
+      const ana = await fixture.createUser("ana");
+      const ben = await fixture.createUser("ben");
+      const { batchId } = await gateway.submitBatch([
+        entry("b1", ana, "Title: One"),
+        entry("b2", ben, "Title: Two"),
+        entry("b3", ana, "Title: Three"),
+      ]);
+
+      const collected = await gateway.collectBatch(batchId!, owners(["b1", ana], ["b2", ben]));
+
+      expect(collected.status === "ended" && collected.results.map((r) => r.customId)).toEqual([
+        "b1",
+        "b2",
+      ]);
+      const rows = await ledger();
+      expect(rows.map((row) => row.user_id)).toEqual([ana, ben]);
+    });
+
+    it("holds an entry past its user's cap and sends the rest", async () => {
+      const ana = await fixture.createUser("ana");
+      const ben = await fixture.createUser("ben");
+      await setCap(ana, 100_000);
+      await spend(ana, 100_000);
+
+      const submission = await gateway.submitBatch([
+        entry("b1", ana, "Title: One"),
+        entry("b2", ben, "Title: Two"),
+      ]);
+
+      expect(submission).toMatchObject({
+        accepted: ["b2"],
+        held: [{ customId: "b1", reason: "daily_cap" }],
+      });
+      expect(submission.batchId).toEqual(expect.any(String));
+    });
+
+    it("counts what the accepted entries will cost against the cap, so a big batch can't pass it", async () => {
+      const ana = await fixture.createUser("ana");
+      const ben = await fixture.createUser("ben");
+      // A brief stops at 80% of the cap: 320,000. Ana has spent 50,000, so two 100,000 estimates
+      // fit (250,000) and a third would carry her to 350,000.
+      await setCap(ana, 400_000);
+      await spend(ana, 50_000);
+      const estimated = (customId: string, userId: string): BatchEntry => ({
+        ...entry(customId, userId, `Title: ${customId}`),
+        estimateMicros: 100_000,
+      });
+
+      const submission = await gateway.submitBatch([
+        estimated("a1", ana),
+        estimated("a2", ana),
+        estimated("a3", ana),
+        estimated("b1", ben),
+        estimated("b2", ben),
+      ]);
+
+      expect(submission).toMatchObject({
+        accepted: ["a1", "a2", "b1", "b2"],
+        held: [{ customId: "a3", reason: "daily_cap" }],
+      });
+      // The estimates were only reserved: nothing is on the ledger until the batch ends.
+      expect((await fixture.usage.getBudget(ana)).spentTodayMicros).toBe(50_000);
+    });
+
+    it("accepts an entry with no estimate while the user is under the limit", async () => {
+      const ana = await fixture.createUser("ana");
+      await setCap(ana, 100_000);
+      await spend(ana, 79_999);
+
+      const submission = await gateway.submitBatch([
+        entry("b1", ana, "Title: One"),
+        entry("b2", ana, "Title: Two"),
+      ]);
+
+      expect(submission).toMatchObject({ accepted: ["b1", "b2"], held: [] });
+    });
+
+    it("bills a batch's requests once, however often it is collected", async () => {
+      const ana = await fixture.createUser("ana");
+      const ben = await fixture.createUser("ben");
+      const { batchId } = await gateway.submitBatch([
+        entry("b1", ana, "Title: One [fake-usage input=1000 output=500 searches=2]"),
+        entry("b2", ben, "Title: Two"),
+      ]);
+      const both = owners(["b1", ana], ["b2", ben]);
+
+      const first = await gateway.collectBatch(batchId!, both);
+      const second = await gateway.collectBatch(batchId!, both);
+
+      expect(second).toEqual(first);
+      expect(await ledger()).toHaveLength(2);
+      expect((await fixture.usage.getBudget(ana)).spentTodayMicros).toBe(23_500);
+    });
+
+    it("ends a batch the provider no longer has, with every request expired and nothing billed", async () => {
+      const ana = await fixture.createUser("ana");
+
+      const collected = await gateway.collectBatch(
+        "msgbatch_missing",
+        owners(["b1", ana], ["b2", ana]),
+      );
+
+      expect(collected).toEqual({
+        status: "ended",
+        results: [
+          { customId: "b1", outcome: "expired", detail: expect.any(String) },
+          { customId: "b2", outcome: "expired", detail: expect.any(String) },
+        ],
+      });
+      expect(await ledger()).toEqual([]);
+    });
+
+    it("makes no batch when every entry is held", async () => {
+      const ana = await fixture.createUser("ana");
+      await setCap(ana, 100_000);
+      await spend(ana, 100_000);
+      const create = vi.spyOn(anthropic.messages.batches, "create");
+
+      const submission = await gateway.submitBatch([entry("b1", ana, "Title: One")]);
+
+      expect(submission).toEqual({
+        batchId: null,
+        accepted: [],
+        held: [{ customId: "b1", reason: "daily_cap" }],
+      });
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it("holds every entry when Anthropic's spend limit refuses the batch", async () => {
+      const ana = await fixture.createUser("ana");
+
+      const submission = await gateway.submitBatch([
+        entry("b1", ana, "Title: One [fake-error spend-limit]"),
+        entry("b2", ana, "Title: Two"),
+      ]);
+
+      expect(submission).toEqual({
+        batchId: null,
+        accepted: [],
+        held: [
+          { customId: "b1", reason: "provider_limit" },
+          { customId: "b2", reason: "provider_limit" },
+        ],
+      });
+    });
+
+    it("says in_progress until the batch ends, and bills nothing", async () => {
+      const slow = await startFakes({ FAKE_BATCH_DELAY_MS: "3600000" });
+      try {
+        const ana = await fixture.createUser("ana");
+        const waiting = createGateway({
+          ledger: fixture.usage,
+          anthropic: () =>
+            new Anthropic({ apiKey: "local", baseURL: slow.anthropicUrl, maxRetries: 0 }),
+        });
+        const { batchId } = await waiting.submitBatch([entry("b1", ana, "Title: One")]);
+
+        expect(await waiting.collectBatch(batchId!, owners(["b1", ana]))).toEqual({
+          status: "in_progress",
+        });
+        expect(await ledger()).toEqual([]);
+      } finally {
+        slow.stop();
+      }
+    });
+
+    it("reports errored and expired requests without billing them", async () => {
+      const ana = await fixture.createUser("ana");
+      const { batchId } = await gateway.submitBatch([
+        entry("b1", ana, "Title: One [fake-batch errored]"),
+        entry("b2", ana, "Title: Two [fake-batch expired]"),
+      ]);
+
+      const collected = await gateway.collectBatch(batchId!, owners(["b1", ana], ["b2", ana]));
+
+      expect(collected).toMatchObject({
+        status: "ended",
+        results: [
+          {
+            customId: "b1",
+            outcome: "errored",
+            detail: expect.stringContaining("Fake batch error"),
+          },
+          { customId: "b2", outcome: "expired" },
+        ],
       });
       expect(await ledger()).toEqual([]);
     });

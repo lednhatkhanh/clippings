@@ -52,6 +52,19 @@ describe.skipIf(!TEST_DATABASE_URL)("usage ledger", () => {
     expect((await fixture.usage.getBudget(ana)).spentTodayMicros).toBe(4_000);
   });
 
+  it("writes one row for a request key, however often the request is recorded", async () => {
+    const ana = await fixture.createUser("ana");
+
+    await fixture.usage.recordUsage(ana, call(1_500, { requestKey: "batch:b1:r1" }));
+    await fixture.usage.recordUsage(ana, call(1_500, { requestKey: "batch:b1:r1" }));
+    await fixture.usage.recordUsage(ana, call(2_000, { requestKey: "batch:b1:r2" }));
+    // Rows without a key are separate calls, each its own row.
+    await fixture.usage.recordUsage(ana, call(100));
+    await fixture.usage.recordUsage(ana, call(100));
+
+    expect((await fixture.usage.getSpend(ana)).todayMicros).toBe(3_700);
+  });
+
   it("stores what the call used, so the ledger can be read back", async () => {
     const ana = await fixture.createUser("ana");
 

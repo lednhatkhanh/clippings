@@ -13,12 +13,14 @@ import {
   type PageFetcher,
   type PageSummary,
   type Summarizer,
+  type SummarizerInput,
 } from "../clippings/ports.ts";
 import { createClippingsService } from "../clippings/service.ts";
 import { createConnectionsService } from "../connections/service.ts";
 import { createLibraryService } from "../librarian/library.ts";
 import { createLibrarianService } from "../librarian/service.ts";
 import { createPool } from "../pool.ts";
+import { createResearchService } from "../research/service.ts";
 import { EMBEDDING_DIMENSIONS } from "../schema.ts";
 import { createSettingsService } from "../settings/service.ts";
 import { createUsageService } from "../usage/service.ts";
@@ -84,6 +86,8 @@ export async function createServiceFixture() {
   };
   /** The `userTags` each summarize call got, in order: undefined when suggestions were off. */
   const summarizedWithTags: (readonly string[] | undefined)[] = [];
+  /** The `research` each summarize call got, in order: undefined when the user had no domains. */
+  const summarizedWithResearch: (SummarizerInput["research"] | undefined)[] = [];
   /** The page (URL, title and text) each summarize call got, in order. */
   const summarizedPages: { url: string; title: string | null; text: string }[] = [];
   /** Whether the model gateway refuses calls, as it does for a user past their daily cap. */
@@ -95,9 +99,10 @@ export async function createServiceFixture() {
   /** Runs while the summarizer reads the note with this body, before it answers. */
   const duringNoteReading = new Map<string, () => Promise<void>>();
   const summarizer: Summarizer = {
-    summarize: async ({ kind, url, title, text, userTags }) => {
+    summarize: async ({ kind, url, title, text, userTags, research }) => {
       if (capped) throw new CapReachedError();
       summarizedWithTags.push(userTags);
+      summarizedWithResearch.push(research);
       if (kind === "note") {
         summarizedNotes.push(text);
         await duringNoteReading.get(text)?.();
@@ -183,6 +188,7 @@ export async function createServiceFixture() {
     librarian: createLibrarianService({ pool, clock }),
     library: createLibraryService({ pool }),
     usage: createUsageService({ pool, clock }),
+    research: createResearchService({ pool, clock }),
     connections: createConnectionsService({ pool, clock }),
     /** The fixture's pool, for tests that set up rows no service writes (Better Auth's). */
     pool,
@@ -211,6 +217,12 @@ export async function createServiceFixture() {
      * suggestions off. Set a page's `summary.suggestedTags` in `web` to change what it suggests.
      */
     summarizedWithTags,
+    /**
+     * The research profile and domains the summarizer received per call, in order; undefined for
+     * a call made with no research domains. Set a page's `summary.research` in `web` to change
+     * the verdict it gives.
+     */
+    summarizedWithResearch,
     /** Makes the publisher throw (or work again), the way an unreachable queue does. */
     setPublishing: (state: "up" | "down") => {
       publishing = state;

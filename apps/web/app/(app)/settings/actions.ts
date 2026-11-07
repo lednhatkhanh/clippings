@@ -18,9 +18,12 @@ import { getSettings } from "@/lib/settings/service.ts";
 import {
   autoTagChangeSchema,
   automationSettingsChangeSchema,
+  parseResearchDomains,
   pickAppearance,
+  researchSettingsChangeSchema,
   type Appearance,
   type AutomationSettings,
+  type ResearchSettings,
 } from "@clippings/shared";
 
 /** Saves the appearance settings the user changed. Values the app doesn't know are dropped. */
@@ -93,6 +96,37 @@ export async function saveAutomationSettingsAction(
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid setting" };
   }
   const value = await getSettings().updateAutomationSettings(userId, parsed.data);
+  revalidatePath("/settings");
+  return { ok: true, value };
+}
+
+/** The outcome of saving the research settings: what is now stored, or why nothing was. */
+export type ResearchActionResult =
+  | { ok: true; value: ResearchSettings }
+  | { ok: false; message: string };
+
+/**
+ * Saves the user's "About me" text and research domains. The form sends the domains as the text
+ * of its field, which is split on commas and new lines here, and the result is checked with the
+ * shared schema, so a client can't store more domains or longer text than the limits allow. An
+ * empty list turns research off.
+ */
+export async function saveResearchSettingsAction(change: {
+  profile: string;
+  domains: string;
+}): Promise<ResearchActionResult> {
+  const userId = await requireUserId();
+  if (typeof change?.profile !== "string" || typeof change.domains !== "string") {
+    return { ok: false, message: "Invalid setting" };
+  }
+  const parsed = researchSettingsChangeSchema.safeParse({
+    profile: change.profile,
+    domains: parseResearchDomains(change.domains),
+  });
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Invalid setting" };
+  }
+  const value = await getSettings().updateResearchSettings(userId, parsed.data);
   revalidatePath("/settings");
   return { ok: true, value };
 }
