@@ -116,7 +116,7 @@ export const PLAN_TOPIC_PAGES = "plan_topic_pages";
 export const CONFIRM_LINKS = "confirm_links";
 
 /**
- * The planner's tools. Every planning call sends all four and forces one with `tool_choice`:
+ * The planner's tools. Every planning call sends all four and asks for one (`oneToolCall`):
  * the tool list is the first thing a prompt cache keys on, so identical tools let each stage read
  * the library block the first one wrote.
  */

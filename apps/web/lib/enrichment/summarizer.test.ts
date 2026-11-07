@@ -246,7 +246,7 @@ describe("summaryRequest", () => {
 
   it("asks for the reading the same way for a PDF as for a page, tags included", () => {
     const request = summaryRequest({ ...pdf, userTags: ["papers"] });
-    expect(request.tool_choice).toEqual({ type: "tool", name: "save_reading" });
+    expect(request.tool_choice).toEqual({ type: "auto", disable_parallel_tool_use: true });
     expect(request.tools?.[0]).toMatchObject({ name: "save_reading", strict: true });
     expect(JSON.stringify(blocks(request))).toContain("<your_tags>\\npapers\\n</your_tags>");
   });
@@ -352,7 +352,7 @@ describe("summaryRequest research", () => {
   ])("%s gets a strict research object when asked", (_label, extra, required) => {
     const request = summaryRequest({ ...page, ...extra, research });
     expect(request.tools?.[0]).toMatchObject({ strict: true });
-    expect(request.tool_choice).toEqual({ type: "tool", name: "save_reading" });
+    expect(request.tool_choice).toEqual({ type: "auto", disable_parallel_tool_use: true });
     const schema = schemaOf(request);
     expect(schema).toMatchObject({ additionalProperties: false, required });
     expect(schema.properties).toMatchObject({
