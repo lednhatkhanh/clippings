@@ -25,6 +25,10 @@ Besides those:
 - Vercel's own Git deploys are off for every branch ([`apps/web/vercel.json`](../apps/web/vercel.json)),
   so the workflows above are the only way code reaches Vercel. Every migration runs before the
   code that needs it.
+- Every deploy uploads its prebuilt output as one tgz (`--archive=tgz` in
+  [`vercel-deploy`](../.github/actions/vercel-deploy/action.yml)). Hobby allows 5000 file uploads a
+  day, and file by file a few deploys used it up ("Too many requests … api-upload-free"). If it
+  happens anyway, wait out the 24 hours and rerun the failed jobs (`gh run rerun <id> --failed`).
 
 ## Releasing
 
