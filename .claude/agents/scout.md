@@ -27,9 +27,7 @@ Workspace packages are consumed as source: follow an import of `@clippings/*` to
 
 ## How to search
 
-Read `docs/agents/code-search.md` before your first search. Find code (definitions, calls,
-imports, JSX) with `ast-grep outline` and `ast-grep run -p`, and text (strings, comments, config,
-docs) with Grep. Bash runs those read-only searches and nothing else.
+Bash runs read-only searches and nothing else.
 
 ## What to return
 

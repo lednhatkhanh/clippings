@@ -28,7 +28,6 @@ export async function saveAppearanceAction(changes: Partial<Appearance>): Promis
  * Ends the session on the server, clears its cookie and goes to sign-in. Signing out is for
  * whoever holds the cookie, and with none it does nothing, so there is no user data to guard.
  */
-// ast-grep-ignore: server-action-checks-session
 export async function signOutAction(): Promise<void> {
   await getAuth().api.signOut({ headers: await headers() });
   redirect("/sign-in");

@@ -65,7 +65,6 @@ async function consentAndReturn(formData: FormData, scope?: string): Promise<voi
  * Allow: grants everything the client asked for. The consent endpoint checks the signed request,
  * the session and the allowlist, so this action needs no session check of its own.
  */
-// ast-grep-ignore: server-action-checks-session
 export async function allowConnectionAction(formData: FormData): Promise<void> {
   await consentAndReturn(formData);
 }
@@ -76,7 +75,6 @@ export async function allowConnectionAction(formData: FormData): Promise<void> {
  * come from the signed request, never from the form; the consent endpoint checks the same
  * session, allowlist and signature as for Allow, so this action needs no session check either.
  */
-// ast-grep-ignore: server-action-checks-session
 export async function allowReadOnlyConnectionAction(formData: FormData): Promise<void> {
   const requested = new URLSearchParams(readOAuthQuery(formData)).get("scope");
   await consentAndReturn(formData, readOnlyScopes(requested).join(" "));
@@ -90,7 +88,6 @@ export async function allowReadOnlyConnectionAction(formData: FormData): Promise
  * own address or the static closing page. A user whose session ended while the page was open
  * (after "Not you?" and Back) can still refuse, and the client still hears it.
  */
-// ast-grep-ignore: server-action-checks-session
 export async function denyConnectionAction(formData: FormData): Promise<void> {
   const toExtension = extensionErrorRedirect(
     new URLSearchParams(readOAuthQuery(formData)),
@@ -105,7 +102,6 @@ export async function denyConnectionAction(formData: FormData): Promise<void> {
  * "Not you?": signs out and starts sign-in again, keeping the authorization request. Signing out
  * is for whoever holds the cookie, so there is no user data to guard.
  */
-// ast-grep-ignore: server-action-checks-session
 export async function switchAccountAction(formData: FormData): Promise<void> {
   await getAuth().api.signOut({ headers: await headers() });
   const oauthQuery = readOAuthQuery(formData);

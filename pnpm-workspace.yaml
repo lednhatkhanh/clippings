@@ -6,7 +6,6 @@ catalogMode: strict
 
 catalog:
   "@anthropic-ai/sdk": 1.6.0
-  "@ast-grep/cli": 0.51.1
   "@axe-core/playwright": 4.14.0
   "@better-auth/cimd": 1.7.18
   "@better-auth/mcp": 1.7.18
@@ -119,6 +118,3 @@ minimumReleaseAgeExclude:
 # platform binary, which resolves from optional dependencies without it.
 allowBuilds:
   esbuild: false
-  # Its postinstall only links the platform binary over the JS shim, so each
-  # ast-grep run skips a Node startup.
-  "@ast-grep/cli": true

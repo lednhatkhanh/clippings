@@ -9,7 +9,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 
 const tasks = ["lint", "format:check", "typecheck", "test", "build"];
 const rootConfig =
-  /^(\.oxlintrc\.json|\.oxfmtrc\.json|\.node-version|turbo\.json|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|scripts\/|\.github\/|sgconfig\.yml|ast-grep\/)/;
+  /^(\.oxlintrc\.json|\.oxfmtrc\.json|\.node-version|turbo\.json|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|scripts\/|\.github\/)/;
 
 const git = (...args) => execFileSync("git", args, { encoding: "utf8" }).trim();
 
