@@ -53,9 +53,11 @@ runs:
           flags+=(--env "DATABASE_URL=$DATABASE_URL")
         fi
 
+        # One tgz instead of thousands of files: Hobby allows 5000 file uploads a day
+        # ("api-upload-free"), which a few prebuilt deploys used up.
         # The CLI prints the URL on stdout and everything else on stderr, but pnpm may add noise
         # to stdout, so take the last line.
-        vercel deploy --prebuilt "${flags[@]}" > deployment.txt
+        vercel deploy --prebuilt --archive=tgz "${flags[@]}" > deployment.txt
         url=$(tail -n 1 deployment.txt)
         echo "url=$url" >> "$GITHUB_OUTPUT"
 
