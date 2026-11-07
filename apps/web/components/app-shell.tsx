@@ -6,11 +6,12 @@ import { OfflineBanner } from "./online-status.tsx";
 /**
  * The frame every signed-in page sits in: glass navigation that floats over the page's color
  * fields (see `AppNav` for its three sizes), and room around the content for it. Each page brings
- * its own `PageHeader`, which is glass too.
+ * its own `PageHeader`, which is glass too. It clips sideways overflow at the screen's edge, so
+ * content sliding in (a settings tab's panel) never widens a phone's page.
  */
 export function AppShell({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-dvh text-ink medium:ps-25 medium:pe-3 large:ps-69 print:ps-0">
+    <div className="min-h-dvh overflow-x-clip text-ink medium:ps-25 medium:pe-3 large:ps-69 print:ps-0">
       <a
         href="#main"
         className="sr-only rounded-full glass-float px-6 py-3 typescale-label-lg text-ink focus-visible:not-sr-only focus-visible:fixed focus-visible:start-4 focus-visible:top-4 focus-visible:z-50 print:hidden"

@@ -33,8 +33,9 @@
 }
 
 /*
- * The paper chip behind the selected segment of a `SegmentedButtons`, on `SelectionIndicator`: it
- * slides and resizes to the new segment. Reduced motion fades the jumped chip in.
+ * The paper chip behind the selected segment of a `SegmentedButtons`: `SegmentChip` starts it on
+ * the previous segment and it slides and resizes to the new one. Reduced motion fades the jumped
+ * chip in.
  */
 @utility segment-indicator {
   /* The edge marks the selected segment at 3:1 or more (WCAG 1.4.11), beyond the paper's shadow. */
@@ -61,18 +62,54 @@
   transition: height var(--motion-spring-paper-duration) var(--motion-spring-paper);
 }
 
-/* A `TabPanel` inside `tab-panels`: crossfades, with the old panel lifted out of the flow. */
+@keyframes tab-panel-in {
+  from {
+    opacity: 0;
+    translate: calc(var(--tab-panel-from) * var(--tab-panel-shift)) 0;
+  }
+}
+
+@keyframes tab-panel-out {
+  to {
+    opacity: 0;
+    translate: calc(var(--tab-panel-to) * var(--tab-panel-shift)) 0;
+  }
+}
+
+/*
+ * A `TabPanel` inside `tab-panels`: the new panel slides in from the side of its tab and the old one
+ * leaves toward the other side, lifted out of the flow. `Tabs` sets `data-direction` from the order
+ * of the two tabs; `:dir(rtl)` mirrors the travel. The entrance settles, the exit is quicker.
+ * Reduced motion zeroes the travel, leaving the crossfade.
+ */
 @utility tab-panel {
+  --tab-panel-shift: calc(2.5rem * var(--motion-spatial-factor));
+  --tab-panel-from: 0;
+  --tab-panel-to: 0;
+
+  [data-direction="forward"] & {
+    --tab-panel-from: 1;
+    --tab-panel-to: -1;
+  }
+
+  [data-direction="backward"] & {
+    --tab-panel-from: -1;
+    --tab-panel-to: 1;
+  }
+
+  &:dir(rtl) {
+    --tab-panel-shift: calc(-2.5rem * var(--motion-spatial-factor));
+  }
+
   &[data-entering] {
-    animation: selection-fade-in var(--motion-spring-fade-duration) var(--motion-spring-fade);
+    animation: tab-panel-in var(--motion-spring-paper-duration) var(--motion-spring-paper) both;
   }
 
   &[data-exiting] {
     position: absolute;
     inset-block-start: 0;
     inset-inline: 0;
-    animation: selection-fade-out var(--motion-spring-fade-duration) var(--motion-spring-fade)
-      forwards;
+    animation: tab-panel-out var(--motion-duration-quick) var(--motion-ease-exit) forwards;
   }
 }
 
