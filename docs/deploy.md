@@ -123,7 +123,7 @@ one ([rate limits](https://docs.voyageai.com/docs/rate-limits)), and every searc
 
 Every Claude and Voyage AI call goes through the app's model gateway, which writes it to a ledger
 and refuses new calls once the day's spend (UTC) reaches the cap in Settings → Automation ($3 by
-default). Saves made past the cap wait as pending and are read the next day. That cap is the first
+default). Saves made past the cap wait as pending and are read once the cap resets (the daily sweep takes at most 100 a day). That cap is the first
 line of defence; the Anthropic Console is the second, so set it up before the first deploy:
 
 1. In the [Console](https://platform.claude.com), in the organization linked to the Max plan, create

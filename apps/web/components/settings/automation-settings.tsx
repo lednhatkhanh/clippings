@@ -59,7 +59,7 @@ export function AutomationSettings({
     <SettingsCard title="Automation">
       <SettingsRow
         title="Spent today"
-        description={`The day runs on UTC and the cap is ${formatDollars(saved.dailyCapMicros)}. Once it is reached, new saves wait as pending and are read the next day.`}
+        description={`The day runs on UTC and the cap is ${formatDollars(saved.dailyCapMicros)}. Once it is reached, new saves wait as pending and are read once the cap resets, a batch each day.`}
       >
         <div className="typescale-title-md tabular-nums">{formatDollars(spend.todayMicros)}</div>
       </SettingsRow>

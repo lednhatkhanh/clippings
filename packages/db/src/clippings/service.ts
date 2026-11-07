@@ -1,9 +1,11 @@
+import { utc } from "@date-fns/utc";
 import {
   constructNow,
   isAfter,
   isBefore,
   isValid,
   parseISO,
+  startOfDay,
   subDays,
   subHours,
   subSeconds,
@@ -29,6 +31,7 @@ import {
 import type pg from "pg";
 
 import {
+  AUTOMATION_DEFAULTS,
   formatIsoUtc,
   MAX_NOTE_LENGTH,
   MAX_QUERY_LENGTH,
@@ -58,6 +61,7 @@ import {
   clippingTagSuggestions,
   clippingTexts,
   EMBEDDING_DIMENSIONS,
+  modelUsage,
   tags,
   userSettings,
 } from "../schema.ts";
@@ -473,7 +477,7 @@ const documentText = ({
 
 /** How long a clipping can sit pending or failed before the sweep requests it again. */
 const STUCK_AFTER_HOURS = 1;
-const SWEEP_BATCH_SIZE = 100;
+export const SWEEP_BATCH_SIZE = 100;
 /**
  * How many times the sweep starts a failed clipping over before it leaves it failed: a page that
  * is gone or refuses us would otherwise cost a read and a model call every day, forever. The
@@ -506,6 +510,17 @@ export const IMPORT_DAILY_BUDGET = 400;
  * are published immediately, so they are never queued behind the backlog.
  */
 export const IMPORT_SPREAD_SECONDS = 20 * 60 * 60;
+/**
+ * Whether the clipping's owner can still spend today: their UTC-day spend is below their daily
+ * cap, as the gateway reads it for `enrich` calls (a cap of 0 never is). The sweep and the drain
+ * leave out everyone else, so a user who is held back neither fills a batch nor costs a page
+ * fetch for a call the gateway will refuse.
+ */
+function ownerCanSpend(now: Date): SQL {
+  const today = startOfDay(now, { in: utc });
+  return sql`coalesce((select ${userSettings.dailyCapMicros} from ${userSettings} where ${userSettings.userId} = ${clippings.userId}), ${AUTOMATION_DEFAULTS.dailyCapMicros}) > coalesce((select sum(${modelUsage.costMicros}) from ${modelUsage} where ${modelUsage.userId} = ${clippings.userId} and ${modelUsage.createdAt} >= ${today}), 0)`;
+}
+
 /** Rows per insert, so a statement stays far below Postgres's 65,535 parameters. */
 const IMPORT_CHUNK_SIZE = 500;
 /** Bookmarks dated before this are taken for a bad ADD_DATE: the web had no bookmarks then. */
@@ -2056,8 +2071,9 @@ export function createClippingsService({
    * capped, so a backlog drains over several days instead of one long run. Imports waiting their
    * turn are pending on purpose: `drainImports` takes those. A failed clipping is started over at
    * most `MAX_SWEEP_RESTARTS` times; after that it stays failed until the user retries it. A
-   * clipping held by the spend cap is pending, so each day's request is free of that count and it
-   * is read as soon as the cap allows.
+   * clipping held by the spend cap is pending, so each day's request is free of that count. Owners
+   * who can't spend today (a cap of 0, or today's spend at the cap) are left out, and the oldest
+   * status time goes first, so held clippings don't crowd out other users' stuck ones.
    *
    * The jobs go out as one batch. If the queue can't be reached the clippings stay pending, and
    * the next daily sweep takes them again.
@@ -2074,9 +2090,12 @@ export function createClippingsService({
           lt(clippings.statusChangedAt, stuckBefore),
           or(ne(clippings.source, "import"), ne(clippings.status, "pending")),
           or(eq(clippings.status, "pending"), lt(clippings.sweepAttempts, MAX_SWEEP_RESTARTS)),
+          ownerCanSpend(now),
           live,
         ),
       )
+      // The restart stamps the status time, so what was taken moves to the back of the line.
+      .orderBy(asc(clippings.statusChangedAt), asc(clippings.id))
       .limit(SWEEP_BATCH_SIZE);
     const restarted = await db
       .update(clippings)
@@ -2113,7 +2132,8 @@ export function createClippingsService({
    * It claims the batch in one statement that stamps `import_requested_at` and the status time, so
    * two overlapping runs never take the same clipping. The budget counts what was requested in
    * the last `IMPORT_SPREAD_SECONDS`, so a second run the same day takes only the remainder; a
-   * lock keeps two runs from both counting before either claims. A clipping whose job is lost
+   * lock keeps two runs from both counting before either claims. Imports of owners who can't spend
+   * today are left out (see `ownerCanSpend`), so they neither use the budget nor block others. A clipping whose job is lost
    * (still pending a spread window later) is taken again, behind the others. Throws when the
    * queue can't be reached, after giving the budget back.
    */
@@ -2140,6 +2160,7 @@ export function createClippingsService({
               eq(clippings.source, "import"),
               eq(clippings.status, "pending"),
               or(isNull(clippings.importRequestedAt), lt(clippings.importRequestedAt, windowStart)),
+              ownerCanSpend(now),
               live,
             ),
           )

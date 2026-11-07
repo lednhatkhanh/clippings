@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { createServiceFixture, type ServiceFixture } from "../test/service-fixture.ts";
 import { TEST_DATABASE_URL } from "../test/temp-database.ts";
+import { SWEEP_BATCH_SIZE } from "./service.ts";
 
 describe.skipIf(!TEST_DATABASE_URL)("clippings held by the spend cap", () => {
   const HOUR = 60 * 60 * 1000;
@@ -82,6 +83,85 @@ describe.skipIf(!TEST_DATABASE_URL)("clippings held by the spend cap", () => {
     expect(await sweepAttempts(id)).toBe(0);
     fixture.setCapReached(false);
     expect(await fixture.service.enrichClipping(id)).toBe("ready");
+  });
+
+  describe("the daily sweep", () => {
+    const saveMany = async (userId: string, count: number, prefix: string) => {
+      const ids: string[] = [];
+      for (let n = 0; n < count; n++) {
+        ids.push(await save(userId, `https://example.com/${prefix}-${n}`));
+      }
+      return ids;
+    };
+
+    /** A clipping of Ben's that has failed, so the sweep wants to start it over. */
+    const failedClipping = async (userId: string) => {
+      fixture.web.set("https://example.com/ben-gone", { error: new Error("404") });
+      const id = await save(userId, "https://example.com/ben-gone");
+      await fixture.service.enrichClipping(id, { lastAttempt: true });
+      return id;
+    };
+
+    it("leaves out a user with a cap of 0, so their backlog doesn't take the batch from others", async () => {
+      const ana = await fixture.createUser("ana");
+      const ben = await fixture.createUser("ben");
+      await fixture.settings.updateAutomationSettings(ana, { dailyCapMicros: 0 });
+      const held = await saveMany(ana, SWEEP_BATCH_SIZE + 1, "ana");
+      fixture.advanceClock(HOUR);
+      const bens = await failedClipping(ben);
+      fixture.advanceClock(2 * HOUR);
+
+      expect(await fixture.service.sweepStuck()).toEqual([bens]);
+
+      // Raising the cap lets the next sweep take the backlog.
+      await fixture.settings.updateAutomationSettings(ana, { dailyCapMicros: 3_000_000 });
+      fixture.advanceClock(DAY);
+      const swept = await fixture.service.sweepStuck();
+      expect(swept).toHaveLength(SWEEP_BATCH_SIZE);
+      expect(held).toEqual(expect.arrayContaining(swept.filter((id) => id !== bens)));
+    });
+
+    it("leaves out a user whose spend today has reached their cap, until the UTC day turns over", async () => {
+      const ana = await fixture.createUser("ana");
+      await fixture.settings.updateAutomationSettings(ana, { dailyCapMicros: 1_000_000 });
+      const id = await save(ana);
+      fixture.advanceClock(2 * HOUR);
+      await fixture.usage.recordUsage(ana, {
+        jobKind: "enrich",
+        model: "claude-haiku-5-5",
+        batch: false,
+        inputTokens: 1,
+        outputTokens: 1,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        webSearches: 0,
+        costMicros: 1_000_000,
+      });
+
+      expect(await fixture.service.sweepStuck()).toEqual([]);
+
+      fixture.advanceClock(DAY);
+      expect(await fixture.service.sweepStuck()).toEqual([id]);
+    });
+
+    it("takes the clippings that have waited longest first, so a held backlog rotates", async () => {
+      const ana = await fixture.createUser("ana");
+      const ben = await fixture.createUser("ben");
+      await saveMany(ana, SWEEP_BATCH_SIZE + 1, "ana");
+      fixture.advanceClock(HOUR);
+      const bens = await save(ben, "https://example.com/ben");
+      fixture.advanceClock(2 * HOUR);
+
+      const first = await fixture.service.sweepStuck();
+      expect(first).toHaveLength(SWEEP_BATCH_SIZE);
+      expect(first).not.toContain(bens);
+
+      // The first batch's status time moved on, so the one left behind and Ben's come first.
+      fixture.advanceClock(DAY);
+      const second = await fixture.service.sweepStuck();
+      expect(second).toHaveLength(SWEEP_BATCH_SIZE);
+      expect(second).toContain(bens);
+    });
   });
 
   it("does not hold a clipping that fails for another reason", async () => {
