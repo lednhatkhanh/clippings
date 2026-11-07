@@ -43,6 +43,42 @@ export {
   type ChangesService,
   type UndoResult,
 } from "./changes/service.ts";
+export { gateChange, type GateDecision } from "./librarian/gate.ts";
+export {
+  LIBRARY_VIEW_ITEM_LIMIT,
+  type LibraryView,
+  type LibraryViewItem,
+  type LibraryViewTag,
+} from "./librarian/library-view.ts";
+export {
+  LibrarianInputError,
+  LibrarianInvalidError,
+  LibrarianNotFoundError,
+  type ProposedChange,
+  type ProposingActor,
+} from "./librarian/plans.ts";
+export {
+  createLibraryService,
+  type AppliedChange,
+  type ClippingPlacement,
+  type LibraryService,
+  type LinkedClipping,
+  type TagPlacement,
+  type TagTopic,
+} from "./librarian/library.ts";
+export {
+  ChangeNotSuggestedError,
+  createLibrarianService,
+  InvalidSuggestionCursorError,
+  SuggestionStaleError,
+  type FolderSummary,
+  type LibrarianService,
+  type ListSuggestionsInput,
+  type PlannedChange,
+  type ProposalResult,
+  type ProposeOptions,
+  type SuggestionsPage,
+} from "./librarian/service.ts";
 export {
   createClippingsService,
   EmptyNoteBodyError,

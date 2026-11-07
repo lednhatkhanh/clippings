@@ -141,6 +141,8 @@ export interface ListClippingsInput {
   tags?: readonly string[];
   /** Only clippings saved from these; all of them when empty or left out. */
   sources?: readonly ClippingSource[];
+  /** Only clippings filed in this folder; an id that is not a folder id matches nothing. */
+  folderId?: string;
 }
 
 /** A filtered list of the user's clippings, newest saved first, pinned or not. */
@@ -186,6 +188,8 @@ export interface SearchClippingsInput {
   tags?: readonly string[];
   /** Only clippings saved from these; all of them when empty or left out. */
   sources?: readonly ClippingSource[];
+  /** Only clippings filed in this folder; an id that is not a folder id matches nothing. */
+  folderId?: string;
   sort?: SearchSort;
   limit?: number;
   /**
@@ -361,6 +365,14 @@ const toClipping = (row: ClippingRow, tagList: Tag[] = []): Clipping => ({
 
 /** The title to show, in SQL: the user's own, else the page's. */
 const shownTitle = sql`coalesce(${clippings.userTitle}, ${clippings.title})`;
+
+/** The user's clippings filed in this folder; undefined when no folder is asked for. */
+const inFolder = (folderId: string | undefined) =>
+  folderId === undefined
+    ? undefined
+    : UUID.test(folderId)
+      ? eq(clippings.folderId, folderId)
+      : sql`false`;
 
 const fromSources = (sources: readonly ClippingSource[] = []) =>
   sources.length > 0 ? inArray(clippings.source, [...sources]) : undefined;
@@ -937,14 +949,15 @@ export function createClippingsService({
 
   /**
    * Gives the tag one of `TAG_COLORS`, by name. Returns the tag as it now stands, or null when
-   * the user has no such tag. Throws on a name that isn't a tag color.
+   * the user has no such tag. Throws on a name that isn't a tag color. A color set here is the
+   * user's choice, so the librarian leaves it alone.
    */
   async function setTagColor(userId: string, tagId: string, color: string): Promise<Tag | null> {
     if (!isTagColor(color)) throw new InvalidTagColorError(color);
     if (!UUID.test(tagId)) return null;
     const [updated] = await db
       .update(tags)
-      .set({ color })
+      .set({ color, colorOverridden: true })
       .where(and(eq(tags.id, tagId), eq(tags.userId, userId)))
       .returning(tagColumns);
     return updated ?? null;
@@ -1125,13 +1138,14 @@ export function createClippingsService({
 
   async function listClippings(
     userId: string,
-    { cursor, limit = 20, sources, tags: tagNames }: ListClippingsInput,
+    { cursor, limit = 20, sources, folderId, tags: tagNames }: ListClippingsInput,
   ): Promise<ClippingsPage> {
     const after = cursor ? decodeCursor(cursor) : null;
     const matching = and(
       eq(clippings.userId, userId),
       live,
       fromSources(sources),
+      inFolder(folderId),
       taggedWithAll(db, userId, tagNames),
     );
     const [pinnedRows, rows] = await Promise.all([
@@ -1226,6 +1240,7 @@ export function createClippingsService({
       q,
       tags: tagNames,
       sources,
+      folderId,
       sort = "relevance",
       limit = SEARCH_RESULT_LIMIT,
       words = "all",
@@ -1259,6 +1274,7 @@ export function createClippingsService({
       eq(clippings.userId, userId),
       live,
       fromSources(sources),
+      inFolder(folderId),
       taggedWithAll(db, userId, tagNames),
     );
 

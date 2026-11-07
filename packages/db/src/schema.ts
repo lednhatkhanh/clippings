@@ -27,10 +27,15 @@ import {
   CLIPPING_KINDS,
   CLIPPING_SOURCES,
   CLIPPING_STATUSES,
+  ITEM_LINK_CREATORS,
   LIBRARY_CHANGE_ACTORS,
   LIBRARY_CHANGE_CONFIDENCES,
   LIBRARY_CHANGE_STATUSES,
+  MAX_FOLDER_NAME_LENGTH,
+  MAX_LINK_REASON_LENGTH,
+  MAX_TOPIC_PAGE_LENGTH,
   TAG_COLORS,
+  TOPIC_PAGE_SOURCES,
 } from "@clippings/shared";
 
 /**
@@ -402,6 +407,9 @@ export const clippings = pgTable(
     // When the user pinned it above the newest-first list; null when not pinned. Deleting and
     // undoing leave it alone.
     pinnedAt: timestamptz("pinned_at"),
+    // The one folder it sits in; null until the librarian files it (existing rows have none).
+    // The foreign key, with the user id, is in the table's extra config.
+    folderId: uuid("folder_id"),
     // When the weekly link check last looked at the page; null before the first look.
     linkCheckedAt: timestamptz("link_checked_at"),
     // Checks in a row that found the page gone. Any live answer resets it to 0.
@@ -420,6 +428,17 @@ export const clippings = pgTable(
     unique("clippings_user_id_url_normalized_key").on(table.userId, table.urlNormalized),
     // What `clipping_tags` points at, so a link can only join a user's clipping to their own tag.
     unique("clippings_id_user_id_key").on(table.id, table.userId),
+    // Only the folder id is nulled when the folder goes: the user id stays (`SET NULL (folder_id)`,
+    // written by hand in the migration, since Drizzle can't say it).
+    foreignKey({
+      name: "clippings_folder_fkey",
+      columns: [table.folderId, table.userId],
+      foreignColumns: [folders.id, folders.userId],
+    }).onDelete("set null"),
+    // A folder's clippings.
+    index("clippings_folder_idx")
+      .on(table.folderId)
+      .where(sql`${table.folderId} is not null`),
     check("clippings_status_check", sql`${table.status} in (${inList(CLIPPING_STATUSES)})`),
     check("clippings_source_check", sql`${table.source} in (${inList(CLIPPING_SOURCES)})`),
     check("clippings_kind_check", sql`${table.kind} in (${inList(CLIPPING_KINDS)})`),
@@ -480,12 +499,27 @@ export const tags = pgTable(
     name: text("name").notNull(),
     // A name from `TAG_COLORS`, never a hex value: each palette renders it.
     color: text("color", { enum: TAG_COLORS }).notNull().default("none"),
+    // True once the user chose the color themselves: the librarian then leaves it alone.
+    colorOverridden: boolean("color_overridden").notNull().default(false),
+    // The one folder it sits in; null until the librarian files it. The foreign key, with the user
+    // id, is in the extra config.
+    folderId: uuid("folder_id"),
     // No default: the service stamps it from its clock.
     createdAt: timestamptz("created_at").notNull(),
   },
   (table) => [
     uniqueIndex("tags_user_id_name_key").on(table.userId, sql`lower(${table.name})`),
     unique("tags_id_user_id_key").on(table.id, table.userId),
+    // As `clippings_folder_fkey`: the migration nulls only `folder_id`.
+    foreignKey({
+      name: "tags_folder_fkey",
+      columns: [table.folderId, table.userId],
+      foreignColumns: [folders.id, folders.userId],
+    }).onDelete("set null"),
+    // A folder's tags.
+    index("tags_folder_idx")
+      .on(table.folderId)
+      .where(sql`${table.folderId} is not null`),
     check("tags_color_check", sql`${table.color} in (${inList(TAG_COLORS)})`),
   ],
 );
@@ -627,6 +661,9 @@ export const userSettings = pgTable(
     researchJobsPerDay: integer("research_jobs_per_day")
       .notNull()
       .default(AUTOMATION_DEFAULTS.researchJobsPerDay),
+    // When the user's first librarian run finished, which stored its suggestions for them to
+    // judge. Null until then, so a first run cut off partway and redelivered is still a first run.
+    librarianFirstRunAt: timestamptz("librarian_first_run_at"),
     // No default: the service stamps it from its clock.
     updatedAt: timestamptz("updated_at").notNull(),
   },
@@ -733,6 +770,10 @@ export const libraryChanges = pgTable(
     confidence: text("confidence", { enum: LIBRARY_CHANGE_CONFIDENCES }),
     status: text("status", { enum: LIBRARY_CHANGE_STATUSES }).notNull().default("applied"),
     reason: text("reason").notNull().default(""),
+    // When the change took effect: the creation time for an applied change, the time of the
+    // decision for an accepted suggestion; null while it waits or when it was never applied. Undo
+    // compares it with later changes to the same targets.
+    appliedAt: timestamptz("applied_at"),
     // No default: the service stamps it from its clock.
     createdAt: timestamptz("created_at").notNull(),
   },
@@ -758,5 +799,110 @@ export const libraryChanges = pgTable(
       .where(sql`${table.status} = 'suggested'`),
     // "Did a later change touch this target": undo refuses when one did.
     index("library_changes_target_ids_idx").using("gin", table.targetIds),
+  ],
+);
+
+/**
+ * A folder the librarian files clippings and tags under: one per item, unlike tags. Names are
+ * unique per user, ignoring case. The color is a `TAG_COLORS` name, never a hex value.
+ */
+export const folders = pgTable(
+  "folders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    color: text("color", { enum: TAG_COLORS }).notNull().default("none"),
+    // No default: the service stamps both from its clock.
+    createdAt: timestamptz("created_at").notNull(),
+    updatedAt: timestamptz("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("folders_user_id_name_key").on(table.userId, sql`lower(${table.name})`),
+    // What `clippings` and `tags` point at, so an item can only sit in its owner's folder.
+    unique("folders_id_user_id_key").on(table.id, table.userId),
+    check("folders_color_check", sql`${table.color} in (${inList(TAG_COLORS)})`),
+    check(
+      "folders_name_check",
+      sql`char_length(${table.name}) between 1 and ${sql.raw(String(MAX_FOLDER_NAME_LENGTH))}`,
+    ),
+  ],
+);
+
+/**
+ * A link between two of a user's clippings, with why. A pair has at most one link whichever way
+ * it points, and nothing links to itself. A link goes when either clipping is deleted for good.
+ */
+export const itemLinks = pgTable(
+  "item_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    fromId: uuid("from_id").notNull(),
+    toId: uuid("to_id").notNull(),
+    reason: text("reason").notNull(),
+    createdBy: text("created_by", { enum: ITEM_LINK_CREATORS }).notNull(),
+    // No default: the service stamps it from its clock.
+    createdAt: timestamptz("created_at").notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "item_links_from_fkey",
+      columns: [table.fromId, table.userId],
+      foreignColumns: [clippings.id, clippings.userId],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "item_links_to_fkey",
+      columns: [table.toId, table.userId],
+      foreignColumns: [clippings.id, clippings.userId],
+    }).onDelete("cascade"),
+    // One link per unordered pair: (a, b) and (b, a) collide.
+    uniqueIndex("item_links_user_pair_key").on(
+      table.userId,
+      sql`least(${table.fromId}, ${table.toId})`,
+      sql`greatest(${table.fromId}, ${table.toId})`,
+    ),
+    check("item_links_no_self_check", sql`${table.fromId} <> ${table.toId}`),
+    check(
+      "item_links_created_by_check",
+      sql`${table.createdBy} in (${inList(ITEM_LINK_CREATORS)})`,
+    ),
+    check(
+      "item_links_reason_check",
+      sql`char_length(${table.reason}) between 1 and ${sql.raw(String(MAX_LINK_REASON_LENGTH))}`,
+    ),
+    // Each side's lookup ("what links to this clipping").
+    index("item_links_from_idx").on(table.fromId),
+    index("item_links_to_idx").on(table.toId),
+  ],
+);
+
+/** The page the librarian writes for a tag: one per tag, replaced on every rewrite. */
+export const topicPages = pgTable(
+  "topic_pages",
+  {
+    tagId: uuid("tag_id").primaryKey(),
+    userId: text("user_id").notNull(),
+    // Markdown.
+    body: text("body").notNull(),
+    source: text("source", { enum: TOPIC_PAGE_SOURCES }).notNull().default("ai"),
+    // No default: the service stamps it from its clock.
+    updatedAt: timestamptz("updated_at").notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "topic_pages_tag_fkey",
+      columns: [table.tagId, table.userId],
+      foreignColumns: [tags.id, tags.userId],
+    }).onDelete("cascade"),
+    check("topic_pages_source_check", sql`${table.source} in (${inList(TOPIC_PAGE_SOURCES)})`),
+    check(
+      "topic_pages_body_check",
+      sql`char_length(${table.body}) <= ${sql.raw(String(MAX_TOPIC_PAGE_LENGTH))}`,
+    ),
   ],
 );

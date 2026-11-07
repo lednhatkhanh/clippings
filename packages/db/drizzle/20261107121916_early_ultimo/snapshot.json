@@ -1,0 +1,37 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "c21df085-3feb-4aaf-83ea-1f53a2200237",
+  "prevIds": ["2eb3500a-f91f-4bea-b30f-722024e39dfe"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "user_settings", "librarian_first_run_at"],
+      "writes": [
+        "s|col|public.user_settings.librarian_first_run_at",
+        "n|col|public.user_settings.librarian_first_run_at",
+        "e|col|public.user_settings.librarian_first_run_at"
+      ],
+      "reads": ["n|tbl|public.user_settings", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "user_settings",
+        "name": "librarian_first_run_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

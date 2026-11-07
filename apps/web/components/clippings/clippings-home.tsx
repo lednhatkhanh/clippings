@@ -12,6 +12,8 @@ import { TodayLabel } from "@/components/today-label.tsx";
 import { getSession, signInRedirect } from "@/lib/auth/session.ts";
 import { loadBrowseParams, toQueryString } from "@/lib/clippings/browse-params.ts";
 import { loadRows } from "@/lib/clippings/rows.ts";
+import { getLibrarian } from "@/lib/librarian/service.ts";
+import type { Folder } from "@clippings/shared";
 
 import { ClippingsBrowser } from "./clippings-browser.tsx";
 import { EmptyState } from "./empty-state.tsx";
@@ -27,8 +29,14 @@ async function Clippings({ searchParams }: { searchParams: SearchParams }) {
   const params = await loadBrowseParams(searchParams);
 
   let page: Awaited<ReturnType<typeof loadRows>>;
+  let folders: Folder[];
   try {
-    page = await loadRows(session.user.id, params);
+    const [rows, filed] = await Promise.all([
+      loadRows(session.user.id, params),
+      getLibrarian().listFolders(session.user.id),
+    ]);
+    page = rows;
+    folders = filed.map(({ id, name, color }) => ({ id, name, color }));
   } catch (error) {
     unstable_rethrow(error);
     // Only the list is replaced, so the heading and "New clipping" stay in place.
@@ -37,7 +45,7 @@ async function Clippings({ searchParams }: { searchParams: SearchParams }) {
 
   // Nothing saved yet: no search to offer.
   if (page.rows.length + page.pinned.length === 0 && !toQueryString(params)) return <EmptyState />;
-  return <ClippingsBrowser initialParams={params} initialPage={page} />;
+  return <ClippingsBrowser initialParams={params} initialPage={page} folders={folders} />;
 }
 
 /**

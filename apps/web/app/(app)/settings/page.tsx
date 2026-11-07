@@ -16,12 +16,14 @@ import {
 } from "@/components/settings/connections-settings.tsx";
 import { ImportSettings } from "@/components/settings/import-settings.tsx";
 import { KeyboardSettings } from "@/components/settings/keyboard-settings.tsx";
+import { LibraryReviewSettings } from "@/components/settings/library-review-settings.tsx";
 import { SuggestTagsSettings } from "@/components/settings/suggest-tags-settings.tsx";
 import { clientDisplayName, getConnections } from "@/lib/auth/connections.ts";
 import { getSession, signInRedirect } from "@/lib/auth/session.ts";
 import { getClippings } from "@/lib/clippings/service.ts";
 import { formatLastUsed } from "@/lib/format-date.ts";
 import { getUsage } from "@/lib/gateway/service.ts";
+import { getLibrary } from "@/lib/librarian/library.ts";
 import {
   getAppearance,
   getAutomation,
@@ -45,16 +47,21 @@ async function SettingsTabs() {
   let pendingImports: number;
   let automation: Automation;
   let spend: SpendSummary;
+  let waitingSuggestions: number;
   try {
-    const [settings, connected, suggest, auto, pending, limits, spent] = await Promise.all([
-      getAppearance(session.user.id),
-      getConnections().listConnections(session.user.id),
-      getSuggestTags(session.user.id),
-      getAutoTag(session.user.id),
-      getClippings().countPendingImports(session.user.id),
-      getAutomation(session.user.id),
-      getUsage().getSpend(session.user.id),
-    ]);
+    const [settings, connected, suggest, auto, pending, limits, spent, waiting] = await Promise.all(
+      [
+        getAppearance(session.user.id),
+        getConnections().listConnections(session.user.id),
+        getSuggestTags(session.user.id),
+        getAutoTag(session.user.id),
+        getClippings().countPendingImports(session.user.id),
+        getAutomation(session.user.id),
+        getUsage().getSpend(session.user.id),
+        getLibrary().countSuggestions(session.user.id),
+      ],
+    );
+    waitingSuggestions = waiting;
     appearance = settings;
     suggestTags = suggest;
     autoTag = auto;
@@ -90,6 +97,7 @@ async function SettingsTabs() {
         </TabPanel>
         <TabPanel id="library">
           <div className="flex flex-col gap-4">
+            <LibraryReviewSettings waiting={waitingSuggestions} />
             <SuggestTagsSettings initial={suggestTags} />
             <ImportSettings pendingImports={pendingImports} />
           </div>
