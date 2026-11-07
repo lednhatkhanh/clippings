@@ -257,6 +257,25 @@ describe.skipIf(!TEST_DATABASE_URL)("notes", () => {
       ).toEqual([id]);
     });
 
+    it("doesn't give a note the vector of the body it had when embedMissing read it", async () => {
+      const ana = await fixture.createUser("ana");
+      const id = await readNote(ana, "sedan notes");
+      fixture.setEmbeddingCapReached(true);
+      await fixture.service.updateClipping(ana, id, { body: "sedan notes!" });
+      fixture.setEmbeddingCapReached(false);
+      // The note is edited, the embedder still capped for that edit, after embedMissing read it.
+      fixture.duringEmbedding.set("sedan notes!", async () => {
+        fixture.setEmbeddingCapReached(true);
+        await fixture.service.updateClipping(ana, id, { body: "sourdough notes" });
+        fixture.setEmbeddingCapReached(false);
+      });
+
+      expect(await fixture.service.embedMissing()).toBe(0);
+      expect(await fixture.service.embedMissing()).toBe(1);
+
+      expect(fixture.embedded.at(-1)).toEqual({ text: "sourdough notes", purpose: "document" });
+    });
+
     it("refuses a blank or too long body, and a body for a link", async () => {
       const ana = await fixture.createUser("ana");
       const id = await readNote(ana, "keep me");

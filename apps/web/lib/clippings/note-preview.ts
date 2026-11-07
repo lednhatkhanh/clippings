@@ -1,3 +1,5 @@
+import { isCodeFenceLine, noteTitleLineIndex } from "@clippings/shared";
+
 /** Longest preview of a note under its title in a list row, in characters. */
 const PREVIEW_LENGTH = 200;
 
@@ -8,11 +10,10 @@ const PREVIEW_LENGTH = 200;
  */
 export function notePreview(body: string): string | null {
   const lines = body.split(/\r?\n/);
-  const firstText = lines.findIndex((line) => /[\p{L}\p{N}]/u.test(line));
   const text = lines
-    .slice(firstText + 1)
+    .slice(noteTitleLineIndex(lines) + 1)
+    .filter((line) => !isCodeFenceLine(line))
     .join(" ")
-    .replace(/^\s*(?:```+|~~~+).*$/gm, "")
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/(?:^|\s)(?:#{1,6}|>|[-*+]|\d+[.)])(?=\s)/g, " ")
     .replace(/[*_`~|]+/g, "")

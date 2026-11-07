@@ -1,3 +1,5 @@
+import { noteLineText, noteTitleLineIndex } from "@clippings/shared";
+
 /** Longest title made from a note's body, in characters: a line of a list row, not a paragraph. */
 export const NOTE_TITLE_LENGTH = 80;
 
@@ -10,18 +12,9 @@ export const UNTITLED_NOTE = "Untitled note";
  * `NOTE_TITLE_LENGTH`. A body with no words, such as a rule or an image, is "Untitled note".
  */
 export function noteTitle(body: string): string {
-  for (const line of body.split(/\r?\n/)) {
-    const text = line
-      .replace(/^\s*(?:```+|~~~+)\s*\S*\s*$/, "")
-      .replace(/^\s*(?:>\s*)*(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)?/, "")
-      .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
-      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-      .replace(/[*_`~]+/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (/[\p{L}\p{N}]/u.test(text)) return cutAtWord(text);
-  }
-  return UNTITLED_NOTE;
+  const lines = body.split(/\r?\n/);
+  const index = noteTitleLineIndex(lines);
+  return index === -1 ? UNTITLED_NOTE : cutAtWord(noteLineText(lines[index]!));
 }
 
 function cutAtWord(text: string): string {

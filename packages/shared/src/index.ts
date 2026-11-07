@@ -40,6 +40,7 @@ export {
   type ClippingStatuses,
 } from "./clipping.ts";
 export { formatAbsoluteDate, formatIsoUtc } from "./dates.ts";
+export { isCodeFenceLine, noteLineText, noteTitleLineIndex } from "./note-text.ts";
 export {
   CLIPPINGS_EXTENSION_ID,
   EXTENSION_API_ERRORS,

@@ -68,39 +68,45 @@ export function createChangesService({ pool }: ChangesServiceDeps) {
   const db = createDatabase(pool);
 
   /**
-   * The tags auto-tagging applied to this clipping that it still carries, oldest first. Empty for
+   * The tags auto-tagging applied to this clipping that it still carries, oldest first and by tag name within a reading. Empty for
    * a clipping that isn't the user's.
    */
   async function listAutoApplied(userId: string, clippingId: string): Promise<AutoAppliedTag[]> {
     if (!UUID.test(clippingId)) return [];
-    return db
-      .select({
-        changeId: libraryChanges.id,
-        tagId: tags.id,
-        name: tags.name,
-        reason: libraryChanges.reason,
-        confidence: libraryChanges.confidence,
-      })
-      .from(libraryChanges)
-      .innerJoin(
-        clippingTags,
-        and(
-          eq(clippingTags.clippingId, clippingId),
-          sql`${clippingTags.tagId} = ${libraryChanges.targetIds}[2]`,
-          eq(clippingTags.userId, libraryChanges.userId),
-        ),
-      )
-      .innerJoin(tags, and(eq(tags.id, clippingTags.tagId), eq(tags.userId, libraryChanges.userId)))
-      .where(
-        and(
-          eq(libraryChanges.userId, userId),
-          eq(libraryChanges.actor, "auto_tag"),
-          eq(libraryChanges.status, "applied"),
-          inArray(libraryChanges.action, [...TAG_ON_CLIPPING]),
-          sql`${libraryChanges.targetIds}[1] = ${clippingId}::uuid`,
-        ),
-      )
-      .orderBy(asc(libraryChanges.createdAt), asc(libraryChanges.id));
+    return (
+      db
+        .select({
+          changeId: libraryChanges.id,
+          tagId: tags.id,
+          name: tags.name,
+          reason: libraryChanges.reason,
+          confidence: libraryChanges.confidence,
+        })
+        .from(libraryChanges)
+        .innerJoin(
+          clippingTags,
+          and(
+            eq(clippingTags.clippingId, clippingId),
+            sql`${clippingTags.tagId} = ${libraryChanges.targetIds}[2]`,
+            eq(clippingTags.userId, libraryChanges.userId),
+          ),
+        )
+        .innerJoin(
+          tags,
+          and(eq(tags.id, clippingTags.tagId), eq(tags.userId, libraryChanges.userId)),
+        )
+        .where(
+          and(
+            eq(libraryChanges.userId, userId),
+            eq(libraryChanges.actor, "auto_tag"),
+            eq(libraryChanges.status, "applied"),
+            inArray(libraryChanges.action, [...TAG_ON_CLIPPING]),
+            sql`${libraryChanges.targetIds}[1] = ${clippingId}::uuid`,
+          ),
+        )
+        // Changes applied in one reading share a timestamp, so the tag name settles their order.
+        .orderBy(asc(libraryChanges.createdAt), asc(sql`lower(${tags.name})`), asc(tags.name))
+    );
   }
 
   /**

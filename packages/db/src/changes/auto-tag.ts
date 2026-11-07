@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, or, sql } from "drizzle-orm";
 
 import {
   checkCanonicalTagName,
@@ -31,7 +31,7 @@ export interface AutoTagResult {
  *   canonical-name rule against all of the user's tags; otherwise it waits as a suggestion.
  * - A `low` proposal is a suggestion. So is one that would take the clipping past its tag limit.
  * - A tag the clipping already carries, one the user dismissed for this clipping, and one the
- *   user undid on it earlier are neither applied nor suggested again.
+ *   user undid or took off by hand earlier are neither applied nor suggested again.
  *
  * It only adds links and tags: it never removes or renames anything. The caller has checked that
  * the clipping is the user's.
@@ -70,6 +70,8 @@ export async function applyAutoTags(
         isNotNull(clippingTagSuggestions.dismissedAt),
       ),
     );
+  // Undone, or still `applied` but no longer on the clipping: the user took it off by hand (the
+  // tag picker, a bulk edit), which says the same as Undo.
   const undone = await tx
     .select({ name: sql<string>`${libraryChanges.after}->'tag'->>'name'` })
     .from(libraryChanges)
@@ -77,8 +79,19 @@ export async function applyAutoTags(
       and(
         eq(libraryChanges.userId, userId),
         eq(libraryChanges.actor, "auto_tag"),
-        eq(libraryChanges.status, "undone"),
         sql`${libraryChanges.targetIds}[1] = ${clippingId}::uuid`,
+        or(
+          eq(libraryChanges.status, "undone"),
+          and(
+            eq(libraryChanges.status, "applied"),
+            sql`not exists (
+              select 1 from ${clippingTags}
+              where ${clippingTags.clippingId} = ${clippingId}::uuid
+                and ${clippingTags.tagId} = ${libraryChanges.targetIds}[2]
+                and ${clippingTags.userId} = ${userId}
+            )`,
+          ),
+        ),
       ),
     );
   const refused = new Set([...dismissed, ...undone].map(({ name }) => tagNameKey(name ?? "")));

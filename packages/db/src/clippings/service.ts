@@ -2634,11 +2634,18 @@ export function createClippingsService({
           return count;
         }
         for (const [index, row] of group.entries()) {
-          // Only while still missing: enrichment may have written one in the meantime.
+          // Only while still missing (enrichment may have written one in the meantime) and for
+          // the body that was embedded: an edit made since embeds, or leaves unembedded, the new one.
           const [updated] = await db
             .update(clippings)
             .set({ embedding: vectors[index]! })
-            .where(and(eq(clippings.id, row.id), isNull(embedding)))
+            .where(
+              and(
+                eq(clippings.id, row.id),
+                isNull(embedding),
+                row.body === null ? isNull(clippings.body) : eq(clippings.body, row.body),
+              ),
+            )
             .returning({ id: clippings.id });
           if (updated) count += 1;
         }

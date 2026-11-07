@@ -121,6 +121,8 @@ export async function createServiceFixture() {
   const embeddedFor: { userId: string; jobKind: string }[] = [];
   /** The size of each `embedMany` call, in order. */
   const embeddedBatches: number[] = [];
+  /** Runs while a batched embedding call carrying this text is in flight, before it answers. */
+  const duringEmbedding = new Map<string, () => Promise<void>>();
   let embedding: "up" | "down" = "up";
   /** Whether only the embedder refuses (the summarizer still answers), and for whom. */
   let embeddingCapped = false;
@@ -138,6 +140,7 @@ export async function createServiceFixture() {
     embedMany: async (texts, purpose, owner) => {
       if (embedderRefuses(owner.userId)) throw new CapReachedError();
       if (embedding === "down") throw new Error("the embedder is unreachable");
+      for (const text of texts) await duringEmbedding.get(text)?.();
       embeddedBatches.push(texts.length);
       embeddedFor.push(owner);
       return texts.map((text) => {
@@ -211,6 +214,8 @@ export async function createServiceFixture() {
     meanings,
     /** Every text the embedder was asked for, in order. */
     embedded,
+    /** Something to do while a batched embedding call carrying this text is in flight. */
+    duringEmbedding,
     /** Who each embedding call was made for, in order. */
     embeddedFor,
     /** Makes only the embedder refuse (or work again), as a reached spend cap does. */

@@ -231,6 +231,22 @@ describe.skipIf(!TEST_DATABASE_URL)("auto-tagging", () => {
       expect(await changeRows()).toEqual([]);
     });
 
+    it("doesn't apply a tag the user took off by hand, when the page is read again", async () => {
+      const ana = await userWithTags("ana", ["css"]);
+      const id = await clip(ana, "https://example.com/a", [
+        high("css", true),
+        high("layout", false),
+      ]);
+      expect(await tagNamesOf(ana, id)).toEqual(["css", "layout"]);
+
+      await fixture.service.updateClipping(ana, id, { tags: ["layout"] });
+      await fixture.service.reEnrichClipping(ana, id);
+      await fixture.service.enrichClipping(id);
+
+      expect(await tagNamesOf(ana, id)).toEqual(["layout"]);
+      expect((await changeRows()).map((row) => row.status)).toEqual(["applied", "applied"]);
+    });
+
     it("keeps users apart: one user's tags are not applied to another's clipping", async () => {
       const ana = await userWithTags("ana", ["css"]);
       const bob = await fixture.createUser("bob");
@@ -254,11 +270,7 @@ describe.skipIf(!TEST_DATABASE_URL)("auto-tagging", () => {
 
       const applied = await fixture.changes.listAutoApplied(ana, id);
 
-      // Both changes carry the same timestamp, so their order is not defined.
-      const byName = applied
-        .map(({ name, reason, confidence }) => [name, reason, confidence])
-        .toSorted(([a], [b]) => (a ?? "").localeCompare(b ?? ""));
-      expect(byName).toEqual([
+      expect(applied.map(({ name, reason, confidence }) => [name, reason, confidence])).toEqual([
         ["css", "A page on CSS", "high"],
         ["layout", "About layout", "high"],
       ]);
@@ -267,6 +279,20 @@ describe.skipIf(!TEST_DATABASE_URL)("auto-tagging", () => {
       expect((await fixture.changes.listAutoApplied(ana, id)).map((tag) => tag.name)).toEqual([
         "css",
       ]);
+    });
+
+    it("lists the changes of one reading in a stable order, by tag name", async () => {
+      const names = ["zeta", "Eta", "delta", "gamma", "beta", "alpha"];
+      const ana = await userWithTags("ana", names);
+      const id = await clip(
+        ana,
+        "https://example.com/a",
+        names.map((name) => high(name, true)),
+      );
+
+      const listed = (await fixture.changes.listAutoApplied(ana, id)).map((tag) => tag.name);
+
+      expect(listed).toEqual(["alpha", "beta", "delta", "Eta", "gamma", "zeta"]);
     });
 
     it("keeps users apart", async () => {

@@ -47,6 +47,10 @@ possible and every release is a pull request. Roll back with **Instant Rollback*
 forward on `main` and release again. A rollback doesn't undo migrations, which is why they're written
 expand/contract.
 
+Once notes exist (clippings with a null `url`), don't roll production back to a release before
+phase 2 (notes): the old MCP output schema and bookmarks export can't handle a null `url`. Fix
+forward instead.
+
 ## What's already in place
 
 | Thing        | Value                                                                                 |
