@@ -541,6 +541,7 @@ describe.skipIf(!TEST_DATABASE_URL)("the extension signing in and calling its AP
     const mcp = createMcpRoute({
       auth: setup.auth,
       clippings: fixture.service,
+      librarian: fixture.librarian,
       connections,
       resource: mcpResourceUrl(appOrigin),
       allowedEmails: ALLOWED,
