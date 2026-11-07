@@ -77,6 +77,19 @@ for going offline; a second build gets a new build id, so it triggers the update
   `FAKE_QSTASH_PORT`; `FAKE_MODEL_DELAY_MS=0` skips the four seconds). To see the cap locally, set
   the daily cap in Settings → Automation to `0.00` (or `UPDATE user_settings SET daily_cap_micros =
   0`) and save a link: it stays pending and the QStash log shows a 200.
+- **The librarian**: a request for the librarian's forced tools (`plan_tags`, `plan_folders`,
+  `plan_links`, `plan_topic_pages`, and Haiku's `confirm_links`) gets a deterministic plan read off
+  the library in its system prompt: tags `x` and `xs` merge, a tag with capitals is renamed to
+  lowercase, items and tags go in a folder named for their first tag (items with no tag in
+  "Notes"), the first two items that share a tag are linked, a tag with three or more items gets a
+  topic page, a tag with ten or more is flagged as too broad. Every change is `high` confidence
+  unless the library holds `[fake-confidence low]` (put it in a note). Try it with the `run_librarian`
+  MCP tool (a dry run, then `dryRun: false`), or by hand: `curl -H "Authorization: Bearer
+  $CRON_SECRET" http://localhost:3100/api/cron/librarian` publishes a job per user to the fake
+  QStash, which delivers it to `/api/jobs/librarian`. A user's first run only suggests, so the
+  first call shows suggestions in `list_suggestions` (an idea already waiting, or dismissed, is not
+  proposed again); to see high-confidence changes applied, save something new after the first run,
+  or delete the user's `library_changes` rows to start again.
 - **Voyage AI** embeds a text as its words (one hashed axis per word), so search by meaning finds
   texts that share a word even where keyword search wouldn't, such as a word in the summary.
   Real semantic quality stays with the user.

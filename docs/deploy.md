@@ -117,8 +117,14 @@ console lists, or the token is rejected. A daily Vercel Cron (`vercel.json`, 04:
 failed for more than an hour, and embeds up to 50 ready clippings that have no embedding (saved
 before search by meaning, or while Voyage AI was down). It also checks up to 40 ready clippings
 whose link was last checked more than a week ago (ten at once, each given 5 s), and marks a link
-dead after three checks in a row that find the page gone. Vercel only runs crons on the
-production deployment. Add a payment method to
+dead after three checks in a row that find the page gone. A weekly cron (`0 22 * * 1`, Monday 22:00
+UTC, before the Tuesday lesson) calls `/api/cron/librarian` the same way and publishes one QStash
+job per user with a library, spread over half an hour; each job calls `/api/jobs/librarian`, which
+runs the librarian for that user (`maxDuration` 300 s, the Hobby limit, with the planner stopping
+new model calls at 240 s). QStash retries a failed job once. A user's first run only stores
+suggestions; later runs apply the changes Claude is sure of and leave the rest as suggestions. A run
+that hits the daily cap (80% of it, for the librarian) ends quietly and the next week starts afresh.
+Vercel only runs crons on the production deployment. Add a payment method to
 the Voyage AI account even though usage stays inside the free
 tokens: its documented limits (2,000 requests a minute for `voyage-4`) start at Tier 1, which needs
 one ([rate limits](https://docs.voyageai.com/docs/rate-limits)), and every search makes a request.

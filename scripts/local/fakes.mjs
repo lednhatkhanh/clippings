@@ -21,6 +21,13 @@
 //   [fake-error tier-cap]      HTTP 429 with no retry-after, an account's spend cap
 //   [fake-error rate-limit]    HTTP 429 with retry-after, an ordinary rate limit
 //   [fake-error overloaded]    HTTP 529
+//
+// A librarian request (a forced plan_tags, plan_folders, plan_links, plan_topic_pages or
+// confirm_links tool) gets a deterministic plan read off the library in its system prompt: tags
+// "<x>" and "<x>s" merge, a tag with capitals is renamed to lowercase, items and tags go in a
+// folder named for their first tag (items with none in "Notes"), the first two items that share a
+// tag are linked, and each tag with 3+ items gets a topic page. Every change is "high" confidence
+// unless the library (a note's text, say) holds [fake-confidence low].
 import { createHash, createHmac } from "node:crypto";
 import http from "node:http";
 
@@ -195,6 +202,121 @@ function replyUsage(message, requestBody) {
   };
 }
 
+const LIBRARIAN_TOOLS = new Set([
+  "plan_tags",
+  "plan_folders",
+  "plan_links",
+  "plan_topic_pages",
+  "confirm_links",
+]);
+const FOLDER_COLORS = ["blue", "green", "violet", "orange", "teal", "pink", "amber", "red"];
+const capitalised = (name) => name.charAt(0).toUpperCase() + name.slice(1);
+
+/** The input a librarian tool call gets, from the library listed in the request's system prompt. */
+function librarianInput(payload, message) {
+  const system = Array.isArray(payload.system)
+    ? payload.system.map((block) => block.text).join("\n")
+    : String(payload.system ?? "");
+  const confidence = /\[fake-confidence low\]/.test(system + message) ? "low" : "high";
+  const tags = [...system.matchAll(/^(T\d+) "(.*)" \((\d+) items?, (no folder|folder F\d+)/gm)].map(
+    (m) => ({ ref: m[1], name: m[2], usage: Number(m[3]) }),
+  );
+  const items = [
+    ...system.matchAll(/^(C\d+) (link|note) "(.*)" \[(.*)\] \((no folder|folder F\d+)\)/gm),
+  ].map((m) => ({
+    ref: m[1],
+    kind: m[2],
+    tags: m[4] === "no tags" ? [] : m[4].split(", "),
+  }));
+  const folders = [...system.matchAll(/^F\d+ "(.*)" color/gm)].map((m) => m[1].toLowerCase());
+  const tool = payload.tool_choice.name;
+
+  if (tool === "plan_tags") {
+    const merges = tags.flatMap((tag) => {
+      const target = tags.find((other) => tag.name === `${other.name}s`);
+      return target
+        ? [
+            {
+              source: tag.ref,
+              target: target.ref,
+              reason: `"${tag.name}" is the plural of "${target.name}".`,
+              confidence,
+            },
+          ]
+        : [];
+    });
+    const merged = new Set(merges.flatMap((m) => [m.source, m.target]));
+    const renames = tags
+      .filter((tag) => tag.name !== tag.name.toLowerCase() && !merged.has(tag.ref))
+      .map((tag) => ({
+        tag: tag.ref,
+        name: tag.name.toLowerCase(),
+        reason: "Tag names are lowercase.",
+        confidence,
+      }));
+    const too_broad = tags
+      .filter((tag) => tag.usage >= 10)
+      .map((tag) => ({ tag: tag.ref, reason: `${tag.usage} items is a lot for one tag.` }));
+    return { merges, renames, folds: [], too_broad };
+  }
+
+  if (tool === "plan_folders") {
+    const wanted = (/File these in folders: ([^\n]*)/.exec(message)?.[1] ?? "")
+      .split(" ")
+      .filter(Boolean);
+    const folderOf = (ref) => {
+      const tag = tags.find((t) => t.ref === ref);
+      if (tag) return capitalised(tag.name);
+      const item = items.find((i) => i.ref === ref);
+      return item?.tags[0] ? capitalised(item.tags[0]) : "Notes";
+    };
+    const moves = wanted.map((ref) => ({ ref, folder: folderOf(ref), confidence }));
+    const created = [...new Set(moves.map((m) => m.folder))].filter(
+      (name) => !folders.includes(name.toLowerCase()),
+    );
+    return {
+      folders: created.map((name, i) => ({
+        name,
+        color: FOLDER_COLORS[i % FOLDER_COLORS.length],
+        reason: `Everything about ${name.toLowerCase()}.`,
+        confidence,
+      })),
+      moves,
+    };
+  }
+
+  if (tool === "plan_links") {
+    const byTag = new Map();
+    for (const item of items) {
+      const first = item.tags[0];
+      if (first) byTag.set(first, [...(byTag.get(first) ?? []), item.ref]);
+    }
+    const pair = [...byTag.entries()].find(([, refs]) => refs.length >= 2);
+    return {
+      links: pair
+        ? [{ a: pair[1][0], b: pair[1][1], reason: `Both are about ${pair[0]}.`, confidence }]
+        : [],
+    };
+  }
+
+  if (tool === "confirm_links") {
+    const indexes = [...message.matchAll(/<pair index="(\d+)">/g)].map((m) => Number(m[1]));
+    return { verdicts: indexes.map((index) => ({ index, keep: true })) };
+  }
+
+  // plan_topic_pages: lines like `T3 "css": C1 C2 C3`.
+  const pages = [...message.matchAll(/^(T\d+) "(.*)": ([^\n]*)$/gm)].map((m) => ({
+    tag: m[1],
+    overview: `What has been saved about ${m[2]} so far.`,
+    items: m[3]
+      .split(" ")
+      .filter(Boolean)
+      .map((ref) => ({ ref, summary: `A saved item about ${m[2]}.` })),
+    confidence,
+  }));
+  return { pages };
+}
+
 listen(
   Number(process.env.FAKE_ANTHROPIC_PORT ?? 8081),
   "fake anthropic",
@@ -218,6 +340,31 @@ listen(
       });
       return response.end(
         JSON.stringify({ type: "error", error: { type, message: text }, request_id: "req_local" }),
+      );
+    }
+    if (LIBRARIAN_TOOLS.has(payload.tool_choice?.name)) {
+      console.log(
+        `[anthropic] ${request.url} model=${payload.model} librarian=${payload.tool_choice.name}`,
+      );
+      response.writeHead(200, { "content-type": "application/json" });
+      return response.end(
+        JSON.stringify({
+          id: "msg_local",
+          type: "message",
+          role: "assistant",
+          model: payload.model,
+          stop_reason: "tool_use",
+          stop_sequence: null,
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_local",
+              name: payload.tool_choice.name,
+              input: librarianInput(payload, message),
+            },
+          ],
+          usage: replyUsage(message, body),
+        }),
       );
     }
     const title = /^Page title: (.*)$/m.exec(message)?.[1];

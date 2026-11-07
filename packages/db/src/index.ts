@@ -45,6 +45,12 @@ export {
 } from "./changes/service.ts";
 export { gateChange, type GateDecision } from "./librarian/gate.ts";
 export {
+  LIBRARY_VIEW_ITEM_LIMIT,
+  type LibraryView,
+  type LibraryViewItem,
+  type LibraryViewTag,
+} from "./librarian/library.ts";
+export {
   LibrarianInputError,
   LibrarianInvalidError,
   LibrarianNotFoundError,

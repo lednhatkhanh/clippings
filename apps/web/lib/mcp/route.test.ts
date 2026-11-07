@@ -57,6 +57,11 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
       auth,
       clippings: fixture.service,
       librarian: fixture.librarian,
+      runner: {
+        run: () => {
+          throw new Error("This test doesn't run the librarian");
+        },
+      },
       connections,
       resource: RESOURCE,
       allowedEmails,
@@ -415,6 +420,7 @@ describe.skipIf(!TEST_DATABASE_URL)("connecting a client and calling /mcp", () =
       "move_to_folder",
       "rename_tag",
       "restore_clipping",
+      "run_librarian",
       "save_note",
       "set_tag_color",
       "tag_clippings",
