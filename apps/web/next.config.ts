@@ -19,6 +19,14 @@ const config: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   reactCompiler: true,
+  // Ask and This week are gone (chat lives in the Claude app over MCP): old bookmarks and installed
+  // shortcuts land on the library. Temporary, so a browser never pins the redirect if a page returns.
+  redirects: async () =>
+    ["/ask", "/digest"].map((source) => ({
+      source: `${source}/:path*`,
+      destination: "/",
+      permanent: false,
+    })),
   headers: async () => [
     // Every route. The CSP carries only what can't break Next or sign-in: no `script-src` (it
     // needs per-request nonces, which `cacheComponents` prerendering can't have) and no
