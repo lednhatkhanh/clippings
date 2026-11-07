@@ -1,18 +1,6 @@
 {
   "version": 1,
   "skills": {
-    "ast-grep": {
-      "source": "ast-grep/agent-skill",
-      "sourceType": "github",
-      "skillPath": "ast-grep/skills/ast-grep/SKILL.md",
-      "computedHash": "472c7cd092f9fad72e0ad0c58b5f6af627844730ecc420c009e25a835a5d6e81"
-    },
-    "ast-grep-outline": {
-      "source": "ast-grep/agent-skill",
-      "sourceType": "github",
-      "skillPath": "ast-grep/skills/outline/SKILL.md",
-      "computedHash": "5fca6734ddf196a61f9f58701668428420680d2052e762355dd9a18136699465"
-    },
     "better-auth-best-practices": {
       "source": "better-auth/skills",
       "sourceType": "github",
@@ -29,13 +17,13 @@
       "source": "mattpocock/skills",
       "sourceType": "github",
       "skillPath": "skills/engineering/code-review/SKILL.md",
-      "computedHash": "57cfd4ceb011f05e58a1a4f4cad3b2e03419d371f8990f4bcb32ff0d435a039f"
+      "computedHash": "c2745e2be960b82b9fddd82cf45265f42431e7b045c403f297b25f0f311e9210"
     },
     "codebase-design": {
       "source": "mattpocock/skills",
       "sourceType": "github",
       "skillPath": "skills/engineering/codebase-design/SKILL.md",
-      "computedHash": "b2888e4f4e8c0af3bfd557575a64b905c44e6248c3101d72077816882b3a92b9"
+      "computedHash": "aa11a96c08451f4ff86052d5da94004a8c97bb4ea41b2ac8a4300c189f66c89c"
     },
     "create-auth": {
       "source": "better-auth/skills",
@@ -65,31 +53,31 @@
       "source": "GoogleChrome/modern-web-guidance",
       "sourceType": "github",
       "skillPath": "skills/modern-web-guidance/SKILL.md",
-      "computedHash": "48405ce3611ebdfd7958978117501d0b3d36ac91048cb3a43b36233e8e839d52"
+      "computedHash": "c614730bccf763448d84ed2b5c71164b0ad7410a0823da3639e62e9d9bf2b641"
     },
     "next-bundle-optimizer": {
       "source": "vercel/next.js",
       "sourceType": "github",
       "skillPath": "skills/next-bundle-optimizer/SKILL.md",
-      "computedHash": "c6b7c0bcc589582d7c142c20febe4a0501b8e65e2d239abef86b4c59b680b039"
+      "computedHash": "7c37f80887cf574e146b88d42cf7d8e847a96ac4cbd1a499672213a30a5ba8f5"
     },
     "next-cache-components-optimizer": {
       "source": "vercel/next.js",
       "sourceType": "github",
       "skillPath": "skills/next-cache-components-optimizer/SKILL.md",
-      "computedHash": "45a4f4ad46ce791d42f310c4734795c9ff4e26fbf27ed0285a43a903ef469000"
+      "computedHash": "4e0f4d73209a4c89e503eb374d63631a9146681304f15d64929e47196e7f6a45"
     },
     "next-dev-loop": {
       "source": "vercel/next.js",
       "sourceType": "github",
       "skillPath": "skills/next-dev-loop/SKILL.md",
-      "computedHash": "c305c83b726212e0284930c65cded2c4a4ab85f9bfccfa83b62274247fe3580e"
+      "computedHash": "68e70a9270eb02cc9c63cb19ce5106772ce4c140242199f4d90c77f6acb56355"
     },
     "next-partial-prefetching-optimizer": {
       "source": "vercel/next.js",
       "sourceType": "github",
       "skillPath": "skills/next-partial-prefetching-optimizer/SKILL.md",
-      "computedHash": "97b935496e9f821417229fd4afe153dc57732911991b48144371b15b11716fbe"
+      "computedHash": "2fc7448f5eec4e5c4f6e51359e2cd3d9c992566ca90652c8466d64015932b255"
     },
     "pr": {
       "source": "mattpocock/skills",
@@ -114,13 +102,13 @@
       "source": "mattpocock/skills",
       "sourceType": "github",
       "skillPath": "skills/engineering/research/SKILL.md",
-      "computedHash": "c8c1cba327a6f824b554cd978079a3dadd7406d73174f8fb9bfef58824691970"
+      "computedHash": "5d85b64ecceed6b3f6d5996dc8af07180be8d1ff11ef3d26eda2acff078fbd39"
     },
     "setup-matt-pocock-skills": {
       "source": "mattpocock/skills",
       "sourceType": "github",
       "skillPath": "skills/engineering/setup-matt-pocock-skills/SKILL.md",
-      "computedHash": "1d35d0afa3ded88c9324d38db08b2cff91cd03e0e11d64786bee41385cd7b9fb"
+      "computedHash": "50d6c45174f56a4323b24978f36fcc9169fae0b3abb026587bf636e468c4954c"
     },
     "tdd": {
       "source": "mattpocock/skills",
@@ -156,7 +144,7 @@
       "source": "vercel-labs/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/react-view-transitions/SKILL.md",
-      "computedHash": "73fddafed488c308ee0799178432801fe10aa338451948ea05f4200541053040"
+      "computedHash": "6c9169eb561dcdea32408e2525a2eb5375d709dd8dbb3412b895e6c58a8dc22e"
     },
     "web-design-guidelines": {
       "source": "vercel-labs/agent-skills",

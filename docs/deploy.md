@@ -54,7 +54,7 @@ expand/contract.
 | Neon project | `clippings`, id `young-forest-43160496`, PG 18, `aws-ap-southeast-1` (Singapore)      |
 | Neon branch  | `production` (default), database `neondb`, role `neondb_owner`. No `development` yet. |
 | Vercel team  | `Khanh Le's projects` (Hobby), id `team_qJyGOMbid155EAi33r67nuvY`                     |
-| Vercel project | `clippings`, id `prj_lkLLi6zhR1BiGMIQ5JCP5BOgzwMV`, Next.js, Node 24.x, no env vars yet |
+| Vercel project | `clippings`, id `prj_lkLLi6zhR1BiGMIQ5JCP5BOgzwMV`, Next.js, Node 26.x, no env vars yet |
 
 ## One-time setup
 
