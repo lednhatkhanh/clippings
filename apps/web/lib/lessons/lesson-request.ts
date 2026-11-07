@@ -1,11 +1,13 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { formatISO, parseISO } from "date-fns";
 
+import { oneToolCall } from "@/lib/gateway/one-tool.ts";
 import type { LessonMaterialItem, PastLesson } from "@clippings/db";
 import { LESSON_QUIZ_CHOICES } from "@clippings/shared";
 
 export const LESSON_MODEL = "claude-sonnet-5-5";
 export const WRITE_LESSON = "write_lesson";
+const writeLesson = oneToolCall(LESSON_MODEL, WRITE_LESSON);
 
 /** About 1,800 words of Markdown is 3,000 tokens or so; the rest is room for the quiz and slack. */
 const MAX_TOKENS = 8_000;
@@ -157,8 +159,8 @@ export function buildLessonRequest(input: LessonInput): {
       max_tokens: MAX_TOKENS,
       system: [SYSTEM, fenced("about_me", input.profile.trim() || "(not given)")].join("\n\n"),
       tools: [WRITE_LESSON_TOOL],
-      tool_choice: { type: "tool", name: WRITE_LESSON },
-      messages: [{ role: "user", content: sections.join("\n\n") }],
+      ...writeLesson.params,
+      messages: [{ role: "user", content: [...sections, writeLesson.instruction].join("\n\n") }],
     },
   };
 }
