@@ -57,12 +57,13 @@ forward instead.
 
 ## What's already in place
 
-| Thing        | Value                                                                                 |
-| ------------ | ------------------------------------------------------------------------------------- |
-| Neon project | `clippings`, id `young-forest-43160496`, PG 18, `aws-ap-southeast-1` (Singapore)      |
-| Neon branch  | `production` (default), database `neondb`, role `neondb_owner`. No `development` yet. |
-| Vercel team  | `Khanh Le's projects` (Hobby), id `team_qJyGOMbid155EAi33r67nuvY`                     |
-| Vercel project | `clippings`, id `prj_lkLLi6zhR1BiGMIQ5JCP5BOgzwMV`, Next.js, Node 26.x, no env vars yet |
+Nothing: the original deployment was taken down on 2026-11-21. To host your own, create:
+
+| Thing          | Value                                                                       |
+| -------------- | --------------------------------------------------------------------------- |
+| Neon project   | PG 18, in a region near your Vercel function region (it ran in Singapore)   |
+| Neon branch    | `production` (default), database `neondb`, role `neondb_owner`              |
+| Vercel project | Next.js, Node 26.x, on a Hobby team                                         |
 
 ## One-time setup
 
@@ -175,9 +176,9 @@ Repo → Settings → Secrets and variables → Actions.
 | Secret                            | Value                                                       |
 | --------------------------------- | ----------------------------------------------------------- |
 | `VERCEL_TOKEN`                    | Vercel → Account Settings → Tokens                          |
-| `VERCEL_ORG_ID`                   | `team_qJyGOMbid155EAi33r67nuvY`                             |
-| `VERCEL_PROJECT_ID`               | `prj_lkLLi6zhR1BiGMIQ5JCP5BOgzwMV`                          |
-| `NEON_PROJECT_ID`                 | `young-forest-43160496`                                     |
+| `VERCEL_ORG_ID`                   | your Vercel team id (`team_…`)                              |
+| `VERCEL_PROJECT_ID`               | your Vercel project id (`prj_…`)                            |
+| `NEON_PROJECT_ID`                 | your Neon project id                                        |
 | `NEON_API_KEY`                    | the Neon API key from step 1                                |
 | `PRODUCTION_DATABASE_URL_DIRECT`  | Neon `production` branch, **direct** (not pooled) URL       |
 | `TURBO_TOKEN` (optional)          | Vercel → Account Settings → Tokens, scoped to the team: turns on Turborepo's remote cache in CI |
@@ -212,10 +213,10 @@ ask Neon for it.
    from a point in time inside the restore window, check a few rows, then delete the branch:
 
    ```bash
-   neon branches create --project-id young-forest-43160496 --name restore-test \
+   neon branches create --project-id <neon project id> --name restore-test \
      --parent <timestamp inside the window>
    psql "<restore-test direct URL>" -c 'select count(*) from "user"'
-   neon branches delete restore-test --project-id young-forest-43160496
+   neon branches delete restore-test --project-id <neon project id>
    ```
 
    Check `neon branches create --help` if the `--parent` form has changed.

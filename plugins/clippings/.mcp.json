@@ -2,7 +2,7 @@
   "mcpServers": {
     "clippings": {
       "type": "http",
-      "url": "https://clippings-space.vercel.app/mcp"
+      "url": "http://localhost:3100/mcp"
     }
   }
 }
