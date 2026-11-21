@@ -8,7 +8,10 @@ data is private to them.
 
 ## Status
 
-In use and released to production. It was built from three specs, all shipped:
+No longer hosted: the deployment was taken down on 2026-11-21, and the code is here under the
+[MIT license](LICENSE) for anyone to run their own. [`docs/deploy.md`](docs/deploy.md) is how it
+was hosted on Vercel and Neon, and the GitHub deploy workflows are disabled on this repository.
+It was built from three specs, all shipped:
 
 - **v1**, [issue #1](https://github.com/lednhatkhanh/clippings/issues/1): saving from the web app,
   extension and Claude; background enrichment with Claude Haiku; hybrid keyword and meaning
@@ -119,7 +122,8 @@ copy.
 
 ### The Clippings plugin
 
-`plugins/clippings` bundles that connector (pointed at the production `/mcp`) with a skill that
+`plugins/clippings` bundles that connector (pointed at `http://localhost:3100/mcp`: change the URL
+in `plugins/clippings/.mcp.json` to your own deployment's `/mcp`) with a skill that
 teaches Claude to search before saving, reuse your tags, cite links, and run a weekly review and a
 tag tidy-up. This repo is also the plugin marketplace.
 
@@ -186,3 +190,7 @@ restore test are in [`docs/deploy.md`](docs/deploy.md).
   [`docs/agents/triage-labels.md`](docs/agents/triage-labels.md).
 - How code is written: [`CODING_STANDARDS.md`](CODING_STANDARDS.md).
 - Workflow rules for people and Claude Code: [`CLAUDE.md`](CLAUDE.md).
+
+## License
+
+[MIT](LICENSE).
